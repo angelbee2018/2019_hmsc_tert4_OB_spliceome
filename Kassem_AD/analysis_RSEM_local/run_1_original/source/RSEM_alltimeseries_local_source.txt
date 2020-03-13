@@ -1,0 +1,29 @@
+# language: timepoint = timepoint. replicate = technical replicate.
+
+data_dir="/media/sbi/4tb_ironwolf/PGNEXUS_ADseries/"
+transcriptome_bam_bai_SJ_and_sam_files_dir="/media/sbi/4tb_ironwolf/PGNEXUS_ADseries/transcriptome_mapping/"
+fastq_gz_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_AD_fastqc/fastq_gz/"
+
+# THIS CODE EXPECTS YOU TO HAVE PUT THE BAM BAI SJ SAM FILES INTO THE AFOREMENTIONED DIRECTORY BEFOREHAND
+# NOTE: DO NOT EVER PUT BAM BAI SJ SAM FILES THAT YOU ARE NOT GOING TO ANALYSE INTO THE FOLDER. THE PROGRAMS IS REALLY DUMB AND WILL ATTEMPT TO PROCESS THAT ANYWAYS BUT FAIL MISERABLY
+# expect that the bam bai sj sam files relevant to the analysis folder ONLY AND NOTHING ELSE is placed into this folder
+
+refgenome_dir="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/"
+source_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_AD_fastqc/analysis_RSEM_local/run_1_original/source/"
+results_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_AD_fastqc/analysis_RSEM_local/run_1_original/results/"
+quant_output_dir="/media/sbi/4tb_ironwolf/PGNEXUS_ADseries/results_RSEM_quant/"
+mkdir $quant_output_dir
+
+sampleandaccessionlists="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_AD_fastqc/"
+sample_name_list=$sampleandaccessionlists"annotated_fastqnames_replicatenumber.txt"
+
+# RSEM PREPARATION OF REFERENCE
+
+cd $quant_output_dir
+
+rsem-prepare-reference --gtf $refgenome_dir"gtf/Homo_sapiens.GRCh38.98.gtf" -p 4 --star $refgenome_dir"raw_genome_fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa" ensembl_human_ref_38.98 
+                       
+
+# RSEM QUANTIFICATION OF ALREADY ALIGNED READS FROM STAR
+
+for timepoint in $(cat $sample_name_list); do rsem-calculate-expression -p 4 --paired-end --forward-prob 1 --alignments $transcriptome_bam_bai_SJ_and_sam_files_dir$timepoint"_Aligned.toTranscriptome.out.bam" ensembl_human_ref_38.98 $(echo $timepoint); done

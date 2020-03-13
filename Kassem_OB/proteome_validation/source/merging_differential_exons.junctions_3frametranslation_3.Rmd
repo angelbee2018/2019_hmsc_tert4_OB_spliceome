@@ -1,0 +1,603 @@
+---
+title: "A workspace to design the functions to summarise exon or junction"
+author: "Angel Liang"
+date: "11/01/2020"
+output: html_document
+---
+
+# Set the running environment
+
+## Packages
+
+```{r}
+
+library(tidyverse)
+library(data.table)
+library(rtracklayer)
+
+# library(biomaRt)
+# ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 99)
+
+library(furrr)
+future::plan(multiprocess)
+options(future.globals.maxSize = 30000000000)
+
+
+```
+
+## Global directories
+
+```{r}
+
+output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/angel_3FT_junctions/"
+
+```
+
+# Pooling AS junction co-ordinates from JUM
+
+accepts:
+1. table of differential junctions (result from JUM), must contain AS_event_ID and splicemode columns
+2. all the detailed tables used in analysis, as is (untouched)
+3. UNION_junc_coor file from JUM, which contains all the junction ID to genome co-ordinate mapping.
+
+## Directories
+
+```{r}
+
+JUM_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+
+differential_junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/5x5_SOM_1663_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt"
+
+UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+
+output_file_name <- "junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.2"
+
+```
+
+## Import the detailed tables into the environment
+
+```{r message=FALSE, warning=FALSE}
+
+list_of_timepoint_comparisons_final <- read.delim(paste(JUM_results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree %>% flatten
+
+list_of_AS_events <- c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events") %>% array_tree %>% flatten
+
+# read tables into environment
+
+list_of_detailed_tables <- purrr::map(.x = list_of_timepoint_comparisons_final, .f = ~purrr::map2(.x = .x, .y = list_of_AS_events, .f = ~read.delim(file = paste(JUM_results_dir, "final_JUM_output_", .x, "/", list.files(path = paste(JUM_results_dir, "final_JUM_output_", .x, "/", sep = ""), pattern = paste("(.)", .y, "(.*)detailed.txt", sep = "")), sep = ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble %>% add_column(., "splicemode" = .y)) %>% set_names(list_of_AS_events)) %>% set_names(list_of_timepoint_comparisons_final)
+
+# bind rows for each comparison
+
+list_of_detailed_tables_2 <- list_of_detailed_tables %>% purrr::map(.x = ., .f = ~rbindlist(.x))
+
+# rename the colnames to be not comparison-specific - we will add a comparison column later on
+
+list_of_detailed_tables_3 <- purrr::map2(.x = list_of_detailed_tables_2, .y = list_of_timepoint_comparisons_final, .f = ~setNames(., c("Gene", "AS_event_ID", "AS_structure_ID", "sub_junction_ID", "sub-junction_dispersion_estimate", "LRT_statistic-full_vs_reduced", "LRT_p_value-full_vs_reduced", "BH_adjusted_p-values", "logCPM_1", "logCPM_2", "fitting_parameter_log2fold_change_2_from_1", "sub_junction_chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand", "raw_count.1", "raw_count.2", "raw_count.3", "raw_count.4", "raw_count.5", "raw_count.6", "percentage_usage.1", "percentage_usage.2", "percentage_usage.3", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "deltaPSI", "splicemode")) %>% add_column(., "comparison" = .y)) 
+
+wide_table_of_all_detailed_tables <- list_of_detailed_tables_3 %>% rbindlist %>% as_tibble
+
+```
+
+### Import table of differential junctions
+
+```{r}
+
+differential_junction_table <- read.delim(paste(differential_junction_table_path), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+```
+
+### Filter the detailed tables and extract junction IDs
+
+```{r}
+
+# DAMMIT I SCREWED MYSELF OVER
+# differential_junction_table$splicemode <- gsub(x = differential_junction_table$splicemode, pattern = "A3SS", replacement = "A3SS_events")
+# differential_junction_table$splicemode <- gsub(x = differential_junction_table$splicemode, pattern = "A5SS", replacement = "A5SS_events")
+# differential_junction_table$splicemode <- gsub(x = differential_junction_table$splicemode, pattern = "cassette_exon", replacement = "cassette_exon_events")
+
+wide_table_of_all_detailed_tables_diffonly <- dplyr::semi_join(wide_table_of_all_detailed_tables, differential_junction_table, by = c("AS_event_ID", "splicemode"))
+
+AS_junction.IDs <- tibble("junction_ID" = wide_table_of_all_detailed_tables_diffonly$AS_structure_ID %>% gsub(x = ., pattern = "(5|3)_(.*)", replacement = "\\2"))
+
+AS_junction_IDs_split <- AS_junction.IDs$junction_ID %>% gsub(x = ., pattern = "Junction_", replacement = "") %>% strsplit(., split = "_")
+
+AS_junction_IDs_split_2 <- tibble("junction_ID" = paste("Junction_", AS_junction_IDs_split %>% unlist, sep = "")) %>% unique
+
+print(paste("there are", nrow(AS_junction_IDs_split_2), "unique junctions which have been plausibly differentially spliced"))
+
+```
+
+### import the UNION junc coordinate table and filter it for differential junctions we have just found
+
+```{r}
+
+UNION_junc_coor_table <- read.delim(paste(UNION_junc_coor_path), sep = "\t", stringsAsFactors = FALSE, col.names = c("chr", "start", "end", "strand", "junction_ID")) %>% as_tibble
+
+UNION_junc_coor_table_2 <- UNION_junc_coor_table
+
+UNION_junc_coor_table_2[, "strand"] <- gsub(x = UNION_junc_coor_table_2[, "strand"] %>% as.data.frame %>% unlist, pattern = "0", replacement = ".")
+
+UNION_junc_coor_table_3 <- dplyr::semi_join(UNION_junc_coor_table_2, AS_junction_IDs_split_2, by = "junction_ID")
+
+UNION_junc_coor_table_4 <- UNION_junc_coor_table_3 %>% na.omit
+UNION_junc_coor_table_4[, "start"] <- UNION_junc_coor_table_4[, "start"] + 1
+UNION_junc_coor_table_4[, "end"] <- UNION_junc_coor_table_4[, "end"] + 1
+
+```
+
+### import reference GTF, filter it for transcripts with JUNCTION-FLANKING EXONS ONLY and append to UNION junc coord table
+
+this annotation will be placed as FASTA headers in the custom database.
+
+the plan is to grab reference annotation where possible. If not possible, refer to the reconstructed transcriptome merged from all the timepoints and extract the transcript id.
+
+case 1: flanked by reference transcript: header contains ONLY REF transcript and REF gene name regardless of whether the junction is found in the reconstructed GTF or not
+case 2: junction not in ref GTF BUT IS in an annotated gene AND junction IS in reconstructed GTF: header contains REF external gene names, comma separated (no space), transcript id comes from reconstructed GTF, separated by comma.
+case 3: junction is not in ref GTF and DOES NOT lie in any annotated gene region: header contains no external gene name (NA) and transcript id(s) come(s) from reconstructed GTF.
+case 4: junction is not in either ref nor reconstructed GTF: junction is discarded because there's no way to translate it.
+
+```{r}
+
+# FUNCTION TO EXTRACT TRANSCRIPTS WITH JUNCTION-FLANKING EXONS.
+# NOTE: to be used with purrr
+# input: spliceregion_list: a list containing details of ONE junction: $chr, $start, $end, $strand and $junction_ID
+# tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
+# index: loop progress marker to be used with imap
+
+extract_junction.flanking.exons <- function(spliceregion_list, tibble_gtf_table, index) {
+  
+  # DEBUG ###################
+
+  # spliceregion_list <- UNION_junc_coor_table_4_array.tree[[1833]]
+  # tibble_gtf_table <- tibble_ref_gtf
+  # tibble_gtf_table <- tibble_alltimepoints_reconstructed_gtf
+  # index <- 1833
+
+  ###########################
+
+  print(paste("now processing junction number", index))
+  
+if (spliceregion_list$strand == ".") {
+    
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 2) & .$end >= ((spliceregion_list$start %>% as.numeric) - 2), ] %>% .[!(.$start <= ((spliceregion_list$end %>% as.numeric) - 2) & .$end >= ((spliceregion_list$start %>% as.numeric) + 2)), ] %>% .[.$type == "exon", ]
+    
+  } else if (spliceregion_list$strand == "+" | spliceregion_list$strand == "-") {
+    
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$strand == spliceregion_list$strand %>% trimws, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 2) & .$end >= ((spliceregion_list$start %>% as.numeric) - 2), ] %>% .[!(.$start <= ((spliceregion_list$end %>% as.numeric) - 2) & .$end >= ((spliceregion_list$start %>% as.numeric) + 2)), ] %>% .[.$type == "exon", ]
+    
+  } else {
+    
+    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
+    
+  }
+  
+  list_of_junction_associated_transcripts <- tibble_gtf_subset_flanking_exons$transcript_id %>% unique %>% array_tree %>% flatten
+  
+  # make a list for each transcript that directly flanks a junction.
+  # then filter so that there are only a) exon PAIRS which b) are directly connected in the mature (spliced) transcript
+  
+  list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% as.numeric)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% as.numeric) - (.x[1, "exon_number"] %>% paste %>% as.numeric)) == 1)
+  
+  return(list_of_tibbles_flanking_exon_gtf.entries_per_transcript)
+  
+}
+
+```
+
+```{r}
+
+# function to extract gene name from reference GTF 
+# only FULL overlap considered, where the query junction interval is a subset of any transcript
+
+extract_external.gene.name_from_reference_GTF <- function(spliceregion_list, ref_gtf_table, index) {
+  
+  # DEBUG ###################
+
+  # spliceregion_list <- UNION_junc_coor_table_4_array.tree[[1]]
+  # ref_gtf_table <- tibble_ref_gtf
+  # index <- 1
+
+  ###########################
+
+  print(paste("now processing junction number", index))
+  
+if (spliceregion_list$strand == ".") {
+    
+    ref_gtf_subset <- ref_gtf_table[ref_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$start <= (spliceregion_list$start %>% as.numeric) & .$end >= (spliceregion_list$end %>% as.numeric), ]
+    
+  } else if (spliceregion_list$strand == "+" | spliceregion_list$strand == "-") {
+    
+    ref_gtf_subset <- ref_gtf_table[ref_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$start <= (spliceregion_list$start %>% as.numeric) & .$end >= (spliceregion_list$end %>% as.numeric), ]
+    
+  } else {
+    
+    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
+    
+  }
+  
+  column_matched_genes <- ref_gtf_subset$gene_name %>% unique
+  
+  return(column_matched_genes)
+  
+}
+
+```
+
+```{r}
+
+# FUNCTION TO RETURN FASTA HEADER FROM MATCHED REF/RECONSTRUCTED GTF ROWS.
+# NOTE: to be used with purrr
+# input: a list containing ref/reconstructed GTF matches for ONE junction, totalling 4 elements: 1. subsets of reference GTF (by transcript) each containing EXACTLY 2 entries of the reference GTF tibble - these describe the exons flanking the junction. 2. subsets of reconstructed GTF giving similar information. 3. amount of transcripts matched to ref. GTF 4. amount of transcripts matched to reconstructed GTF.
+
+# SUMMARY OF BEHAVIOUR:
+# the plan is to grab reference annotation where possible. If not possible, refer to the reconstructed transcriptome merged from all the timepoints and extract the transcript id.
+# 
+# case 1: flanked by reference transcript: header contains ONLY REF transcript and REF gene name regardless of whether the junction is found in the reconstructed GTF or not
+# case 2: junction not in ref GTF BUT IS in an annotated gene AND junction IS in reconstructed GTF: header contains REF external gene names, comma separated (no space), transcript id comes from reconstructed GTF, separated by comma.
+# case 3: junction is not in ref GTF and DOES NOT lie in any annotated gene region: header gene name is called "intergenic" and transcript id(s) come(s) from reconstructed GTF.
+# case 4: junction is not in either ref nor reconstructed GTF: junction is discarded because there's no way to translate it. header is NA, and we shall execute na.omit to ultimately remove it from the junction co-ordinate table
+# 
+# FASTA HEADER FORMAT:
+# format: >diff.splice.tool_transcript.reconstruction.tool|junction_ID|ENST.id|external_gene_name
+# example: >JUM_strawberry|Junction_100084|ENST00000536720.1|ALKBH2
+
+generate_fasta_header_from_subset_gtf <- function(element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length, diff.splice.tool_name, transcript.reconstruction.tool_name) {
+  
+  # DEBUG ###################
+
+  # diff.splice.tool_name <- "JUM"
+  # transcript.reconstruction.tool_name <- "strawberry"
+
+  ###########################
+  
+  ref_gtf_combined <- element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reference_gtf_flanking_exon_entries_per_transcript %>% rbindlist %>% as_tibble
+  reconstructed_gtf_combined <- element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reconstructed_gtf_flanking_exon_entries_per_transcript %>% rbindlist %>% as_tibble
+  
+  # case 1
+  if (element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reference.gtf_number.of.transcripts.matched %>% paste %>% as.numeric != 0) {
+    
+    gene_ids <- ref_gtf_combined$gene_name %>% unique
+    
+    transcript_ids <- ref_gtf_combined$transcript_id %>% unique
+    # case 2
+  } else if (element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reference.gtf_number.of.transcripts.matched %>% paste %>% as.numeric == 0 & element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reconstructed.gtf_number.of.transcripts.matched %>% paste %>% as.numeric != 0 &
+             length(element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$external_gene_names) != 0) {
+    
+    gene_ids <- element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$external_gene_names
+    transcript_ids <- reconstructed_gtf_combined$transcript_id %>% unique
+    # case 3
+  } else if (element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reference.gtf_number.of.transcripts.matched %>% paste %>% as.numeric == 0 & element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reconstructed.gtf_number.of.transcripts.matched %>% paste %>% as.numeric != 0 &
+             length(element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$external_gene_names) == 0) {
+    
+    gene_ids <- "intergenic"
+    transcript_ids <- reconstructed_gtf_combined$transcript_id %>% unique
+    
+  }
+  
+  # case 4
+  
+  if (element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reference.gtf_number.of.transcripts.matched %>% paste %>% as.numeric == 0 & element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$reconstructed.gtf_number.of.transcripts.matched %>% paste %>% as.numeric == 0) {
+    
+    fasta_header <- NA
+    
+  } else {
+    
+    # format: >diff.splice.tool_transcript.reconstruction.tool|junction_ID|ENST.id|external_gene_name
+    # example: >JUM_strawberry|Junction_100084|ENST00000536720.1|ALKBH2
+    
+    fasta_header <- paste(">", 
+                          diff.splice.tool_name, 
+                          "_", 
+                          transcript.reconstruction.tool_name, 
+                          "|", 
+                          element_of_list_ref.and.reconstructed_gtf_matching.entries_with.length$junction_ID, 
+                          "|", 
+                          paste(transcript_ids, collapse = ","), 
+                          "|",
+                          paste(gene_ids, collapse = ","), sep = "")
+    
+  }
+  
+  return(fasta_header)
+  
+}
+
+```
+
+```{r results='hide'}
+
+set.seed(7)
+
+UNION_junc_coor_table_4_array.tree <- UNION_junc_coor_table_4 %>% array_tree
+
+# %>% .[sample(1:100, 20)]
+
+tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+
+alltimepoints_reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+
+tibble_alltimepoints_reconstructed_gtf <- rtracklayer::import(alltimepoints_reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+
+# FUNCTION TO ANNOTATE EACH JUNCTION WITH FASTA HEADERS from reference GTF
+
+# format: >diff.splice.tool_transcript.reconstruction.tool|junction_ID|ENST.id|external_gene_name
+# example: >JUM_strawberry|Junction_100084|ENST00000536720.1|ALKBH2
+
+list_ref.and.reconstructed_gtf_matching.entries <- future_imap(.x = UNION_junc_coor_table_4_array.tree, .f = ~list("reference_gtf_flanking_exon_entries_per_transcript" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y), "reconstructed_gtf_flanking_exon_entries_per_transcript" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y), "external_gene_names" = extract_external.gene.name_from_reference_GTF(.x, tibble_ref_gtf, .y), "junction_ID" = .x$junction_ID), .progress = TRUE, globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "extract_external.gene.name_from_reference_GTF"))
+
+list_ref.and.reconstructed_gtf_matching.entries_with.length <- purrr::map(.x = list_ref.and.reconstructed_gtf_matching.entries, .f = ~purrr::splice(.x, "reference.gtf_number.of.transcripts.matched" = length(.x$reference_gtf_flanking_exon_entries_per_transcript), "reconstructed.gtf_number.of.transcripts.matched" = length(.x$reconstructed_gtf_flanking_exon_entries_per_transcript)))
+
+list_fasta_headers <- purrr::map(.x = list_ref.and.reconstructed_gtf_matching.entries_with.length, .f = ~generate_fasta_header_from_subset_gtf(.x, "JUM", "strawberry"))
+
+UNION_junc_coor_table_5 <- add_column(UNION_junc_coor_table_4, "fasta_header" = list_fasta_headers %>% unlist)
+
+UNION_junc_coor_table_5 <- UNION_junc_coor_table_5 %>% na.omit
+
+print(paste("Number of junctions before filtering:", nrow(UNION_junc_coor_table_4)))
+print(paste("Number of junctions after filtering, translatable:", nrow(UNION_junc_coor_table_5)))
+print(paste("Number of junctions filtered out:", (nrow(UNION_junc_coor_table_4) - nrow(UNION_junc_coor_table_5))))
+
+```
+
+### export final UNION_junc_coor table
+
+```{r}
+
+write.table(UNION_junc_coor_table_5, file = paste(output_dir, output_file_name, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+write.table(UNION_junc_coor_table_5[sample(1:nrow(UNION_junc_coor_table_5), 20), ], file = paste(output_dir, output_file_name, ".txt_test", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+write.table(dplyr::anti_join(UNION_junc_coor_table_3, UNION_junc_coor_table_5, by = "junction_ID"), file = paste(output_dir, output_file_name, "_discardedjunctions.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+write.table(wide_table_of_all_detailed_tables_diffonly, file = paste(output_dir, output_file_name, "_detailedtables.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+```
+
+### write final junction table as .bed file
+
+```{r}
+
+junc_bed_table <- UNION_junc_coor_table_5[, c("chr", "start", "end", "junction_ID", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name")
+
+cat(paste("track name=\"Splice Junctions\" description=\"", output_file_name, "\" graphType=junctions\n", sep = ""), file = paste(output_dir, output_file_name, ".bed", sep = ""))
+write.table(junc_bed_table, file = paste(output_dir, output_file_name, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+
+```
+
+# 3-frame translation of junction-flanking nucleotides
+
+Translate as much as we can within a specified window. 
+
+## import reconstructed GTF and UNION_junc_coor_differential.txt
+
+```{r}
+
+reconstructed_gtf_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_reconstructed_stringtiemerged.gtf"
+
+output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/"
+
+UNION_junc_coor_differential_dir <- paste(output_dir, "UNION_junc_coor_differential_allSOM.txt", sep = "")
+
+reference_genome_fasta_path <- "Z:/hg38_ensembl_reference/raw_genome_fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+
+memory.limit(100000)
+
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install(c("seqinr", "tidyverse", "purrr", "dplyr", "rtracklayer"))
+
+library(seqinr)
+library(tidyverse)
+library(purrr)
+library(dplyr)
+library(rtracklayer)
+
+reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_dir) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+
+UNION_junc_coor_differential <- read_delim(UNION_junc_coor_differential_dir, delim = "\t")
+
+reference_genome_fasta <- seqinr::read.fasta(file = reference_genome_fasta_path, forceDNAtolower = FALSE)
+
+```
+
+## match exons of reconstructed GTF with junction coords
+
+```{r}
+
+# FUNCTION TO RETURN A VECTOR OF ALL GENOMIC POSITIONS OCCURRING IN THE SPECIFIED WINDOW, SCANNING ALONG ONE TRANSCRIPT
+# TO BE USED WITH PURRR - THIS PROCESSES THE TRANSLATION START/END COORDINATES FOR ONE TRANSCRIPT ONLY
+# transcript.upstream_window: amount of nucleotides you want to consider in the 5' direction WITH RESPECT TO THE TRANSCRIPT (NOT THE GENOME!!)
+# transcript.downstream_window: exactly the same but for 3' direction. the 2 nucleotide positions directly flanking the junction are included in this up/downstream window
+# in contrast, up/downstream_scan_range: scans from the position of the theoretical median nucleotide between the two junction-flanking nucleotides. has half-integer value.
+
+generate_all.genomic.positions_for_translation <- function(list_junction.adjacent_exon_start.end_coords_one_transcript, vector_all.genomic.positions_one_transcript, transcript.upstream_window = 50, transcript.downstream_window = 50) {
+  
+  
+  # DEBUG ###################
+
+  # transcript.upstream_window <- 50
+  # transcript.downstream_window <- 50
+  # 
+  # list_junction.adjacent_exon_start.end_coords_one_transcript <- list_of_junction.adjacent_exon_start.end_coords_per_transcript[[2]]
+  # vector_all.genomic.positions_one_transcript <- list_all.genomic.positions_per_transcript[[2]]
+
+  ###########################
+  
+  nt_length_of_transcript <- length(vector_all.genomic.positions_one_transcript)
+
+  upstream_scan_range <- transcript.upstream_window - 0.5
+  downstream_scan_range <- transcript.downstream_window - 0.5
+  
+  transcript.upstream_flanking.nt.pos <- which(vector_all.genomic.positions_one_transcript == list_junction.adjacent_exon_start.end_coords_one_transcript$end_transcript.5prime_exon_coord)
+  
+  transcript.downstream_flanking.nt.pos <- which(vector_all.genomic.positions_one_transcript == list_junction.adjacent_exon_start.end_coords_one_transcript$start_transcript.3prime_exon_coord)
+  
+  transcript.median.nt.pos <- ((transcript.upstream_flanking.nt.pos %>% as.double) + (transcript.downstream_flanking.nt.pos %>% as.double)) / 2
+  
+  # CHECKPOINT - IF THE FLANKING POSITIONS ARE NOT DIRECTLY ADJACENT IN THE SPLICED TRANSCRIPT, THROW AN ERROR AND STOP.
+  
+  if (abs(transcript.upstream_flanking.nt.pos - transcript.downstream_flanking.nt.pos) != 1) {
+    
+    stop("ERROR IN FUNCTION: \"generate_all.genomic.positions_for_translation\": junction-flanking nucleotide positions are not adjacent in the mature spliced transcript")
+    
+  }
+  
+  # return vector of genomic positions to translate
+  
+  # translate as much as possible, up to the bounds of the transcript.
+  
+  if (list_junction.adjacent_exon_start.end_coords_one_transcript$sign == 1) {
+    
+      vector_nt.positions_to_translate <- vector_all.genomic.positions_one_transcript[max((transcript.median.nt.pos - upstream_scan_range), 0):min((transcript.median.nt.pos + downstream_scan_range), nt_length_of_transcript)]
+
+  } else if (list_junction.adjacent_exon_start.end_coords_one_transcript$sign == -1) {
+    
+    vector_nt.positions_to_translate <- vector_all.genomic.positions_one_transcript[min((transcript.median.nt.pos + upstream_scan_range), nt_length_of_transcript):max((transcript.median.nt.pos - downstream_scan_range), 0)]
+    
+  }
+  
+  return(list("vector_genome.coords_to_translate" = vector_nt.positions_to_translate, "chr" = list_junction.adjacent_exon_start.end_coords_one_transcript$chr, "strand" = list_junction.adjacent_exon_start.end_coords_one_transcript$strand))
+  
+}
+
+# END generate_all.genomic.positions_for_translation
+
+```
+
+```{r}
+
+# FUNCTION TO 3 FRAME TRANSLATE ONE LIST CONTAINING NUCLEOTIDE SEQUENCE AND STRAND
+
+nt.sequence_strand_threeframetranslate <- function(list_nt.fwd.sequence_strand) {
+  
+  if (list_nt.fwd.sequence_strand$strand == "+") {
+    
+    translation_result <- list("translation_frame_0" = translate(list_nt.fwd.sequence_strand$forward_nucleotides, frame = 0, sens = "F"),
+                               "translation_frame_1" = translate(list_nt.fwd.sequence_strand$forward_nucleotides, frame = 1, sens = "F"),
+                               "translation_frame_2" = translate(list_nt.fwd.sequence_strand$forward_nucleotides, frame = 2, sens = "F"))
+    
+  } else if (list_nt.fwd.sequence_strand$strand == "-") {
+    
+    translation_result <- list("translation_frame_0" = translate(list_nt.fwd.sequence_strand$forward_nucleotides, frame = 0, sens = "R"),
+                               "translation_frame_1" = translate(list_nt.fwd.sequence_strand$forward_nucleotides, frame = 1, sens = "R"),
+                               "translation_frame_2" = translate(list_nt.fwd.sequence_strand$forward_nucleotides, frame = 2, sens = "R"))
+    
+  }
+  
+  return(translation_result)
+  
+}
+
+# END nt.sequence_strand_threeframetranslate
+
+```
+
+```{r}
+
+# MAIN FUNCTION TO DO THREE FRAME TRANSLATION
+# this function will find all flanking exons from ONE input splice junction range by matching with the reconstructed GTF file, then translate in 3 frames.
+# INPUT: a) spliceregion_list, a list (e.g. a single element from a spliceregion_table %>% array tree) containing $chr, $start, $end, $strand, $junction_ID, b) reconstructed GTF table from rtracklayer, c) path to the reference genome fasta itself
+# OUTPUT: a list of every transcript. inside, amino acid sequence from translation of 3 frames
+# mode: can be one of the following: junction OR exon.
+# junction mode e.g. JUM: spliceregion_table must contain columns: chr, start, end and strand of the splice junction region. one row per junction.
+# exon mode e.g. Whippet, PSI-Sigma: spliceregion_table must contain columns: chr, start, end and strand of the differentially included exons. one row per exon.
+# loop_number: used to print out the progress via purrr::imap (prints which junction it's currently looping through)
+
+three_frame_translate_splicejunctions <- function(spliceregion_list, loop_number, reconstructed_gtf_table, mode = NULL, transcript.upstream_window = 50, transcript.downstream_window = 50) {
+  
+  # DEBUG ###################
+
+  # transcript.upstream_window <- 50
+  # transcript.downstream_window <- 50
+  # 
+  # reconstructed_gtf_table <- reconstructed_gtf
+  # spliceregion_list <- UNION_junc_coor_differential_shiftedback_arraytree[[2629]]
+
+  ###########################
+  
+  # filter the reconstructed GTF table for all exon entries that directly flank the splice junction
+  
+  print(paste("Now processing junction number:", loop_number))
+  
+  print("finding which transcripts contain the specified junction...")
+  
+  if (spliceregion_list$strand == ".") {
+    
+    tibble_reconstructed_gtf_subset_flanking_exons <- reconstructed_gtf_table[reconstructed_gtf_table$seqnames == spliceregion_list$chr, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 1) & .$end >= ((spliceregion_list$start %>% as.numeric) - 1), ] %>% .[!(.$start <= (spliceregion_list$end %>% as.numeric) & .$end >= (spliceregion_list$start %>% as.numeric)), ] %>% .[.$type == "exon", ]
+    
+  } else if (spliceregion_list$strand == "+" | spliceregion_list$strand == "-") {
+    
+    tibble_reconstructed_gtf_subset_flanking_exons <- reconstructed_gtf_table[reconstructed_gtf_table$seqnames == spliceregion_list$chr, ] %>% .[.$strand == spliceregion_list$strand, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 1) & .$end >= ((spliceregion_list$start %>% as.numeric) - 1), ] %>% .[!(.$start <= (spliceregion_list$end %>% as.numeric) & .$end >= (spliceregion_list$start %>% as.numeric)), ] %>% .[.$type == "exon", ]
+    
+  } else {
+    
+    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
+    
+  }
+  
+  list_of_junction_associated_transcripts <- tibble_reconstructed_gtf_subset_flanking_exons$transcript_id %>% unique %>% array_tree %>% flatten
+  
+  # make a list for each transcript that directly flanks a junction.
+  # then filter so that there are only a) exon PAIRS which b) are directly connected in the mature (spliced) transcript
+  
+  list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_reconstructed_gtf_subset_flanking_exons[tibble_reconstructed_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% as.numeric)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% as.numeric) - (.x[1, "exon_number"] %>% paste %>% as.numeric)) == 1)
+  
+  #### these are the two main tables to be used for translation #########
+  
+  # to account for + or - strand transcription, the positive "sign" indicates the second exon has higher genome coordinate than the first. negative "sign" indicates the opposite.
+  
+  print("defining junction-flanking nucleotide positions...")
+  
+  list_of_junction.adjacent_exon_start.end_coords_per_transcript <- purrr::map(.x = list_of_tibbles_flanking_exon_gtf.entries_per_transcript, .f = ~list("end_transcript.5prime_exon_coord" = .x[which(.x$exon_number %>% as.numeric == .x$exon_number %>% as.numeric %>% min), "end"] %>% paste %>% as.numeric, "start_transcript.3prime_exon_coord" = .x[which(.x$exon_number %>% as.numeric == .x$exon_number %>% as.numeric %>% max), "start"] %>% paste %>% as.numeric, "chr" = .x[1, "seqnames"] %>% paste, "strand" = .x[1, "strand"] %>% paste) %>% splice("sign" = (.$start_transcript.3prime_exon_coord - .$end_transcript.5prime_exon_coord)/abs(.$start_transcript.3prime_exon_coord - .$end_transcript.5prime_exon_coord)))
+  
+  print("define genome-relative co-ordinates for each nucleotide in associated transcripts...")
+  
+  list_all.genomic.positions_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~reconstructed_gtf_table[reconstructed_gtf_table$transcript_id == .x & reconstructed_gtf$type == "exon", c("start", "end")] %>% array_tree %>% purrr::map(.x  = ., .f = ~.x[[1]]:.x[[2]]) %>% unlist %>% unique %>% sort) %>% set_names(list_of_junction_associated_transcripts) %>% .[names(list_of_tibbles_flanking_exon_gtf.entries_per_transcript)]
+  
+  #######################################################################
+  
+  # generate genome-relative coordinates flanking each junction for translation
+  
+  print("define genomic positions of nucleotides to be translated..")
+  
+  list_genome.coords_for_translation <- purrr::map2(.x = list_of_junction.adjacent_exon_start.end_coords_per_transcript, .y = list_all.genomic.positions_per_transcript, .f = ~generate_all.genomic.positions_for_translation(.x, .y, transcript.upstream_window = transcript.upstream_window, transcript.downstream_window = transcript.downstream_window))
+  
+  print("looking up reference FASTA to fetch nucleotides within specified transcript window...")
+  
+  list_forward_nucleotides_from_coords <- purrr::map(.x = list_genome.coords_for_translation, .f = ~list("forward_nucleotides" = reference_genome_fasta[[.x$chr]] %>% .[.x$vector_genome.coords_to_translate], "strand" = .x$strand))
+  
+  print("initiating three-frame translation...")
+  
+  # three-frame translation
+  
+  list_threeframetranslate <- purrr::map(.x = list_forward_nucleotides_from_coords, .f = ~list(nt.sequence_strand_threeframetranslate(.x), spliceregion_list$fasta_header))
+  
+  print("...Success!!")
+  
+  return(list_threeframetranslate)
+  
+}
+
+# END three_frame_translate_splicejunctions
+
+```
+
+```{r include=FALSE}
+
+UNION_junc_coor_differential_arraytree <- UNION_junc_coor_differential %>% array_tree
+
+
+# test <- three_frame_translate_splicejunctions(UNION_junc_coor_differential_shiftedback_arraytree[[11]], reconstructed_gtf_table = reconstructed_gtf, mode = NULL, transcript.upstream_window = 50, transcript.downstream_window = 50)
+# 
+# list_three_frame_translate_result_chr12 <- purrr::map(.x = UNION_junc_coor_differential_shiftedback_arraytree, .f = ~three_frame_translate_splicejunctions(.x, reconstructed_gtf_table = reconstructed_gtf, mode = NULL, transcript.upstream_window = 50, transcript.downstream_window = 50))
+# 
+# test <- list_three_frame_translate_result_chr12 %>% compact %>% rbindlist
+
+list_three_frame_translate_result <- purrr::imap(.x = UNION_junc_coor_differential_arraytree, .f = ~three_frame_translate_splicejunctions(.x, .y, reconstructed_gtf_table = reconstructed_gtf, mode = NULL, transcript.upstream_window = 50, transcript.downstream_window = 50))
+
+list_three_frame_translate_result %>% length
+
+list_three_frame_translate_result %>% compact %>% length
+
+```
+

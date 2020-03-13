@@ -1,0 +1,2813 @@
+---
+title: "Sorting JUM output files and analysing them for the PGNEXUS OB series bulk RNA-Seq"
+author: "Angel Liang"
+date: "10/21/2019"
+output: pdf_document
+---
+
+# Set the running environment
+
+## Packages and directories
+
+```{r}
+
+library(tidyverse)
+library(dplyr)
+# .datatable.aware = TRUE
+library(purrr)
+# library(data.table)
+library(extrafont)
+loadfonts(device="win")
+windowsFonts("Helvetica" = windowsFont("Helvetica"))
+library(RColorBrewer)
+
+library(genefilter)
+
+library(ggplot2)
+library(kohonen)
+library(genefilter)
+library(gplots)
+library(lattice)
+library(svglite)
+library(scales)
+library(stringr)
+
+library(biomaRt)
+library(systemPipeR)
+library(GOstats)
+library(PFAM.db)
+library(bc3net)
+
+# library(ensembldb)
+# outdated and shit
+# library(EnsDb.Hsapiens.v86)
+# library(DescTools)
+# for %overlaps%
+
+results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+
+results_directory_figures <- paste(results_dir, "figures/", sep="")
+
+if(! dir.exists(results_directory_figures) ) {
+     dir.create(results_directory_figures, recursive = TRUE)}
+
+
+```
+
+## defining functions
+
+```{r}
+
+# function to do Benjamini-Hochberg FDR correction for Gene Ontology output tables from GOHyperGall
+
+## takes the output of the GOHyperGall GO enrichment table and over-writes the Padj column with benjamini-corrected values from the Phyper column
+## spits out the resulting table with modified single column.
+
+## NOTE: BENJAMINI PVALUES ABOVE 0.05 ARE RENAMED NA
+
+GOHyperGAll_benjamini_correction <- function(raw_GOHyperGAll_table)
+
+  {
+  
+  benjamini_GOHyperGAll_table <- raw_GOHyperGAll_table
+  
+  benjamini_GOHyperGAll_table <- benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$SampleMatch != 0, ]
+  
+  benjamini_GOHyperGAll_table[, "Padj"] <- p.adjust(p = benjamini_GOHyperGAll_table[, "Phyper"], method = "BH", n = length(benjamini_GOHyperGAll_table[, "Phyper"]))
+  
+  benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$Padj > 0.05, "Padj"] <- NA
+
+  return(benjamini_GOHyperGAll_table)
+  
+  }
+
+# the equivalent for bc3net::enrichment() output table
+
+bc3net_benjamini_correction <- function(raw_bc3net_table)
+
+  {
+  
+  benjamini_bc3net_table <- raw_bc3net_table
+  
+  benjamini_bc3net_table <- benjamini_bc3net_table[benjamini_bc3net_table$genes != 0, ]
+  
+  benjamini_bc3net_table[, "padj"] <- p.adjust(p = benjamini_bc3net_table[, "pval"], method = "BH", n = length(benjamini_bc3net_table[, "pval"]))
+  
+  benjamini_bc3net_table[benjamini_bc3net_table$padj > 0.05, "padj"] <- NA
+  
+  return(benjamini_bc3net_table)
+  
+}
+
+# bc3net::enrichment() does not show captured genes for each family enriched, so we have to add it in. but in doing so, i want to avoid a purrr within a purrr
+
+# this function selects genes from the background in each family which are ONLY input genes.
+
+filtering_genehits_from_background_catalogue <- function(catalogue, genehit_vector){
+  
+  filtered_catalogue <- purrr::map(.x = catalogue, .f = ~intersect(.x, genehit_vector))
+  
+  return(filtered_catalogue)
+  
+}
+
+# THIS TABLE WILL SPLIT THE IN-CELL CONCATENATED/DELIMITED OUTPUT FOR EACH SUMMARY TABLE FOR EACH SPLICEMODE
+
+split_JUM_output_table <- function(summary_table_onesplicemode, name_of_extra_colname_to_split, name_of_splicemode) {
+  
+  # SPLITTING THE SEMICOLON DELIMITED VALUES INTO NEW ROWS
+
+summary_table_onesplicemode <- summary_table_onesplicemode %>% na.omit
+
+summary_table_onesplicemode_column_names <- colnames(summary_table_onesplicemode)
+
+summary_table_onesplicemode_dPSI_column_numbers <- summary_table_onesplicemode_column_names %>% grep(., pattern = paste("deltaPSI(.*)|", name_of_extra_colname_to_split, sep = ""))
+
+# A. SPLITTING EACH CELL OF DELTAPSI INTO SEPARATE ROWS
+# THIS OUTPUTS A LIST WITH EACH ELEMENT CONTAINING THE VALUES OF EACH ROW
+list_of_onesplicemode_dPSI_values_only_split <- summary_table_onesplicemode[, summary_table_onesplicemode_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){strsplit(x, split = ";")})
+
+# WE MUST FIRST DEFINE THE FINAL TABLE THEN GO BACK TO FINISHING THE FINAL TABLE BECAUSE IT NEEDS TO SCAFFOLD BASED ON A PREDETERMINED NUMBER OF ROWS IN data.frame(matrix(...))
+
+# B. USE SPLITTING LENGTH FOR EACH ROW TO DETERMINE THE AMOUNT OF TIMES ROWS ARE TO BE REPEATED.
+# THIS OUTPUTS THE SAME DATA.FRAME EXCEPT THE RIGHT COLUMNS ARE REPEATED THE SAME NUMBER OF TIMES AS SEMICOLONS
+summary_table_onesplicemode_non_dPSI_values_only_split <- summary_table_onesplicemode[, -summary_table_onesplicemode_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){rep(x, sapply(list_of_onesplicemode_dPSI_values_only_split[[1]], length))}) %>% data.frame
+
+list_of_isoform_number <- list_of_onesplicemode_dPSI_values_only_split[[1]] %>% lapply(length) %>% purrr::map(.x = ., ~c(1:.x)) %>% unlist
+
+# DONE STEP B.
+
+# BACK TO A.
+summary_table_onesplicemode_dPSI_values_only_split <- data.frame(matrix(unlist(list_of_onesplicemode_dPSI_values_only_split), nrow = nrow(summary_table_onesplicemode_non_dPSI_values_only_split), byrow = FALSE), stringsAsFactors = FALSE)
+
+colnames(summary_table_onesplicemode_dPSI_values_only_split) <- names(list_of_onesplicemode_dPSI_values_only_split)
+
+# DONE STEP A.
+
+# APPEND THE TWO TABLES TO RE-CREATE THE WIDE MASTER TABLE EXCEPT THE VALUES ARE ACTUALLY READABLE BY R NOW.
+summary_table_onesplicemode_split <- dplyr::bind_cols(summary_table_onesplicemode_non_dPSI_values_only_split, summary_table_onesplicemode_dPSI_values_only_split)
+
+# rearrange the columns to preserve consistency with the rest of the wide_tables
+
+summary_table_onesplicemode_split <- summary_table_onesplicemode_split[, summary_table_onesplicemode_column_names]
+
+# append the list of isoform numbers
+
+summary_table_onesplicemode_split <- cbind(summary_table_onesplicemode_split, isoform_number = list_of_isoform_number)
+
+# append the list of isoform IDs
+
+summary_table_onesplicemode_split <- cbind(summary_table_onesplicemode_split, isoform_ID = paste(name_of_splicemode, summary_table_onesplicemode_split$AS_event_ID, summary_table_onesplicemode_split$isoform_number, sep = "_"))
+
+# remove non-integer values
+
+summary_table_onesplicemode_split <- type_convert(summary_table_onesplicemode_split, na = c("Inf", "-Inf"), trim_ws = TRUE)
+
+summary_table_onesplicemode_split_with_na <- summary_table_onesplicemode_split
+
+# summary_table_onesplicemode_split <- summary_table_onesplicemode_split %>% na.omit
+
+row.names(summary_table_onesplicemode_split) <- NULL
+
+# re-interpret numbers as numeric
+
+# summary_table_onesplicemode_split[, !(colnames(summary_table_onesplicemode_split) == c("Gene", "AS_event_ID", "splicemode", name_of_extra_colname_to_split))] <- summary_table_onesplicemode_split[, !(colnames(summary_table_onesplicemode_split) == c("Gene", "AS_event_ID", "splicemode", name_of_extra_colname_to_split))] %>% mutate_each(., funs = as.character) %>% mutate_each(., funs = as.numeric)
+
+summary_table_onesplicemode_split <- summary_table_onesplicemode_split %>% type_convert
+  
+return(summary_table_onesplicemode_split)
+
+
+}
+
+
+# END split_JUM_output_table
+
+# function to convert the isoform_ID from JUM and splicemode of isoforms of interest into chr, strand, start and end co-ordinates that ensembldb can read.
+# input tibble structure: MUST CONTAIN: gene "Gene", JUM isoform ID "AS_event_ID" and "splicemode"
+
+JUM_ASeventID_and_splicemode_to_chr_strand_start_end <- function(tibble_of_isoforms_to_be_consequence_assessed) {
+  
+  # subset A3SS, filter out the isoform of interest from the master A3SS table and then return all 4 co-ordinates
+  if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A3SS",] %>% nrow != 0) {
+    
+  A3SS_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A3SS", c("Gene", "AS_event_ID")]
+  A3SS_subset <- dplyr::inner_join(A3SS_summary_table, A3SS_subset, by = c("Gene", "AS_event_ID")) %>% .[, c("Gene", "AS_event_ID", "common_5_SS_coor", "A3SS_coordinates")]
+  A3SS_subset <- cbind(A3SS_subset, chr = gsub(x = A3SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% cbind(., strand = gsub(x = A3SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2")) %>% cbind(., start = gsub(x = A3SS_subset$A3SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\1")) %>% cbind(., end = gsub(x = A3SS_subset$A3SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\3"))
+  A3SS_subset <- A3SS_subset[, c("Gene", "AS_event_ID", "chr", "strand", "start", "end")] %>% as_tibble
+  
+  }
+
+  # subset A5SS
+  if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A5SS",] %>% nrow != 0) {
+    
+  A5SS_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A5SS", c("Gene", "AS_event_ID")]
+  A5SS_subset <- dplyr::inner_join(A5SS_summary_table, A5SS_subset, by = c("Gene", "AS_event_ID")) %>% .[, c("Gene", "AS_event_ID", "common_3_SS_coor", "A5SS_coordinates")]
+  A5SS_subset <- cbind(A5SS_subset, chr = gsub(x = A5SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% cbind(., strand = gsub(x = A5SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2")) %>% cbind(., start = gsub(x = A5SS_subset$A5SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\1")) %>% cbind(., end = gsub(x = A5SS_subset$A5SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\3"))
+  A5SS_subset <- A5SS_subset[, c("Gene", "AS_event_ID", "chr", "strand", "start", "end")] %>% as_tibble
+  
+  }
+
+  # subset cassette
+  if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "cassette_exon",] %>% nrow != 0) {
+    
+  cassette_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "cassette_exon", c("Gene", "AS_event_ID")]
+  cassette_subset <- dplyr::inner_join(cassette_exon_summary_table, cassette_subset, by = c("Gene", "AS_event_ID")) %>% .[, c("Gene", "AS_event_ID", "upstream_exon_end_coor", "cassette_exon_start_coor", "cassette_exon_end_coor", "downstream_exon_start_coor")]
+  cassette_subset <- cbind(cassette_subset, chr = gsub(x = cassette_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% cbind(., strand = gsub(x = cassette_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2"))
+  cassette_subset <- cassette_subset[, c("Gene", "AS_event_ID", "chr", "strand", "cassette_exon_start_coor", "cassette_exon_end_coor")] %>% as_tibble
+  names(cassette_subset) <- c("Gene", "AS_event_ID", "chr", "strand", "start", "end")
+  
+  }
+
+  # subset MXE events
+  if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "MXE_events",] %>% nrow != 0) {
+    
+    MXE_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "MXE_events", c("Gene", "isoform_ID")]
+  MXE_subset <- dplyr::inner_join(MXE_events_summary_table_split, MXE_subset, by = c("Gene", "isoform_ID")) %>% .[, c( "Gene", "AS_event_ID", "isoform_ID", "upstream_exon_end_coor", "MXE_exon_coordinates", "downstream_exon_start_coor")]
+  MXE_subset <- cbind(MXE_subset, chr = gsub(x = MXE_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% cbind(., strand = gsub(x = MXE_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2")) %>% cbind(., start = gsub(x = MXE_subset$MXE_exon_coordinates, pattern = "(.*)-(.*)", replacement = "\\1")) %>% cbind(., end = gsub(x = MXE_subset$MXE_exon_coordinates, pattern = "(.*)-(.*)", replacement = "\\2"))
+  MXE_subset <- MXE_subset[, c("Gene", "isoform_ID", "chr", "strand", "start", "end")] %>% as_tibble
+  names(MXE_subset) <- c("Gene", "AS_event_ID", "chr", "strand", "start", "end")
+    
+  }
+  
+  # subset IR events
+  if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "IR_events",] %>% nrow != 0) {
+    
+  IR_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "IR_events", c("Gene", "AS_event_ID")]
+  IR_subset <- dplyr::inner_join(IR_events_summary_table, IR_subset, by = c("Gene", "AS_event_ID")) %>% .[, c("Gene", "AS_event_ID", "retained_intron_start", "retained_intron_end")]
+  IR_subset <- cbind(IR_subset, chr = gsub(x = IR_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% cbind(., strand = gsub(x = IR_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2"))
+  IR_subset <- IR_subset[, c("Gene", "AS_event_ID", "chr", "strand", "retained_intron_start", "retained_intron_end")] %>% as_tibble
+  colnames(IR_subset) <- c("Gene", "AS_event_ID", "chr", "strand", "start", "end")
+  
+  }
+  
+  # subset composite events
+  if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "composite_events",] %>% nrow != 0) {
+    
+  composite_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "composite_events", c("Gene", "AS_event_ID")]
+  composite_subset <- dplyr::inner_join(composite_events_summary_table, composite_subset, by = c("Gene", "AS_event_ID")) %>% .[, c("Gene", "AS_event_ID")]
+  composite_subset <- cbind(composite_subset, chr = gsub(x = composite_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% 
+    cbind(., strand = gsub(x = composite_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2")) %>% 
+    cbind(., start = gsub(x = composite_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_([0-9]{1,10})(.*{0,1})_([0-9]{1,10})", replacement = "\\3")) %>% 
+    cbind(., end = gsub(x = composite_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_([0-9]{1,10})(.*{0,1})_([0-9]{1,10})", replacement = "\\5"))
+  
+  # generating intervals using the composite coordinate vertices provided
+  
+  # (deprecated) ##
+  # list_of_composite_subset_coordinates <- gsub(x = composite_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\3") %>% strsplit(split = "_")
+  # list_of_composite_subset_coordinates <- purrr::map(.x = list_of_composite_subset_coordinates, .f = ~.x[1:(length(.x)-1)] %>% cbind(., end = .x[2:(length(.x))]) %>% as_tibble)
+  # list_of_composite_subset_coordinates <- purrr::map(.x = list_of_composite_subset_coordinates, ~rename(.x, start = 1, end = 2))
+  # 
+  # composite_subset <- apply(X = composite_subset, MARGIN = 2, FUN = function(x){rep(x, times = purrr::map(list_of_composite_subset_coordinates, nrow) %>% unlist)}) %>% cbind(., start = purrr::map(list_of_composite_subset_coordinates, ~.x$start) %>% unlist) %>% cbind(., end = purrr::map(list_of_composite_subset_coordinates, ~.x$end) %>% unlist)
+  
+  composite_subset <- composite_subset[, c("Gene", "AS_event_ID", "chr", "strand", "start", "end")] %>% as_tibble
+  
+  colnames(composite_subset) <- c("Gene", "AS_event_ID", "chr", "strand", "start", "end")
+  
+  }
+  
+  ### CONCATENATE ALL THE SUBSET LISTS BACK INTO A SINGLE TABLE
+  
+  tibble_of_chr_strand_start_end <- bind_rows(if (exists("A3SS_subset") == TRUE) {A3SS_subset}, 
+                                              if (exists("A5SS_subset") == TRUE) {A5SS_subset}, 
+                                              if (exists("cassette_subset") == TRUE) {cassette_subset}, 
+                                              if (exists("MXE_subset") == TRUE) {MXE_subset}, 
+                                              if (exists("IR_subset") == TRUE) {IR_subset}, 
+                                              if (exists("composite_subset") == TRUE) {composite_subset}) %>% type_convert %>% mutate_if(is.factor, as.character) %>% as_tibble
+  
+  return(tibble_of_chr_strand_start_end)
+  
+}
+
+# END JUM_ASeventID_and_splicemode_to_chr_strand_start_end
+
+# this will take the result of genomic-to-protein mapping (i.e. ENSP ids) and feed it through biomart. The result is a list of protein domain accessions/ids that overlap (AT THE MOMENT FULL OVERLAP ONLY) with the query interval
+# NOTE: THIS FUNCTION ONLY ACTS ON A SINGLE TIBBLE. MUST BE USED AS PART OF PURRR::MAP FUNCTION TO PROCESS THE WHOLE LIST OF PROTEIN POSITION MAPPING RESULTS
+# NOTE2: COLUMNS EXPECTED: $1 (ENSP) "names", $2 "start", $3 "width", $4 "end"
+
+tibble_of_mapped_protein_positions_to_list_of_domains_PTMs <- function(tibble_of_mapped_proteinID, ensemblmart) {
+  
+input_ranges <- purrr::map2(.x = tibble_of_mapped_proteinID$start, .y = tibble_of_mapped_proteinID$end, .f = ~.x:.y %>% unlist) %>% unlist %>% unique
+
+# interpro
+interpro_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "interpro", "interpro_start", "interpro_end"), mart = ensemblmart) %>% array_tree
+
+if (any(interpro_list %>% unlist %>% is.na) == FALSE) {
+  
+  interpro_list <- purrr::map(.x = interpro_list, .f = ~append(.x, values = list(range = .x$interpro_start:.x$interpro_end)))
+
+} else {
+  
+   interpro_list <- "" 
+  
+  }
+
+# coiled coils
+ncoils_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "ncoils_start", "ncoils_end"), mart = ensemblmart) %>% array_tree
+
+if (any(ncoils_list %>% unlist %>% is.na) == FALSE) {
+  
+  ncoils_list <- purrr::map(.x = ncoils_list, .f = ~append(.x, values = list(range = .x$ncoils_start:.x$ncoils_end, ncoils = "ncoils")))
+  
+} else {
+  
+   ncoils_list <- "" 
+  
+  }
+
+# low complexity
+seg_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "seg_start", "seg_end"), mart = ensemblmart) %>% array_tree
+
+if (any(seg_list %>% unlist %>% is.na) == FALSE) {
+  
+  seg_list <- purrr::map(.x = seg_list, .f = ~append(.x, values = list(range = .x$seg_start:.x$seg_end, seg = "seg")))
+  
+} else {
+  
+   seg_list <- "" 
+  
+  }
+
+# signal peptide cleavage site
+signalp_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "signalp_start", "signalp_end"), mart = ensemblmart) %>% array_tree
+
+if (any(signalp_list %>% unlist %>% is.na) == FALSE) {
+  
+  signalp_list <- purrr::map(.x = signalp_list, .f = ~append(.x, values = list(range = .x$signalp_start:.x$signalp_end, signalp = "signalp")))
+  
+} else {
+  
+   signalp_list <- "" 
+  
+  }
+
+# transmembrane helices
+tmhmm_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "tmhmm_start", "tmhmm_end"), mart = ensemblmart) %>% array_tree 
+
+if (any(tmhmm_list %>% unlist %>% is.na) == FALSE) {
+  
+  tmhmm_list <- purrr::map(.x = tmhmm_list, .f = ~append(.x, values = list(range = .x$tmhmm_start:.x$tmhmm_end, tmhmm = "tmhmm")))
+  
+} else {
+  
+   tmhmm_list <- "" 
+  
+  }
+
+#PDB-ENSP mappings
+sifts_import_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "sifts_import", "sifts_import_start", "sifts_import_end"), mart = ensemblmart) %>% array_tree 
+
+if (any(sifts_import_list %>% unlist %>% is.na) == FALSE) {
+  
+  sifts_import_list <-  purrr::map(.x = sifts_import_list, .f = ~append(.x, values = list(range = .x$sifts_import_start:.x$sifts_import_end)))
+  
+} else {
+  
+   sifts_import_list <- "" 
+  
+  }
+
+# mobidblite (prediction of long intrinsically disordered regions) mappings
+mobidblite_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "mobidblite", "mobidblite_start", "mobidblite_end"), mart = ensemblmart) %>% array_tree 
+
+if (any(mobidblite_list %>% unlist %>% is.na) == FALSE) {
+  
+  mobidblite_list <-  purrr::map(.x = mobidblite_list, .f = ~append(.x, values = list(range = .x$mobidblite_start:.x$mobidblite_end)))
+  
+} else {
+  
+   mobidblite_list <- "" 
+  
+  }
+
+all_domains_from_protein_tibble <- list(interpro = interpro_list, 
+                                        ncoils = ncoils_list, 
+                                        seg = seg_list, 
+                                        signalp = signalp_list, 
+                                        tmhmm = tmhmm_list, 
+                                        sifts = sifts_import_list, 
+                                        mobidblite = mobidblite_list) %>% purrr::discard(.x = ., ~any(.x == ""))
+
+# ALL DOMAIN ANNOTATIONS FROM BIOMART ARE FINISHED HERE
+
+all_domains_PTMs_from_protein_tibble_filtered <- keep(all_domains_from_protein_tibble %>% flatten, ~(intersect(.x$range, input_ranges) %>% length) != 0) %>% list(domains = .)
+
+# COINCIDING PTMS
+if (tibble_of_mapped_proteinID$names %>% length != 0) {
+  
+  column_uniprotkb_entry_IDs <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% na.omit %>% setNames(c("protein_stable_ID", "uniprotkb_entry"))
+  
+  if (column_uniprotkb_entry_IDs %>% nrow != 0) {
+    
+    table_all_PTMs_for_query_peptide <- dplyr::semi_join(dbPTM_allhuman_annotations, column_uniprotkb_entry_IDs, by = "uniprotkb_entry")
+    
+    table_coinciding_PTMs <- table_all_PTMs_for_query_peptide[table_all_PTMs_for_query_peptide$modified_residue_position == intersect(table_all_PTMs_for_query_peptide$modified_residue_position %>% as.numeric, input_ranges %>% as.numeric), ]
+    
+    if (table_coinciding_PTMs %>% nrow != 0) {
+      
+      all_domains_PTMs_from_protein_tibble_filtered <- append(all_domains_PTMs_from_protein_tibble_filtered, list(PTMs = table_coinciding_PTMs))
+      
+    }
+    
+  }
+  
+}
+
+return(all_domains_PTMs_from_protein_tibble_filtered)
+
+}
+
+# END tibble_of_mapped_protein_positions_to_list_of_domains_PTMs()
+
+# this will help us deal with ranges with partial overlap. I classify into 3 cases: 1. query start and end positions both lie in the CDS region 2. start is missing 3. end is missing 4. both missing.
+# in the case of missing start/end, it's simple. we use the fact that always start > end.
+# we will use the closest number between start and end which actually lies in the CDS region as a proxy for the missing value.
+match_query_startend_with_vectors_of_CDSpositions <- function(vector_of_sorted_CDSpositions, ENSP_id, input_query_start, input_query_end) {
+  # 
+  # # case if none missing
+  # if (intersect(vector_of_sorted_CDSpositions, input_query_start) %>% length == 1 & intersect(vector_of_sorted_CDSpositions, input_query_end) %>% length == 1) {
+  # 
+  #   proxy_query_start <- input_query_start
+  #   proxy_query_end <- input_query_end
+  #   
+  # # case if input start missing
+  # } else if (intersect(vector_of_sorted_CDSpositions, input_query_start) %>% length == 0 & intersect(vector_of_sorted_CDSpositions, input_query_end) %>% length == 1) {
+  # 
+  #   proxy_query_start <- min(vector_of_sorted_CDSpositions[which(input_query_start < vector_of_sorted_CDSpositions & vector_of_sorted_CDSpositions < input_query_end)])
+  #   proxy_query_end <- input_query_end
+  #   
+  # # case if input end missing
+  # } else if (intersect(vector_of_sorted_CDSpositions, input_query_start) %>% length == 1 & intersect(vector_of_sorted_CDSpositions, input_query_end) %>% length == 0) {
+
+    proxy_query_start <- min(vector_of_sorted_CDSpositions[which(input_query_start <= vector_of_sorted_CDSpositions & vector_of_sorted_CDSpositions <= input_query_end)])
+    proxy_query_end <- max(vector_of_sorted_CDSpositions[which(input_query_start <= vector_of_sorted_CDSpositions & vector_of_sorted_CDSpositions <= input_query_end)])
+
+  # }
+
+  # NOTICE: I DELIBERATELY EXPANDED THE START RANGE BY 1 TO ACCOUNT FOR N-TERMINAL METHIONINE EXCISION. THIS IS, AFTER ALL, A CATCH-ALL.
+
+  protein_coordinate_start <-((which(vector_of_sorted_CDSpositions == proxy_query_start) - 1) %/% 3) + 1 - 1
+  protein_coordinate_end <- ((which(vector_of_sorted_CDSpositions == proxy_query_end) - 1) %/% 3) + 1
+  protein_coordinate_width <- protein_coordinate_end - protein_coordinate_start + 1
+
+  tibble_of_mapped_protein_coordinates <- tribble(~names, ~start, ~width, ~end,
+                                                    ENSP_id,
+                                                    protein_coordinate_start,
+                                                    protein_coordinate_width,
+                                                    protein_coordinate_end)
+
+  return(tibble_of_mapped_protein_coordinates)
+  
+  # debug
+  # return(list(vector_of_sorted_CDSpositions, ENSP_id, input_query_start, input_query_end, proxy_query_start, proxy_query_end))
+  
+}
+
+# END match_query_startend_with_vectors_of_CDSpositions
+
+# FILTER THE GTF TABLE BY ANNOTATIONS OVERLAPPING WITH THE QUERY INTERVAL(S)
+
+map_genome_coordinate_to_transcriptandprotein <- function(chr_strand_start_end_tibble) {
+  
+  list_of_query_AS_event_ID <- chr_strand_start_end_tibble$AS_event_ID %>% as.list
+
+list_of_all_overlapping_annotations <- purrr::map(.x = list_of_query_AS_event_ID, .f = ~gtf_table[
+  (gtf_table$chr == chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "chr"] %>% lapply(as.character)) &
+    (gtf_table$strand == chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "strand"] %>% lapply(as.character)), ] %>% 
+    .[(.$start < chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "end"] %>% as.numeric) & 
+        (.$end > chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "start"] %>% as.numeric), ])
+
+names(list_of_all_overlapping_annotations) <- chr_strand_start_end_tibble$Gene
+
+return(list_of_all_overlapping_annotations)
+  
+}
+
+# END map_genome_coordinate_to_transcriptandprotein
+
+# sort lists of protein CDS positions by descending/ascending order depending if ORF is on + or - strand
+##  function to look at a tibble containing the CDS positions and see whether you need to sort by increasing or decreasing order
+
+sort_tibble_according_to_strand <- function(tibble_to_be_sorted) {
+  
+  if (data.class(tibble_to_be_sorted) != "tbl_df") {
+    
+    CDS_list_out <- tibble_to_be_sorted
+    
+  } else if (data.class(tibble_to_be_sorted) == "tbl_df" & tibble_to_be_sorted$strand %>% lapply(as.character) %>% unique %>% paste == "+") {
+    
+    CDS_list_out <- purrr::map2(.x = tibble_to_be_sorted$start, .y = tibble_to_be_sorted$end, .f = ~.x:.y) %>% unlist %>% unique %>% sort(., decreasing = FALSE)
+    
+  } else if (data.class(tibble_to_be_sorted) == "tbl_df" & tibble_to_be_sorted$strand %>% lapply(as.character) %>% unique %>% paste == "-") {
+    
+    CDS_list_out <- purrr::map2(.x = tibble_to_be_sorted$start, .y = tibble_to_be_sorted$end, .f = ~.x:.y) %>% unlist %>% unique %>% sort(., decreasing = TRUE)
+    
+  }
+  
+  return(CDS_list_out)
+  
+}
+
+# END sort_according_to_strand
+
+# THE MAIN FUNCTION TO CONVERT THE TIDIED CHR STRAND START END TIBBLE TO LISTS OF OVERLAPPING ANNOTATION AND PROTEIN DOMAINS
+# inputs: 1. table containing regions to be queried. columns must be: Gene, AS event ID, chr, strand, start, end; 2. GTF table, preferably from rtracklayer::import, 3. ensembl mart of choice
+
+tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- function(tibble_queryisoforms_chr_strand_start_end, gtf_table, ensemblmart) {
+  
+list_queryisoforms_overlapping_annotations_tibbles <- tibble_queryisoforms_chr_strand_start_end %>% map_genome_coordinate_to_transcriptandprotein
+
+list_overlapping_protein_CDS_exons_tibbles <- purrr::map(.x = list_queryisoforms_overlapping_annotations_tibbles, .f = ~.x$protein_id %>% na.omit %>% unique %>% as.list %>% purrr::map(.x = ., .f = ~gtf_table[gtf_table$protein_id == .x & gtf_table$type == "CDS", ] %>% .[apply(X = ., MARGIN = 1, FUN = function(X) {all(is.na(X)) == FALSE}), ]))
+
+list_overlapping_protein_CDS_positions_tibbles <- purrr::map_depth(.x = list_overlapping_protein_CDS_exons_tibbles, .depth = 2, .f = ~sort_tibble_according_to_strand(.x))
+
+# list_overlapping_protein_CDS_positions_tibbles <- purrr::modify_if(.x = list_overlapping_protein_CDS_exons_tibbles, .p = ~length(.x) != 0, .f = ~purrr::modify_if(.x = .x, .p = ~.x$strand %>% lapply(as.character) %>% unique %>% paste == "+", .f = ~purrr::map2(.x = .$start, .y = .$end, .f = ~.x:.y) %>% unlist %>% unique %>% sort(., decreasing = FALSE)))
+# list_overlapping_protein_CDS_positions_tibbles <- purrr::modify_if(.x = list_overlapping_protein_CDS_positions_tibbles, .p = ~length(.x) != 0, .f = ~purrr::modify_if(.x = .x, .p = ~.x$strand %>% lapply(as.character) %>% unique %>% paste == "-", .f = ~purrr::map2(.x = .$start, .y = .$end, .f = ~.x:.y) %>% unlist %>% unique %>% sort(., decreasing = TRUE)))
+
+# we now generate a table of mapped protein relative coordinates for each genomic start and end nested inside each gene enrichment query.
+# provided functions: 
+# 1. list_overlapping_protein_CDS_positions_tibbles: list of genes corresponding to isoform enriched > list of vectors of genomic positions of CDS for each ENSP, 
+# 2. 1:length(list_overlapping_protein_CDS_positions_tibbles) %>% as.list: level 1 indices, 
+# 3. list_overlapping_protein_CDS_exons_tibbles: list of genes corresponding to isoform enriched > list of subsets of GTF table for each unique ENSP caught by query range. used for ENSP id mapping 
+# NOTE: width < 0 if the ORF is on the - strand
+mapped_aminoacid_positions <- purrr::pmap(.l = list(list_overlapping_protein_CDS_positions_tibbles, 
+                                             1:length(list_overlapping_protein_CDS_positions_tibbles) %>% as.list,
+                                             list_overlapping_protein_CDS_exons_tibbles), .f = ~purrr::pmap(
+  .l = list(..1, rep(..2, times = length(..1)) %>% as.list, ..3), 
+  .f = ~match_query_startend_with_vectors_of_CDSpositions(..1, paste(..3$protein_id %>% unique), paste(tibble_queryisoforms_chr_strand_start_end[..2, "start"]) %>% as.numeric, paste(tibble_queryisoforms_chr_strand_start_end[..2, "end"]) %>% as.numeric)
+      ))
+
+# FINALLY! PROTEIN DOMAIN MATCHING!
+
+# get rid of empty genes with no match
+mapped_aminoacid_positions <- purrr::discard(.x = mapped_aminoacid_positions, .p = ~length(.x) == 0)
+
+conciding_domains_PTMs <- map_depth(.x = mapped_aminoacid_positions, .depth = 2, .f = ~tibble_of_mapped_protein_positions_to_list_of_domains_PTMs(.x, ensemblmart))
+
+return(list(overlapping_annotated_regions = list_queryisoforms_overlapping_annotations_tibbles, conciding_domains_and_PTMs = conciding_domains_PTMs))
+
+}
+
+# END tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain
+
+```
+
+# read all the final tables into environment
+
+```{r}
+
+list_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL)
+
+print(head(list_of_timepoint_comparisons_final))
+
+for (comparison in list_of_timepoint_comparisons_final[, 1])
+{
+  
+  for (AS_event in c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events"))
+  {
+    
+    assign(x = paste(comparison, "_", AS_event, "_simplified", sep = ""), value = read.delim(file = paste(results_dir, "final_JUM_output_", comparison, "/", list.files(path = paste(results_dir, "final_JUM_output_", comparison, "/", sep = ""), pattern = paste("(.)", AS_event, "(.*)simplified.txt", sep = "")), sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf"), colClasses = "character"))
+  
+  }
+  
+}
+
+# this must be equal to the total number of comparisons
+
+length(ls(pattern = "(.*)simplified")) / 6
+
+```
+
+# chopping files into a net summary table
+
+note: the final simplified intron retention table outputted by JUM has two header rows. Remove those.
+
+## A3SS
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_A3SS_simplified_output_table_names <- ls(pattern = "(.*)(_)(A3SS_events)(_simplified$)")
+print(paste("There are", length(list_of_A3SS_simplified_output_table_names), "output tables loaded for A3SS events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_A3SS_simplified_output_tables <- purrr::map(list_of_A3SS_simplified_output_table_names, get)
+names(list_of_A3SS_simplified_output_tables) <- list_of_A3SS_simplified_output_table_names
+## subset
+list_of_A3SS_simplified_output_tables_simplified <- purrr::map(list_of_A3SS_simplified_output_tables, ~dplyr::select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+A3SS_pvalue_column_names <- gsub(x = list_of_A3SS_simplified_output_table_names, pattern = "(.*)_A3SS_events_simplified", replacement = "pvalue_\\1") %>% as.list
+A3SS_qvalue_column_names <- gsub(x = list_of_A3SS_simplified_output_table_names, pattern = "(.*)_A3SS_events_simplified", replacement = "qvalue_\\1") %>% as.list
+
+list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(.x = list_of_A3SS_simplified_output_tables_simplified, .y = A3SS_pvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "pvalue", replacement = paste(.y, sep = ""))))
+list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(.x = list_of_A3SS_simplified_output_tables_shuffled, .y = A3SS_qvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "qvalue", replacement = paste(.y, sep = ""))))
+
+
+# list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(.x = list_of_A3SS_simplified_output_tables_simplified, .y = A3SS_pvalue_column_names, ~rename(.x, !!.y := 5))
+# list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(.x = list_of_A3SS_simplified_output_tables_shuffled, .y = A3SS_qvalue_column_names, ~rename(.x, !!.y := 6))
+
+print(paste("Shuffled", length(list_of_A3SS_simplified_output_tables_shuffled), "output tables for A3SS events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+A3SS_summary_table <- list_of_A3SS_simplified_output_tables_shuffled %>% purrr::reduce(full_join, by = c("common_5_SS_coor", "Gene", "AS_event_ID", "A3SS_coordinates"))
+
+# NOTEEEEEE: further column exclusion later on.
+
+# A3SS_trimmed_table <- A3SS_summary_table[, c(1, 2, 5, 6, 7... to the end)]
+
+```
+
+## A5SS
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_A5SS_simplified_output_table_names <- ls(pattern = "(.*)(_)(A5SS_events)(_simplified$)")
+print(paste("There are", length(list_of_A5SS_simplified_output_table_names), "output tables loaded for A5SS events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_A5SS_simplified_output_tables <- purrr::map(list_of_A5SS_simplified_output_table_names, get)
+names(list_of_A5SS_simplified_output_tables) <- list_of_A5SS_simplified_output_table_names
+
+## subset
+list_of_A5SS_simplified_output_tables_simplified <- purrr::map(list_of_A5SS_simplified_output_tables, ~dplyr::select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+A5SS_pvalue_column_names <- gsub(x = list_of_A5SS_simplified_output_table_names, pattern = "(.*)_A5SS_events_simplified", replacement = "pvalue_\\1")
+A5SS_qvalue_column_names <- gsub(x = list_of_A5SS_simplified_output_table_names, pattern = "(.*)_A5SS_events_simplified", replacement = "qvalue_\\1")
+
+list_of_A5SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A5SS_simplified_output_tables_simplified, A5SS_pvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "pvalue", replacement = paste(.y, sep = ""))))
+list_of_A5SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A5SS_simplified_output_tables_shuffled, A5SS_qvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "qvalue", replacement = paste(.y, sep = ""))))
+
+print(paste("Shuffled", length(list_of_A5SS_simplified_output_tables_shuffled), "output tables for A5SS events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+A5SS_summary_table <- list_of_A5SS_simplified_output_tables_shuffled %>% purrr::reduce(full_join, by = c("common_3_SS_coor", "Gene", "AS_event_ID", "A5SS_coordinates"))
+
+
+```
+
+## cassette exon
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_cassette_exon_simplified_output_table_names <- ls(pattern = "(.*)(_)(cassette_exon_events)(_simplified$)")
+print(paste("There are", length(list_of_cassette_exon_simplified_output_table_names), "output tables loaded for cassette exon events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_cassette_exon_simplified_output_tables <- purrr::map(list_of_cassette_exon_simplified_output_table_names, get)
+names(list_of_cassette_exon_simplified_output_tables) <- list_of_cassette_exon_simplified_output_table_names
+
+## subset
+list_of_cassette_exon_simplified_output_tables_simplified <- purrr::map(list_of_cassette_exon_simplified_output_tables, ~dplyr::select(.x, 1, 2, 5, 6, 7, 8, 9, 10, 11))
+## annotating the column names to be comparison name specific
+
+cassette_exon_pvalue_column_names <- gsub(x = list_of_cassette_exon_simplified_output_table_names, pattern = "(.*)_cassette_exon_events_simplified", replacement = "pvalue_\\1")
+cassette_exon_qvalue_column_names <- gsub(x = list_of_cassette_exon_simplified_output_table_names, pattern = "(.*)_cassette_exon_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_cassette_exon_simplified_output_tables_shuffled <- purrr::map2(list_of_cassette_exon_simplified_output_tables_simplified, cassette_exon_pvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "pvalue", replacement = paste(.y, sep = ""))))
+list_of_cassette_exon_simplified_output_tables_shuffled <- purrr::map2(list_of_cassette_exon_simplified_output_tables_shuffled, cassette_exon_qvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "qvalue", replacement = paste(.y, sep = ""))))
+
+print(paste("Shuffled", length(list_of_cassette_exon_simplified_output_tables_shuffled), "output tables for cassette exon events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+cassette_exon_summary_table <- list_of_cassette_exon_simplified_output_tables_shuffled %>% purrr::reduce(full_join, by = c("upstream_exon_end_coor", "downstream_exon_start_coor", "Gene", "AS_event_ID", "cassette_exon_start_coor", "cassette_exon_end_coor"))
+
+
+```
+
+## MXE events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_MXE_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(MXE_events)(_simplified$)")
+print(paste("There are", length(list_of_MXE_events_simplified_output_table_names), "output tables loaded for MXE events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_MXE_events_simplified_output_tables <- purrr::map(list_of_MXE_events_simplified_output_table_names, get)
+names(list_of_MXE_events_simplified_output_tables) <- list_of_MXE_events_simplified_output_table_names
+
+## subset
+list_of_MXE_events_simplified_output_tables_simplified <- purrr::map(list_of_MXE_events_simplified_output_tables, ~dplyr::select(.x, 1, 2, 5, 6, 7, 8, 9, 10))
+## annotating the column names to be comparison name specific
+
+MXE_events_pvalue_column_names <- gsub(x = list_of_MXE_events_simplified_output_table_names, pattern = "(.*)_MXE_events_simplified", replacement = "pvalue_\\1")
+MXE_events_qvalue_column_names <- gsub(x = list_of_MXE_events_simplified_output_table_names, pattern = "(.*)_MXE_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_MXE_events_simplified_output_tables_shuffled <- purrr::map2(list_of_MXE_events_simplified_output_tables_simplified, MXE_events_pvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "pvalue", replacement = paste(.y, sep = ""))))
+list_of_MXE_events_simplified_output_tables_shuffled <- purrr::map2(list_of_MXE_events_simplified_output_tables_shuffled, MXE_events_qvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "qvalue", replacement = paste(.y, sep = ""))))
+
+print(paste("Shuffled", length(list_of_MXE_events_simplified_output_tables_shuffled), "output tables for MXE exon events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+MXE_events_summary_table <- list_of_MXE_events_simplified_output_tables_shuffled %>% purrr::reduce(full_join, by = c("upstream_exon_end_coor", "downstream_exon_start_coor", "Gene", "AS_event_ID", "MXE_exon_coordinates"))
+
+MXE_events_summary_table_split <- split_JUM_output_table(MXE_events_summary_table, "MXE_exon_coordinates", "MXE_events")
+
+```
+
+## composite events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_composite_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(composite_events)(_simplified$)")
+print(paste("There are", length(list_of_composite_events_simplified_output_table_names), "output tables loaded for composite events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_composite_events_simplified_output_tables <- purrr::map(list_of_composite_events_simplified_output_table_names, get)
+## subset
+list_of_composite_events_simplified_output_tables_simplified <- purrr::map(list_of_composite_events_simplified_output_tables, ~dplyr::select(.x, 1, 2, 5, 6, 7, 8))
+## annotating the column names to be comparison name specific
+
+composite_events_pvalue_column_names <- gsub(x = list_of_composite_events_simplified_output_table_names, pattern = "(.*)_composite_events_simplified", replacement = "pvalue_\\1")
+composite_events_qvalue_column_names <- gsub(x = list_of_composite_events_simplified_output_table_names, pattern = "(.*)_composite_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_composite_events_simplified_output_tables_shuffled <- purrr::map2(list_of_composite_events_simplified_output_tables_simplified, composite_events_pvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "pvalue", replacement = paste(.y, sep = ""))))
+list_of_composite_events_simplified_output_tables_shuffled <- purrr::map2(list_of_composite_events_simplified_output_tables_shuffled, composite_events_qvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "qvalue", replacement = paste(.y, sep = ""))))
+
+print(paste("Shuffled", length(list_of_composite_events_simplified_output_tables_shuffled), "output tables for composite events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+composite_events_summary_table <- list_of_composite_events_simplified_output_tables_shuffled %>% purrr::reduce(full_join, by = c("Composite_coordinates", "Gene", "AS_event_ID"))
+
+# composite_events_summary_table_split <- split_JUM_output_table(composite_events_summary_table, "Composite_coordinates", "composite_events")
+
+```
+
+## IR events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_IR_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(intron_retention)(_simplified$)")
+print(paste("There are", length(list_of_IR_events_simplified_output_table_names), "output tables loaded for IR events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_IR_events_simplified_output_tables <- purrr::map(list_of_IR_events_simplified_output_table_names, get)
+names(list_of_IR_events_simplified_output_tables) <- list_of_IR_events_simplified_output_table_names
+
+## subset
+list_of_IR_events_simplified_output_tables_simplified <- list_of_IR_events_simplified_output_tables %>% purrr::map(~filter(.x, chromosome != "chromosome", Gene != "", pvalue != ""))
+
+list_of_IR_events_simplified_output_tables_simplified <- purrr::map(list_of_IR_events_simplified_output_tables_simplified, ~dplyr::select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+IR_events_pvalue_column_names <- gsub(x = list_of_IR_events_simplified_output_table_names, pattern = "(.*)_intron_retention_simplified", replacement = "pvalue_\\1")
+IR_events_qvalue_column_names <- gsub(x = list_of_IR_events_simplified_output_table_names, pattern = "(.*)_intron_retention_simplified", replacement = "qvalue_\\1")
+
+
+list_of_IR_events_simplified_output_tables_shuffled <- purrr::map2(list_of_IR_events_simplified_output_tables_simplified, IR_events_pvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "pvalue", replacement = paste(.y, sep = ""))))
+list_of_IR_events_simplified_output_tables_shuffled <- purrr::map2(list_of_IR_events_simplified_output_tables_shuffled, IR_events_qvalue_column_names, ~setNames(.x, gsub(x = colnames(.x), pattern = "qvalue", replacement = paste(.y, sep = ""))))
+
+print(paste("Shuffled", length(list_of_IR_events_simplified_output_tables_shuffled), "output tables for IR events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+IR_events_summary_table <- list_of_IR_events_simplified_output_tables_shuffled %>% purrr::reduce(full_join, by = c("retained_intron_start", "retained_intron_end", "Gene", "AS_event_ID"))
+
+```
+
+## discard the superfluous columns for each table containing each splice mode
+
+```{r}
+
+# generating the list of tables
+list_of_summary_tables <- list(A3SS_summary_table, A5SS_summary_table, cassette_exon_summary_table, composite_events_summary_table, IR_events_summary_table, MXE_events_summary_table)
+
+# naming the list of tables
+list_of_summary_table_names <- c("A3SS_summary_table", "A5SS_summary_table", "cassette_exon_summary_table", "composite_events_summary_table", "IR_events_summary_table", "MXE_events_summary_table")
+names(list_of_summary_tables) <- list_of_summary_table_names
+
+# remove columns we don't want
+
+list_of_summary_tables_reduced <- list_of_summary_tables
+
+list_of_summary_tables_reduced[[1]] <- list_of_summary_tables_reduced[[1]] %>% dplyr::select(., -3, -4)
+list_of_summary_tables_reduced[[2]] <- list_of_summary_tables_reduced[[2]] %>% dplyr::select(., -3, -4)
+list_of_summary_tables_reduced[[3]] <- list_of_summary_tables_reduced[[3]] %>% dplyr::select(., -(3:6))
+list_of_summary_tables_reduced[[4]] <- list_of_summary_tables_reduced[[4]] %>% dplyr::select(., -3)
+list_of_summary_tables_reduced[[5]] <- list_of_summary_tables_reduced[[5]] %>% dplyr::select(., -3, -4)
+list_of_summary_tables_reduced[[6]] <- list_of_summary_tables_reduced[[6]] %>% dplyr::select(., -(3:5))
+
+```
+
+## append the name of the splice mode to each data frame 
+
+```{r}
+
+splicemode_colname <- rep("splicemode", 6)
+
+column_of_splicemode_names <- gsub(x = list_of_summary_table_names, pattern = "(.*)_summary_table", replacement = "\\1")
+
+list_of_summary_tables_reduced_appendedwithsplicemode <- purrr::map2(.x = list_of_summary_tables_reduced, .y = column_of_splicemode_names, ~cbind(.x, splicemode=.y))
+
+```
+
+## combining the summary tables for each splice mode into a large table
+
+NOTE: wide_table_all_splicemodes_split IS THE MAIN TABULAR OUTPUT THAT CONTAINS VALUES THAT EXIST IN *ALL* COMPARISONS. IT WILL BE USED FOR SOMS ANALYSIS AND OTHER ANALYSES THAT REQUIRE DATA FROM ALL COMPARISONS. 
+
+NOTE2: wide_table_of_all_splicemodes(_with_na)/wide_table_all_splicemodes_split_with_na IS/ARE THE MAIN TABULAR OUTPUT(S) THAT CONTAIN(S) *EVERYTHING*, EVEN NA VALUES. USED FOR GENE ONTOLOGY
+
+NOTE3: I NEED TO WRITE A FUNCTION FOR THIS STEP
+
+```{r}
+
+wide_table_of_all_splicemodes_with_na <-  purrr::reduce(.x = list_of_summary_tables_reduced_appendedwithsplicemode, .f = bind_rows) 
+
+wide_table_of_all_splicemodes <- wide_table_of_all_splicemodes_with_na %>% na.omit
+
+wide_table_of_all_splicemodes <- type_convert(wide_table_of_all_splicemodes)
+
+rownames(wide_table_of_all_splicemodes) <- NULL
+
+# SPLITTING THE SEMICOLON DELIMITED VALUES INTO NEW ROWS
+
+wide_table_of_all_splicemodes_column_names <- colnames(wide_table_of_all_splicemodes)
+
+
+wide_table_of_all_splicemodes_dPSI_column_numbers <- wide_table_of_all_splicemodes_column_names %>% grep(., pattern = "deltaPSI(.*)")
+
+# A. SPLITTING EACH CELL OF DELTAPSI INTO SEPARATE ROWS
+# THIS OUTPUTS A LIST WITH EACH ELEMENT CONTAINING THE VALUES OF EACH ROW
+list_of_all_splicemodes_dPSI_values_only_split <- wide_table_of_all_splicemodes[, wide_table_of_all_splicemodes_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){strsplit(x, split = ";")})
+
+# WE MUST FIRST DEFINE THE FINAL TABLE THEN GO BACK TO FINISHING THE FINAL TABLE BECAUSE IT NEEDS TO SCAFFOLD BASED ON A PREDETERMINED NUMBER OF ROWS IN data.frame(matrix(...))
+
+# B. USE SPLITTING LENGTH FOR EACH ROW TO DETERMINE THE AMOUNT OF TIMES ROWS ARE TO BE REPEATED.
+# THIS OUTPUTS THE SAME DATA.FRAME EXCEPT THE RIGHT COLUMNS ARE REPEATED THE SAME NUMBER OF TIMES AS SEMICOLONS
+wide_table_of_all_splicemodes_non_dPSI_values_only_split <- wide_table_of_all_splicemodes[, -wide_table_of_all_splicemodes_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){rep(x, sapply(list_of_all_splicemodes_dPSI_values_only_split[[1]], length))}) %>% data.frame
+
+list_of_isoform_number <- list_of_all_splicemodes_dPSI_values_only_split[[1]] %>% lapply(length) %>% purrr::map(.x = ., ~c(1:.x)) %>% unlist
+
+# DONE STEP B.
+
+# BACK TO A.
+wide_table_all_splicemodes_dPSI_values_only_split <- data.frame(matrix(unlist(list_of_all_splicemodes_dPSI_values_only_split), nrow = nrow(wide_table_of_all_splicemodes_non_dPSI_values_only_split), byrow = FALSE), stringsAsFactors = FALSE)
+
+colnames(wide_table_all_splicemodes_dPSI_values_only_split) <- names(list_of_all_splicemodes_dPSI_values_only_split)
+
+# DONE STEP A.
+
+# APPEND THE TWO TABLES TO RE-CREATE THE WIDE MASTER TABLE EXCEPT THE VALUES ARE ACTUALLY READABLE BY R NOW.
+wide_table_all_splicemodes_split <- dplyr::bind_cols(wide_table_of_all_splicemodes_non_dPSI_values_only_split, wide_table_all_splicemodes_dPSI_values_only_split)
+
+# rearrange the columns to preserve consistency with the rest of the wide_table s
+
+wide_table_all_splicemodes_split <- wide_table_all_splicemodes_split[, wide_table_of_all_splicemodes_column_names]
+
+# append the list of isoform numbers
+
+wide_table_all_splicemodes_split <- cbind(wide_table_all_splicemodes_split, isoform_number = list_of_isoform_number)
+
+# remove non-integer values
+
+wide_table_all_splicemodes_split <- type_convert(wide_table_all_splicemodes_split, na = c("Inf", "-Inf"), trim_ws = TRUE)
+
+wide_table_all_splicemodes_split_with_na <- wide_table_all_splicemodes_split
+
+wide_table_all_splicemodes_split <- wide_table_all_splicemodes_split %>% na.omit
+
+row.names(wide_table_all_splicemodes_split) <- NULL
+
+# re-interpret numbers as numeric
+
+wide_table_all_splicemodes_split[, !(colnames(wide_table_all_splicemodes_split) == c("Gene", "AS_event_ID", "splicemode"))] <- wide_table_all_splicemodes_split[, !(colnames(wide_table_all_splicemodes_split) == c("Gene", "AS_event_ID", "splicemode"))] %>% mutate_each(., funs = as.character) %>% mutate_each(., funs = as.numeric)
+
+```
+
+# DRAWING SOMS TO ANALYSE TIME SERIES DATA
+
+## preparing the wide tables which are chopped and ready for next SOMs analyses
+
+NOTE: P/QVALUE AND DPSI FILTERING OCCURS HERE
+
+At this point, wide_table_all_splicemodes_split includes EVERYTHING. OB and OB, qvalue, pvalue and deltaPSI.
+
+At the present time, we shall just cluster the OB time series separate to the OB time series.
+
+Our trick is to use only the "deltaPSI_BM_MSC_to_OB_[something]d-BM_MSC_to_ud" column and use it as a proxy for the absolute inclusion levels. Setting the PSI at timepoint 0 (MSC) is inconsequential for our method of running SOMs, as it normalises the centroid of all PSI values of each isoforms' time series anyways.
+
+**SETUP**
+
+```{r}
+
+dPSI_cutoff <- 0.3
+
+# choose either pvalue or qvalue
+p_or_q_value <- "qvalue"
+
+```
+
+```{r}
+
+# reducing the table to only contain OB-specific comparisons
+PSI_levels_timeseries_OB_wide <- wide_table_all_splicemodes_split
+
+# [, -grep(x = colnames(wide_table_all_splicemodes_split), pattern = "OB")]
+
+# reducing the table to only contain OB-specific comparisons
+# PSI_levels_timeseries_OB_wide <- wide_table_all_splicemodes_split[, -grep(x = colnames(wide_table_all_splicemodes_split), pattern = "OB")]
+
+# filtering for dPSI cutoff
+PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide[apply(PSI_levels_timeseries_OB_wide[, grep(colnames(PSI_levels_timeseries_OB_wide), pattern = "deltaPSI")], 1, function(x){any(abs(x) > dPSI_cutoff)}) == TRUE, ]
+
+# PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide[apply(PSI_levels_timeseries_OB_wide[, grep(colnames(PSI_levels_timeseries_OB_wide), pattern = "deltaPSI")], 1, function(x){any(abs(x) > dPSI_cutoff)}) == TRUE, ]
+
+# filtering for FDR/pvalue
+PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide[apply(PSI_levels_timeseries_OB_wide[, grep(colnames(PSI_levels_timeseries_OB_wide), pattern = p_or_q_value)], 1, function(x){any(x<0.05)}) == TRUE, ]
+
+# PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide[apply(PSI_levels_timeseries_OB_wide[, grep(colnames(PSI_levels_timeseries_OB_wide), pattern = p_or_q_value)], 1, function(x){any(x<0.05)}) == TRUE, ]
+
+# further subsetting into ud-only comparisons
+
+##  OB #####
+
+PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", colnames(PSI_levels_timeseries_OB_wide)[grep(x = colnames(PSI_levels_timeseries_OB_wide), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_OB_ud)")])]
+
+PSI_levels_timeseries_OB_wide <- cbind(PSI_levels_timeseries_OB_wide, MSC = 0)
+
+colnames(PSI_levels_timeseries_OB_wide) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
+
+##  OB #####
+# 
+# PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", colnames(PSI_levels_timeseries_OB_wide)[grep(x = colnames(PSI_levels_timeseries_OB_wide), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_ud)")])]
+# 
+# PSI_levels_timeseries_OB_wide <- cbind(PSI_levels_timeseries_OB_wide, MSC = 0)
+# 
+# colnames(PSI_levels_timeseries_OB_wide) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_ud)", replacement = "\\3")
+
+
+## ADDITIONAL PROCESSING REQUIRED SIGH
+
+### OB series #####
+
+PSI_levels_timeseries_OB_wide_processed <- PSI_levels_timeseries_OB_wide
+
+rownames(PSI_levels_timeseries_OB_wide_processed) <- NULL
+
+# necessary to make this column to avoid ambiguous values when doing GGPLOT
+PSI_levels_timeseries_OB_wide_processed[, "isoform_ID"] <- paste(PSI_levels_timeseries_OB_wide_processed[, "splicemode"], PSI_levels_timeseries_OB_wide_processed[, "AS_event_ID"], PSI_levels_timeseries_OB_wide_processed[, "isoform_number"], sep = "_")
+
+PSI_levels_timeseries_OB_wide_processed <- PSI_levels_timeseries_OB_wide_processed[, c("Gene", "AS_event_ID", "splicemode","isoform_ID", "MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")]
+
+print(paste("There are", nrow(PSI_levels_timeseries_OB_wide_processed), "isoforms with specified significance and dPSI cutoff of", dPSI_cutoff, "for OB series"))
+
+### OB series #####
+
+# PSI_levels_timeseries_OB_wide_processed <- PSI_levels_timeseries_OB_wide
+# 
+# rownames(PSI_levels_timeseries_OB_wide_processed) <- NULL
+# 
+# PSI_levels_timeseries_OB_wide_processed[, "isoform_ID"] <- paste(PSI_levels_timeseries_OB_wide_processed[, "splicemode"], PSI_levels_timeseries_OB_wide_processed[, "AS_event_ID"], PSI_levels_timeseries_OB_wide_processed[, "isoform_number"], sep = "_")
+# 
+# PSI_levels_timeseries_OB_wide_processed <- PSI_levels_timeseries_OB_wide_processed[, c("Gene", "isoform_ID", "MSC", "4h", "1d", "3d", "7d", "14d")]
+# 
+# print(paste("There are", nrow(PSI_levels_timeseries_OB_wide_processed), "isoforms with specified significance and dPSI cutoff of", dPSI_cutoff, "for OB series"))
+
+
+```
+
+## construction of a 5x5 SOM
+
+```{r}
+
+som_seed_number <- 7
+
+OB_xdim <- 5
+OB_ydim <- 5
+
+# OB_xdim <- 5
+# OB_ydim <- 5
+
+# OB series #####
+
+som_5_by_5_OBseries_table  <- PSI_levels_timeseries_OB_wide_processed[, c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")]
+
+som_5_by_5_OBseries_table <- som_5_by_5_OBseries_table %>% genescale(m = ., axis = 1, method = "Z")
+
+set.seed(som_seed_number)
+
+somdata_5_by_5_OBseries <- som(som_5_by_5_OBseries_table, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
+
+wide_table_of_final_SOM_summary_5_by_5_OBseries <- cbind(PSI_levels_timeseries_OB_wide_processed[, c("Gene", "AS_event_ID", "splicemode", "isoform_ID")], som_5_by_5_OBseries_table, cluster = somdata_5_by_5_OBseries[["unit.classif"]])
+
+# OB series #####
+# 
+# som_5_by_5_OBseries_table  <- PSI_levels_timeseries_OB_wide_processed[, c("MSC", "4h", "1d", "3d", "7d", "14d")]
+# 
+# som_5_by_5_OBseries_table <- som_5_by_5_OBseries_table %>% genescale(m = ., axis = 1, method = "Z")
+# 
+# set.seed(som_seed_number)
+# 
+# somdata_5_by_5_OBseries <- som(som_5_by_5_OBseries_table, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
+# 
+# wide_table_of_final_SOM_summary_5_by_5_OBseries <- cbind(PSI_levels_timeseries_OB_wide_processed[, c("Gene", "isoform_ID")], som_5_by_5_OBseries_table, cluster = somdata_5_by_5_OBseries[["unit.classif"]])
+
+```
+
+### convert the som table to a long form interprable by ggplot
+
+Steps:
+
+0. Melt wide table into long form
+1. Subtract 1 from the cluster number
+2. x-facet is the remainder when mod 5
+3. y-facet is the quotient when mod 5
+4. in ggplot, the numbers go from 1-5 from top left to top right, then 6-10 on second row left-right... 25 will be bottom right.
+
+```{r}
+
+# OB series #####
+
+# reshaping into long table
+
+long_table_of_final_SOM_summary_5_by_5_OBseries <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries, id.vars = c("Gene", "AS_event_ID", "splicemode", "isoform_ID", "cluster"), variable.name = "timepoint", value.name = "scaled_PSI_value")
+
+# calculating the facet coordinates for 5x5 plot in ggplot
+
+long_table_of_final_SOM_summary_5_by_5_OBseries[, "cluster_minus_1"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster - 1
+
+long_table_of_final_SOM_summary_5_by_5_OBseries[, "remainder_facet.x"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster_minus_1 %% 5
+
+long_table_of_final_SOM_summary_5_by_5_OBseries[, "quotient_facet.y"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster_minus_1 %/% 5
+
+# OB series #####
+
+# reshaping into long table
+
+# long_table_of_final_SOM_summary_5_by_5_OBseries <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries, id.vars = c("Gene", "isoform_ID", "cluster"), variable.name = "timepoint", value.name = "scaled_PSI_value")
+
+# calculating the facet coordinates for 5x5 plot in ggplot
+
+# long_table_of_final_SOM_summary_5_by_5_OBseries[, "cluster_minus_1"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster - 1
+
+# long_table_of_final_SOM_summary_5_by_5_OBseries[, "remainder_facet.x"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster_minus_1 %% 5
+
+# long_table_of_final_SOM_summary_5_by_5_OBseries[, "quotient_facet.y"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster_minus_1 %/% 5
+
+```
+
+### THE GGPLOT
+
+all the genes
+
+```{r}
+
+# OB series
+
+ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_PSI_value)) +
+  geom_line(aes(group = AS_event_ID)) +
+  scale_colour_manual(values = c("black")) +
+  facet_grid(quotient_facet.y ~ remainder_facet.x) +
+  ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "isoforms' PSI values during OB diff (any", p_or_q_value, 
+               "any deltaPSI >", dPSI_cutoff, ")")) +
+  scale_x_discrete(limits = c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  xlab("Time-point") +
+  ylab("Normalised PSI Level") +
+  # guides(colour = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# OB series
+# 
+# ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_PSI_value)) +
+#   geom_line(aes(group = isoform_ID)) +
+#   scale_colour_manual(values = c("black")) +
+#   facet_grid(quotient_facet.y ~ remainder_facet.x) +
+#   ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "isoforms' PSI values during OB diff (any ", p_or_q_value, " , 
+#                 any deltaPSI >", dPSI_cutoff, ")")) +
+#   scale_x_discrete(limits = c('MSC', '4h', '1d', '3d', '7d', '14d')) +
+#   xlab("Time-point") +
+#   ylab("Normalised PSI Level") +
+#   # guides(colour = FALSE) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+# 
+# write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+# GENE ONTOLOGY
+
+## anysig
+
+use gene ontology to analyse all the genes which had at least one differential splicing event over all timepoint comparisons
+
+### p value and FDR (q value) cutoff filtering
+
+In this step: we will use the wide_table_of_all_splicemodes_with_na and filter it for:
+
+a*) At least one pvalue < 0.05, OR IF THE AMOUNT OF GENES AFTER QVALUE FILTERING IS HIGH ENOUGH, 
+a) At least one qvalue < 0.05
+
+FOR 
+
+a) OB timeseries, OR
+b) OB timeseries
+
+POSSIBLY FOR ISOFORMS WHICH HAVE INCLUSION LEVELS WHICH GO
+
+a) UP, OR
+b) DOWN,
+
+for a total of 1* x 2 x 2 = 4 comparisons.
+
+... or maybe we might not do inclusion levels because PSI values going up and down for a particular splicemode means squat for a gene.
+
+```{r}
+
+# OB SERIES
+
+## filtering the table to include only OB values
+
+# wide_table_of_all_splicemodes_with_na_OBseries <- wide_table_of_all_splicemodes_with_na[, -grep(colnames(wide_table_of_all_splicemodes_with_na), pattern = "OB")]
+
+## filtering the table for FDR
+# wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_OBseries[apply(wide_table_of_all_splicemodes_with_na_OBseries[, grep(colnames(wide_table_of_all_splicemodes_with_na_OBseries), pattern = p_or_q_value)], 1, function(x){any(x<0.05)}) == TRUE, ]
+# 
+# wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[apply(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[, grep(colnames(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05), pattern = p_or_q_value)], 1, function(x){all(is.na(x))}) == FALSE, ]
+# 
+# rownames(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05) <- NULL
+# 
+# OBseries_qvalue_0.05_GO_genelist <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05$Gene %>% unique
+# 
+# numberofgenes_anysig_OBseries <- OBseries_qvalue_0.05_GO_genelist %>% length
+# 
+# numberofgenes_anysig_OBseries %>% paste(., "unique genes differentially spliced between any two time points during the time course of osteoblastic differentiation with FDR < 0.05") %>% print
+
+# OB SERIES
+
+## filtering the table to include only OB values
+
+wide_table_of_all_splicemodes_with_na_OBseries <- wide_table_all_splicemodes_split_with_na
+
+# [, -grep(colnames(wide_table_of_all_splicemodes_with_na), pattern = "OB")]
+
+## filtering the table for FDR
+wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_OBseries[apply(wide_table_of_all_splicemodes_with_na_OBseries[, grep(colnames(wide_table_of_all_splicemodes_with_na_OBseries), pattern = p_or_q_value)], 1, function(x){any(x<0.05)}) == TRUE, ]
+
+## filtering the table for dpsi
+wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[apply(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[, grep(colnames(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05), pattern = "deltaPSI")], 1, function(x){any(abs(x) > dPSI_cutoff)}) == TRUE, ]
+
+wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[apply(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[, grep(colnames(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05), pattern = p_or_q_value)], 1, function(x){all(is.na(x))}) == FALSE, ]
+
+rownames(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05) <- NULL
+
+OBseries_qvalue_0.05_GO_genelist <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05$Gene %>% unique
+
+numberofgenes_anysig_OBseries <- OBseries_qvalue_0.05_GO_genelist %>% length
+
+numberofgenes_anysig_OBseries %>% paste(., "unique genes differentially spliced between any two time points during the time course of adipocytic differentiation with FDR < 0.05") %>% print
+
+```
+
+### running hyperGO in GOstats
+
+#### preparation of GO catalog for the gene background
+
+This gene background shall contain all ensembl protein coding, long noncoding and transcribed pseudogenes.
+
+```{r}
+
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "uswest")
+# 
+# # # GOTERM
+polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_pseudogene", "transcribed_unitary_pseudogene", "transcribed_unprocessed_pseudogene", "translated_processed_pseudogene"), attributes = c("external_gene_name", "go_id", "namespace_1003"), mart = ensembl_mart) %>% .[.$namespace_1003 != "",]
+# 
+polyA_RNAseq_GO_background[, "namespace_1003"] <- as.character(polyA_RNAseq_GO_background[, "namespace_1003"])
+
+write.table(x = polyA_RNAseq_GO_background, file = paste(results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+# 
+# ## Create catDB instance (takes a while but needs to be done only once)
+## note: you had to save the GO annotation file to disk in the previous steps above
+catdb <- makeCATdb(myfile = paste(results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+
+```
+
+#### hypergeometric test for GO terms
+
+```{r}
+
+# OB series
+# 
+# OB_anysig_GOtest_MF <- GOHyperGAll(catdb = catdb, gocat = "protein family", sample = OBseries_qvalue_0.05_GO_genelist, Nannot = 2) %>% GOHyperGAll_benjamini_correction
+# 
+# OB_anysig_GOtest_BP <- GOHyperGAll(catdb = catdb, gocat = "BP", sample = OBseries_qvalue_0.05_GO_genelist, Nannot = 2) %>% GOHyperGAll_benjamini_correction
+# 
+# OB_anysig_GOtest_CC <- GOHyperGAll(catdb = catdb, gocat = "CC", sample = OBseries_qvalue_0.05_GO_genelist, Nannot = 2) %>% GOHyperGAll_benjamini_correction
+# 
+# OB_anysig_GOtest_MF %>% head(n = 15L) %>% print
+# OB_anysig_GOtest_BP %>% head(n = 15L) %>% print
+# OB_anysig_GOtest_CC %>% head(n = 15L) %>% print
+
+# filter out the top ten most significant GO terms for each node
+
+# OB_anysig_GOtest_MF_topten <- OB_anysig_GOtest_MF[order(OB_anysig_GOtest_MF$Padj, decreasing = FALSE), ] %>% head(n = 10)
+# OB_anysig_GOtest_BP_topten <- OB_anysig_GOtest_BP[order(OB_anysig_GOtest_BP$Padj, decreasing = FALSE), ] %>% head(n = 10)
+# OB_anysig_GOtest_CC_topten <- OB_anysig_GOtest_CC[order(OB_anysig_GOtest_CC$Padj, decreasing = FALSE), ] %>% head(n = 10)
+
+# table with only the top ten most significant GO terms
+
+# OB_anysig_GOtest_all_topten <- bind_rows(OB_anysig_GOtest_MF_topten, OB_anysig_GOtest_BP_topten, OB_anysig_GOtest_CC_topten)
+
+# OB_anysig_GOtest_all_topten <- type_convert(OB_anysig_GOtest_all_topten)
+
+# OB series
+
+OB_anysig_GOtest_MF <- GOHyperGAll(catdb = catdb, gocat = "MF", sample = OBseries_qvalue_0.05_GO_genelist, Nannot = 2) %>% GOHyperGAll_benjamini_correction
+
+OB_anysig_GOtest_BP <- GOHyperGAll(catdb = catdb, gocat = "BP", sample = OBseries_qvalue_0.05_GO_genelist, Nannot = 2) %>% GOHyperGAll_benjamini_correction
+
+OB_anysig_GOtest_CC <- GOHyperGAll(catdb = catdb, gocat = "CC", sample = OBseries_qvalue_0.05_GO_genelist, Nannot = 2) %>% GOHyperGAll_benjamini_correction
+
+OB_anysig_GOtest_MF %>% head(n = 15L) %>% print
+OB_anysig_GOtest_BP %>% head(n = 15L) %>% print
+OB_anysig_GOtest_CC %>% head(n = 15L) %>% print
+
+# filter out the top ten most significant GO terms for each node
+
+OB_anysig_GOtest_MF_topten <- OB_anysig_GOtest_MF[order(OB_anysig_GOtest_MF$Padj, decreasing = FALSE), ] %>% head(n = 10)
+OB_anysig_GOtest_BP_topten <- OB_anysig_GOtest_BP[order(OB_anysig_GOtest_BP$Padj, decreasing = FALSE), ] %>% head(n = 10)
+OB_anysig_GOtest_CC_topten <- OB_anysig_GOtest_CC[order(OB_anysig_GOtest_CC$Padj, decreasing = FALSE), ] %>% head(n = 10)
+
+# table with only the top ten most significant GO terms
+
+OB_anysig_GOtest_all_topten <- bind_rows(OB_anysig_GOtest_MF_topten, OB_anysig_GOtest_BP_topten, OB_anysig_GOtest_CC_topten)
+
+OB_anysig_GOtest_all_topten <- type_convert(OB_anysig_GOtest_all_topten)
+
+```
+
+#### bar graph of GO terms
+
+```{r}
+
+# OB series
+# 
+# ggplot(OB_anysig_GOtest_all_topten, aes(x = reorder(Term, Padj), y = SampleMatch)) +
+#   geom_col(aes(fill = log(Padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill") +
+#   facet_grid(~ Ont, scales = "free") +
+#   ggtitle(paste("Top 10 significantly over-represented GO terms for OB series for dPSI cutoff of", dPSI_cutoff, "and any sig", p_or_q_value, "encompassing", numberofgenes_anysig_OBseries, "genes")) +
+#   xlab("GO term") +
+#   ylab("Number of genes in GO term") +
+#   coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,   "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,   "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# write.table(x = OB_anysig_GOtest_all_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# OB series
+
+ggplot(OB_anysig_GOtest_all_topten, aes(x = reorder(Term, Padj), y = SampleMatch)) +
+  geom_col(aes(fill = log(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_grid(~ Ont, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented GO terms for OB series for dPSI cutoff of", dPSI_cutoff, "and any sig", p_or_q_value, "encompassing", numberofgenes_anysig_OBseries, "genes")) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+
+
+write.table(x = OB_anysig_GOtest_all_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+  
+
+```
+
+## Gene ontology of each SOM cluster
+
+### preparation of separate data frames containing genes belonging to each cluster
+
+at the end of this, we will get list_of_OB/OBseries_gene_tables_by_SOM_cluster which are lists containing 25 nested data frames
+
+```{r}
+
+# OB series #####
+
+##  separating the wide SOMs table into a list by cluster
+
+list_of_OBseries_gene_tables_by_SOM_cluster <- list()
+
+for (clusternumber in 1:(OB_xdim * OB_ydim))
+  
+{
+  
+  list_of_OBseries_gene_tables_by_SOM_cluster[[clusternumber]] <- wide_table_of_final_SOM_summary_5_by_5_OBseries %>% filter(cluster == clusternumber) %>% dplyr::select(Gene) %>% unique %>% lapply(as.character)
+  
+}
+
+# OB series #####
+
+##  separating the wide SOMs table into a list by cluster
+# 
+# list_of_OBseries_gene_tables_by_SOM_cluster <- list()
+# 
+# for (clusternumber in 1:(OB_xdim * OB_ydim))
+#   
+# {
+#   
+#   list_of_OBseries_gene_tables_by_SOM_cluster[[clusternumber]] <- wide_table_of_final_SOM_summary_5_by_5_OBseries %>% filter(cluster == clusternumber) %>% dplyr::select(Gene) %>% unique %>% lapply(as.character)
+#   
+# }
+
+```
+
+### GO enrichment
+
+1. make a list of 25 nested data frames which are the results of GO term enrichment every cluster
+
+2. sort by increasing adjusted P value
+
+3. filter out the top 10 GO terms each cluster
+
+4. append the cluster number to each data frame
+
+5. Unlist(i.e. bind rows)
+
+6. calculate the facet coordinates for GGPLOT
+
+The result: One 5 x 5 GGPLOT of each GOTERM node(3) for OB and OBseries(2) = 6 plots altogether
+
+```{r}
+
+# OB series #####
+
+list_of_OBseries_gene_tables_by_SOM_cluster_flattened <- list_of_OBseries_gene_tables_by_SOM_cluster %>% flatten
+
+list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten <- purrr::map(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten <- purrr::map2(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten, .y = 1:(OB_xdim * OB_ydim), .f = ~cbind(.x, cluster = .y))
+# bind rows
+wide_table_of_topten_hyperGOresult_MF_OBseries <- purrr::reduce(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten, .f = bind_rows)
+wide_table_of_topten_hyperGOresult_MF_OBseries <- type_convert(wide_table_of_topten_hyperGOresult_MF_OBseries)
+
+list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten <- purrr::map(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten <- purrr::map2(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten, .y = 1:(OB_xdim * OB_ydim), .f = ~cbind(.x, cluster = .y))
+# bind rows
+wide_table_of_topten_hyperGOresult_BP_OBseries <- purrr::reduce(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten, .f = bind_rows)
+wide_table_of_topten_hyperGOresult_BP_OBseries <- type_convert(wide_table_of_topten_hyperGOresult_BP_OBseries)
+
+list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten <- purrr::map(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten <- purrr::map2(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten, .y = 1:(OB_xdim * OB_ydim), .f = ~cbind(.x, cluster = .y))
+# bind rows
+wide_table_of_topten_hyperGOresult_CC_OBseries <- purrr::reduce(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten, .f = bind_rows)
+wide_table_of_topten_hyperGOresult_CC_OBseries <- type_convert(wide_table_of_topten_hyperGOresult_CC_OBseries)
+
+# OB series #####
+# 
+# list_of_OBseries_gene_tables_by_SOM_cluster_flattened <- list_of_OBseries_gene_tables_by_SOM_cluster %>% flatten
+# 
+# list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+# list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten <- purrr::map(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+# list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten <- purrr::map2(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten, .y = 1:(OB_xdim * OB_ydim), .f = ~cbind(.x, cluster = .y))
+# bind rows
+# wide_table_of_topten_hyperGOresult_MF_OBseries <- purrr::reduce(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_MF_tables_topten, .f = bind_rows)
+# wide_table_of_topten_hyperGOresult_MF_OBseries <- type_convert(wide_table_of_topten_hyperGOresult_MF_OBseries)
+# 
+# list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+# list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten <- purrr::map(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+# list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten <- purrr::map2(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten, .y = 1:(OB_xdim * OB_ydim), .f = ~cbind(.x, cluster = .y))
+# bind rows
+# wide_table_of_topten_hyperGOresult_BP_OBseries <- purrr::reduce(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_BP_tables_topten, .f = bind_rows)
+# wide_table_of_topten_hyperGOresult_BP_OBseries <- type_convert(wide_table_of_topten_hyperGOresult_BP_OBseries)
+# 
+# list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+# list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten <- purrr::map(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+# list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten <- purrr::map2(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten, .y = 1:(OB_xdim * OB_ydim), .f = ~cbind(.x, cluster = .y))
+# bind rows
+# wide_table_of_topten_hyperGOresult_CC_OBseries <- purrr::reduce(.x = list_of_OBseries_SOMclusterwise_hyperGOresult_CC_tables_topten, .f = bind_rows)
+# wide_table_of_topten_hyperGOresult_CC_OBseries <- type_convert(wide_table_of_topten_hyperGOresult_CC_OBseries)
+
+
+# calculating the facet coordinates for 5x5 plot in ggplot ##########
+
+list_of_wide_topten_clusterwise_tables_all <- list(wide_table_of_topten_hyperGOresult_MF_OBseries, wide_table_of_topten_hyperGOresult_BP_OBseries, wide_table_of_topten_hyperGOresult_CC_OBseries)
+
+# , wide_table_of_topten_hyperGOresult_MF_OBseries, wide_table_of_topten_hyperGOresult_BP_OBseries, wide_table_of_topten_hyperGOresult_CC_OBseries
+
+list_of_wide_topten_clusterwise_tables_all <- purrr::map(.x = list_of_wide_topten_clusterwise_tables_all, .f = ~cbind(., cluster_minus_1 = .$cluster - 1)) %>% purrr::map(.x = ., .f = ~cbind(., remainder_facet.x = .$cluster_minus_1 %% 5)) %>% purrr::map(.x = ., .f = ~cbind(., quotient_facet.y = .$cluster_minus_1 %/% 5))
+
+# as a finishing note... holy shit that was quick.
+
+## UN-NESTING THE PROCESSED DATA FRAMES
+
+unprocessed_clusterwise_tables_topten_GOTERM <- c("wide_table_of_topten_hyperGOresult_MF_OBseries", "wide_table_of_topten_hyperGOresult_BP_OBseries", "wide_table_of_topten_hyperGOresult_CC_OBseries")
+
+# , "wide_table_of_topten_hyperGOresult_MF_OBseries", "wide_table_of_topten_hyperGOresult_BP_OBseries", "wide_table_of_topten_hyperGOresult_CC_OBseries"
+
+for (i in 1:3)
+
+{
+
+  temp <- list_of_wide_topten_clusterwise_tables_all[[i]] %>% type_convert
+
+  assign(x = paste(unprocessed_clusterwise_tables_topten_GOTERM[i], "_processed", sep = ""), value = temp)
+
+}
+
+```
+
+### GGPLOT OF TOP TEN GO TERMS FOR EACH SOM CLUSTER
+
+```{r}
+
+# OB series #####
+
+# MF
+
+ggplot(wide_table_of_topten_hyperGOresult_MF_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle("Top 10 significantly over-represented MF GO terms for each cluster in OB series") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_MF_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_MF_GO.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+write.table(x = wide_table_of_topten_hyperGOresult_MF_OBseries_processed, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_MF_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# BP
+
+ggplot(wide_table_of_topten_hyperGOresult_BP_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle("Top 10 significantly over-represented BP GO terms for each cluster in OB series") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_BP_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_BP_GO.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+write.table(x = wide_table_of_topten_hyperGOresult_BP_OBseries_processed, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_BP_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# CC
+
+ggplot(wide_table_of_topten_hyperGOresult_CC_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle("Top 10 significantly over-represented CC GO terms for each cluster in OB series") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_CC_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_CC_GO.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+write.table(x = wide_table_of_topten_hyperGOresult_CC_OBseries_processed, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_CC_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# OB series #####
+
+# MF
+
+# ggplot(wide_table_of_topten_hyperGOresult_MF_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+#   geom_col(aes(fill = log10(Padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~cluster, scales = "free") +
+#   ggtitle("Top 10 significantly over-represented MF GO terms for each cluster in OB series") +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("GO term") +
+#   ylab("Number of genes in GO term") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_MF_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_MF_GO.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+# 
+# write.table(x = wide_table_of_topten_hyperGOresult_MF_OBseries_processed, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_MF_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# BP
+
+# ggplot(wide_table_of_topten_hyperGOresult_BP_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+#   geom_col(aes(fill = log10(Padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~cluster, scales = "free") +
+#   ggtitle("Top 10 significantly over-represented BP GO terms for each cluster in OB series") +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("GO term") +
+#   ylab("Number of genes in GO term") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_BP_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_BP_GO.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+# 
+# write.table(x = wide_table_of_topten_hyperGOresult_BP_OBseries_processed, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_BP_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# CC
+
+# ggplot(wide_table_of_topten_hyperGOresult_CC_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+#   geom_col(aes(fill = log10(Padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~cluster, scales = "free") +
+#   ggtitle("Top 10 significantly over-represented CC GO terms for each cluster in OB series") +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("GO term") +
+#   ylab("Number of genes in GO term") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_CC_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_CC_GO.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+# 
+# write.table(x = wide_table_of_topten_hyperGOresult_CC_OBseries_processed, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_CC_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+### Gene Ontology for the isoforms/genes with highest PSIs at every time point
+
+Plan: 
+
+1. for each OB/OB series, for each time point, filter separately for the isoforms with the top ... 10%? (depends on total no. of isoforms) PSI
+2. Generate all 3 GO nodes for each timepoint
+3. Append timepoint to their respective GO output tables
+4. Bind rows for a total of three massive tables (one for each GO node)
+5. GGPLOT
+
+#### creation of lists of NORMALISED(SCALED) PSI values of isoforms per time point
+
+```{r}
+
+# OB series ###
+
+OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+
+list_of_scaled_PSI_OBseries <- wide_table_of_final_SOM_summary_5_by_5_OBseries[, OBseries_timepoints] %>% as.list
+
+list_of_scaled_PSI_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~cbind(.x, Gene = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "Gene"])) %>% cbind(., AS_event_ID = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "AS_event_ID"])) %>% cbind(., isoform_ID = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "isoform_ID"])) %>% cbind(splicemode = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "splicemode"])))
+
+# OB series ###
+
+# OBseries_timepoints <- c("MSC", "4h", "1d", "3d", "7d", "14d")
+# 
+# list_of_scaled_PSI_OBseries <- wide_table_of_final_SOM_summary_5_by_5_OBseries[, OBseries_timepoints] %>% as.list
+# 
+# list_of_scaled_PSI_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~cbind(.x, Gene = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "Gene"])))
+
+
+```
+
+#### filtering for top 10% of isoforms with highest inclusion level
+
+```{r}
+
+high_scaledPSIcutoff <- 0.1
+
+list_of_highest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~.x[order(.x[, 1], decreasing = TRUE), ])
+list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * high_scaledPSIcutoff)))
+list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID, .f = ~unique(.x[, "Gene"]))
+
+
+# list_of_highest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~.x[order(.x[, 1], decreasing = TRUE), ])
+# list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * high_scaledPSIcutoff)))
+# list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~unique(.x[, "Gene"]))
+
+```
+
+#### filtering for top 10% of isoforms with LOWEST inclusion level
+
+```{r}
+
+low_scaledPSIcutoff <- 0.1
+
+list_of_lowest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~.x[order(.x[, 1], decreasing = FALSE), ])
+list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * low_scaledPSIcutoff)))
+list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID, .f = ~unique(.x[, "Gene"]))
+
+
+# list_of_lowest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~.x[order(.x[, 1], decreasing = FALSE), ])
+# list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * low_scaledPSIcutoff)))
+# list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~unique(.x[, "Gene"]))
+
+```
+
+#### GENE ONTOLOGY
+
+```{r}
+
+# OB series #####
+
+# MF highestPSI
+
+list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+wide_table_of_timepointwise_highestPSI_results_MF_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .f = bind_rows)
+wide_table_of_timepointwise_highestPSI_results_MF_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_results_MF_OBseries)
+
+# BP highestPSI
+
+list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+wide_table_of_timepointwise_highestPSI_results_BP_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .f = bind_rows)
+wide_table_of_timepointwise_highestPSI_results_BP_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_results_BP_OBseries)
+
+# CC highestPSI
+
+list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+wide_table_of_timepointwise_highestPSI_results_CC_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .f = bind_rows)
+wide_table_of_timepointwise_highestPSI_results_CC_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_results_CC_OBseries)
+
+# MF lowestPSI
+
+list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map(.x = list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .y = as.list(names(list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+wide_table_of_timepointwise_lowestPSI_results_MF_OBseries <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .f = bind_rows)
+wide_table_of_timepointwise_lowestPSI_results_MF_OBseries <- type_convert(wide_table_of_timepointwise_lowestPSI_results_MF_OBseries)
+
+# BP lowestPSI
+
+list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map(.x = list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .y = as.list(names(list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+wide_table_of_timepointwise_lowestPSI_results_BP_OBseries <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .f = bind_rows)
+wide_table_of_timepointwise_lowestPSI_results_BP_OBseries <- type_convert(wide_table_of_timepointwise_lowestPSI_results_BP_OBseries)
+
+# CC lowestPSI
+
+list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map(.x = list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .y = as.list(names(list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+wide_table_of_timepointwise_lowestPSI_results_CC_OBseries <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .f = bind_rows)
+wide_table_of_timepointwise_lowestPSI_results_CC_OBseries <- type_convert(wide_table_of_timepointwise_lowestPSI_results_CC_OBseries)
+
+# OB series #####
+
+# MF 
+
+# list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+# list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+# list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+# wide_table_of_timepointwise_highestPSI_results_MF_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .f = bind_rows)
+# wide_table_of_timepointwise_highestPSI_results_MF_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_results_MF_OBseries)
+
+# BP
+
+# list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+# list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+# list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+# wide_table_of_timepointwise_highestPSI_results_BP_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .f = bind_rows)
+# wide_table_of_timepointwise_highestPSI_results_BP_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_results_BP_OBseries)
+
+# CC
+
+# list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+# list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
+# list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
+# un-nest by binding rows
+# wide_table_of_timepointwise_highestPSI_results_CC_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .f = bind_rows)
+# wide_table_of_timepointwise_highestPSI_results_CC_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_results_CC_OBseries)
+
+# reordering the "timepoint" factor to give correct facet order
+
+#  highestPSI
+
+wide_tables_of_timepointwise_highestPSI_results <- c("wide_table_of_timepointwise_highestPSI_results_MF_OBseries", "wide_table_of_timepointwise_highestPSI_results_BP_OBseries", "wide_table_of_timepointwise_highestPSI_results_CC_OBseries")
+
+# , "wide_table_of_timepointwise_highestPSI_results_MF_OBseries", "wide_table_of_timepointwise_highestPSI_results_BP_OBseries", "wide_table_of_timepointwise_highestPSI_results_CC_OBseries"
+
+for (i in 1:3)
+  
+{
+  
+  temp <- get(wide_tables_of_timepointwise_highestPSI_results[[i]]) %>% type_convert
+  
+  # reordering the "timepoint" factor to give correct facet order
+  
+  temp <- arrange(transform(temp, timepoint = factor(timepoint, levels = unique(temp$timepoint))), timepoint)
+  
+  assign(x = paste(wide_tables_of_timepointwise_highestPSI_results[i], "_processed", sep = ""), value = temp)
+  
+}
+
+# lowestPSI
+
+wide_tables_of_timepointwise_lowestPSI_results <- c("wide_table_of_timepointwise_lowestPSI_results_MF_OBseries", "wide_table_of_timepointwise_lowestPSI_results_BP_OBseries", "wide_table_of_timepointwise_lowestPSI_results_CC_OBseries")
+
+# , "wide_table_of_timepointwise_highestPSI_results_MF_OBseries", "wide_table_of_timepointwise_highestPSI_results_BP_OBseries", "wide_table_of_timepointwise_highestPSI_results_CC_OBseries"
+
+for (i in 1:3)
+  
+{
+  
+  temp <- get(wide_tables_of_timepointwise_lowestPSI_results[[i]]) %>% type_convert
+  
+  # reordering the "timepoint" factor to give correct facet order
+  
+  temp <- arrange(transform(temp, timepoint = factor(timepoint, levels = unique(temp$timepoint))), timepoint)
+  
+  assign(x = paste(wide_tables_of_timepointwise_lowestPSI_results[i], "_processed", sep = ""), value = temp)
+  
+}
+
+```
+
+#### GGPLOT
+
+```{r}
+
+# OB series ######
+
+# MF highestPSI
+
+ggplot(wide_table_of_timepointwise_highestPSI_results_MF_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented MF GO terms for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_highestPSI_results_MF_OBseries_processed, file = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# BP highestPSI
+
+ggplot(wide_table_of_timepointwise_highestPSI_results_BP_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented BP GO terms for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_highestPSI_results_BP_OBseries_processed, file = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# CC highestPSI
+
+ggplot(wide_table_of_timepointwise_highestPSI_results_CC_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented CC GO terms for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_highestPSI_results_CC_OBseries_processed, file = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# MF lowestPSI
+
+ggplot(wide_table_of_timepointwise_lowestPSI_results_MF_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented MF GO terms for the", high_scaledPSIcutoff * 100, "% lowest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_lowestPSI_results_MF_OBseries_processed, file = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# BP lowestPSI
+
+ggplot(wide_table_of_timepointwise_lowestPSI_results_BP_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented BP GO terms for the", high_scaledPSIcutoff * 100, "% lowest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_lowestPSI_results_BP_OBseries_processed, file = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# CC lowestPSI
+
+ggplot(wide_table_of_timepointwise_lowestPSI_results_CC_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented CC GO terms for the", high_scaledPSIcutoff * 100, "% lowest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_lowestPSI_results_CC_OBseries_processed, file = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# OB series ######
+
+# MF
+# 
+# ggplot(wide_table_of_timepointwise_highestPSI_results_MF_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+#   geom_col(aes(fill = log10(Padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~timepoint, scales = "free") +
+#   ggtitle(paste("Top 10 significantly over-represented MF GO terms for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("GO term") +
+#   ylab("Number of genes in GO term") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+# 
+# write.table(x = wide_table_of_timepointwise_highestPSI_results_MF_OBseries_processed, file = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# BP
+# 
+# ggplot(wide_table_of_timepointwise_highestPSI_results_BP_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+#   geom_col(aes(fill = log10(Padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~timepoint, scales = "free") +
+#   ggtitle(paste("Top 10 significantly over-represented BP GO terms for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("GO term") +
+#   ylab("Number of genes in GO term") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+# 
+# write.table(x = wide_table_of_timepointwise_highestPSI_results_BP_OBseries_processed, file = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# CC
+# 
+# ggplot(wide_table_of_timepointwise_highestPSI_results_CC_OBseries_processed, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+#   geom_col(aes(fill = log10(Padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~timepoint, scales = "free") +
+#   ggtitle(paste("Top 10 significantly over-represented CC GO terms for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("GO term") +
+#   ylab("Number of genes in GO term") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+# 
+# write.table(x = wide_table_of_timepointwise_highestPSI_results_CC_OBseries_processed, file = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+# protein family enrichment (EXPERIMENTAL)
+
+goal: to conduct hypergeometric tests of overrepresentation for gene subsets in protein families
+
+## generating the gene background for PFAM protein families
+
+```{r}
+
+ensembl_mart = useMart("ensembl", dataset="hsapiens_gene_ensembl")
+
+# PROTEINFAMILY
+polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_pseudogene", "transcribed_unitary_pseudogene", "transcribed_unprocessed_pseudogene", "translated_processed_pseudogene"), attributes = c("external_gene_name", "pfam"), mart = ensembl_mart) %>% .[.$pfam != "",]
+
+# obtain description(definition, DE) for each PFAM ID
+
+PFAM_all_descriptions <- as.data.frame(PFAMDE[mappedkeys(PFAMDE)]) %>% setNames(., c("pfam", "family_description"))
+
+polyA_RNAseq_GO_background <- dplyr::left_join(polyA_RNAseq_GO_background, PFAM_all_descriptions, by = "pfam")
+
+polyA_RNAseq_GO_background[, "family_description"] <- as.character(polyA_RNAseq_GO_background[, "family_description"])
+
+write.table(x = polyA_RNAseq_GO_background, file = paste(results_dir, "polyA_RNAseq_GO_background_PROTEINFAMILY.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+
+# create list of gene UNIVERSE
+
+reference_geneset <- polyA_RNAseq_GO_background$external_gene_name
+
+# create list containing collections of genes under their according family descriptions
+
+polyA_RNAseq_GO_background_2 <- polyA_RNAseq_GO_background
+
+polyA_RNAseq_GO_background_2 <- polyA_RNAseq_GO_background_2[, names(polyA_RNAseq_GO_background_2) != "pfam"]
+
+list_of_pfam_descriptions <- polyA_RNAseq_GO_background_2$family_description %>% unique %>% as.list
+
+list_of_pfam_gene_family_categories <- purrr::map(.x = list_of_pfam_descriptions, .f = ~as.list(polyA_RNAseq_GO_background[polyA_RNAseq_GO_background$family_description == .x, "external_gene_name"]))
+
+names(list_of_pfam_gene_family_categories) <- list_of_pfam_descriptions
+
+list_of_pfam_gene_family_categories <- list_of_pfam_gene_family_categories %>% purrr::map(~unlist(.x))
+
+```
+
+## ENRICHMENT TEST
+
+### anysig, highest PSI
+
+hypergeometric test, filtering for top 10 overrepresented families
+```{r}
+
+# OB
+
+# OB_anysig_family_enrichment <- enrichment(genes = OBseries_qvalue_0.05_GO_genelist, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction; rownames(OB_anysig_family_enrichment) <- NULL
+# 
+# OB_anysig_family_enrichment %>% head(n = 15L) %>% print
+
+# table with only the top ten most significant enrichments
+
+# OB_anysig_family_enrichment_topten <- OB_anysig_family_enrichment[order(OB_anysig_family_enrichment$padj, decreasing = FALSE), ] %>% head(n = 10)
+# 
+# OB_anysig_family_enrichment_topten <- type_convert(OB_anysig_family_enrichment_topten)
+
+# OB
+
+OB_anysig_family_enrichment <- enrichment(genes = OBseries_qvalue_0.05_GO_genelist, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction; rownames(OB_anysig_family_enrichment) <- NULL
+
+OB_anysig_family_enrichment %>% head(n = 15L) %>% print
+
+# table with only the top ten most significant enrichments
+
+OB_anysig_family_enrichment_topten <- OB_anysig_family_enrichment[order(OB_anysig_family_enrichment$padj, decreasing = FALSE), ] %>% head(n = 10)
+
+OB_anysig_family_enrichment_topten <- type_convert(OB_anysig_family_enrichment_topten)
+
+```
+
+bar graph of GO terms
+```{r}
+
+# OB series
+
+# ggplot(OB_anysig_family_enrichment_topten, aes(x = reorder(TermID, padj), y = genes)) +
+#   geom_col(aes(fill = log(padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   # facet_grid(~ Ont, scales = "free") +
+#   ggtitle(paste("Top 10 significantly over-represented families for OB series for dPSI cutoff of", dPSI_cutoff, "and any sig", p_or_q_value,"encompassing", numberofgenes_anysig_OBseries, "genes")) +
+#   xlab("Family description (PFAM)") +
+#   ylab("Number of genes captured in family") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# OB series
+
+ggplot(OB_anysig_family_enrichment_topten, aes(x = reorder(TermID, padj), y = genes)) +
+  geom_col(aes(fill = log(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  # facet_grid(~ Ont, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented families for OB series for dPSI cutoff of", dPSI_cutoff, "and any sig", p_or_q_value,"encompassing", numberofgenes_anysig_OBseries, "genes")) +
+  xlab("Family description (PFAM)") +
+  ylab("Number of genes captured in family") +
+  # coord_cartesian(ylim = c(0, 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  
+```
+
+### anytimepoint
+
+#### anysig, highest PSI
+
+hypergeometric test, filtering for top 10 overrepresented families
+```{r}
+
+# OB ###
+
+list_of_highest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+
+list_of_highest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
+
+# un-nest by binding rows
+wide_table_of_timepointwise_highestPSI_families_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_familyenrichment_OBseries_topten, .f = bind_rows)
+
+wide_table_of_timepointwise_highestPSI_families_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_families_OBseries)
+
+wide_table_of_timepointwise_highestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_highestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_highestPSI_families_OBseries$timepoint))), timepoint)
+
+# OB ###
+
+# list_of_highest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+# 
+# list_of_highest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
+                       
+# un-nest by binding rows
+# wide_table_of_timepointwise_highestPSI_families_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_familyenrichment_OBseries_topten, .f = bind_rows)
+# 
+# wide_table_of_timepointwise_highestPSI_families_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_families_OBseries)
+# 
+# wide_table_of_timepointwise_highestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_highestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_highestPSI_families_OBseries$timepoint))), timepoint)
+
+```
+
+#### anysig, lowest PSI
+
+hypergeometric test, filtering for top 10 overrepresented families
+```{r}
+
+# OB ###
+
+list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+
+list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
+
+# un-nest by binding rows
+wide_table_of_timepointwise_lowestPSI_families_OBseries <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries_topten, .f = bind_rows)
+
+wide_table_of_timepointwise_lowestPSI_families_OBseries <- type_convert(wide_table_of_timepointwise_lowestPSI_families_OBseries)
+
+wide_table_of_timepointwise_lowestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_lowestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_lowestPSI_families_OBseries$timepoint))), timepoint)
+
+# OB ###
+
+# list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+# 
+# list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))     
+
+# un-nest by binding rows
+# wide_table_of_timepointwise_lowestPSI_families_OBseries <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries_topten, .f = bind_rows)
+# 
+# wide_table_of_timepointwise_lowestPSI_families_OBseries <- type_convert(wide_table_of_timepointwise_lowestPSI_families_OBseries)
+# 
+# wide_table_of_timepointwise_lowestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_lowestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_lowestPSI_families_OBseries$timepoint))), timepoint)
+
+```
+
+bar graph of GO terms
+
+```{r}
+
+# OB series ######
+
+# highest PSI
+
+ggplot(wide_table_of_timepointwise_highestPSI_families_OBseries, aes(x = reorder(TermID, padj), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented families for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("Family description (PFAM)") +
+  ylab("Number of genes captured in family") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_highestPSI_families_OBseries, file = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# lowest PSI
+
+ggplot(wide_table_of_timepointwise_lowestPSI_families_OBseries, aes(x = reorder(TermID, padj), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented families for the", high_scaledPSIcutoff * 100, "% lowest PSI isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("Family description (PFAM)") +
+  ylab("Number of genes captured in family") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_lowestPSI_families_OBseries, file = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# OB series ######
+
+# highest PSI
+
+# ggplot(wide_table_of_timepointwise_highestPSI_families_OBseries, aes(x = reorder(TermID, padj), y = genes)) +
+#   geom_col(aes(fill = log10(padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~timepoint, scales = "free") +
+#   ggtitle(paste("Top 10 significantly over-represented families for the", high_scaledPSIcutoff * 100, "% highest PSI isoforms in each OB timepoint")) +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("Family description (PFAM)") +
+#   ylab("Number of genes captured in family") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+# 
+# write.table(x = wide_table_of_timepointwise_highestPSI_families_OBseries, file = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# lowest PSI
+
+# ggplot(wide_table_of_timepointwise_lowestPSI_families_OBseries, aes(x = reorder(TermID, padj), y = genes)) +
+#   geom_col(aes(fill = log10(padj))) +
+#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+#   facet_wrap(~timepoint, scales = "free") +
+#   ggtitle(paste("Top 10 significantly over-represented families for the", high_scaledPSIcutoff * 100, "% lowest PSI isoforms in each OB timepoint")) +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+#   xlab("Family description (PFAM)") +
+#   ylab("Number of genes captured in family") +
+#   # coord_cartesian(ylim = c(0, 20)) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+#  ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+#  ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+# 
+# write.table(x = wide_table_of_timepointwise_lowestPSI_families_OBseries, file = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+#### family enrichment of each cluster
+
+```{r}
+
+# OB ###
+
+list_of_familyenrichment_by_SOM_cluster_OBseries <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble)
+
+names(list_of_familyenrichment_by_SOM_cluster_OBseries) <- list_of_familyenrichment_by_SOM_cluster_OBseries
+
+list_of_familyenrichment_by_SOM_cluster_OBseries_topten <- purrr::map2(.x = list_of_familyenrichment_by_SOM_cluster_OBseries, .y = 1:(OB_xdim * OB_ydim), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., cluster = .y) %>% as_tibble)
+
+# bind rows and calculate ggplot facet x and y coordinates
+wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten <- purrr::reduce(.x = list_of_familyenrichment_by_SOM_cluster_OBseries_topten, .f = bind_rows) %>% type_convert %>% cbind(., cluster_minus_1 = .$cluster - 1) %>% cbind(., remainder_facet.x = .$cluster_minus_1 %% 5) %>% cbind(., quotient_facet.y = .$cluster_minus_1 %/% 5)
+
+
+```
+
+GGPLOT
+
+```{r}
+
+ggplot(wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, aes(x = reorder(TermID, -genes), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle("Top 10 significantly over-represented PFAM families for each cluster in OB series") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("PFAM family") +
+  ylab("Number of genes enriched in PFAM family") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+write.table(x = wide_table_of_topten_hyperGOresult_MF_OBseries_processed, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_PSI_OB_diff_any_", p_or_q_value, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+# MAPPING/ANNOTATING DIFFERENTIALLY INCLUDED TRANSCRIPT REGIONS WITH PROTEIN DOMAIN/MOTIF/STRUCTURE INFORMATION
+
+## import GTF and process it into a nice table containing only character and numeric types
+
+```{r}
+
+# IMPORT GTF ANNOTATION OF TRANSCRIPT/EXON/PROTEIN CODING REGIONS ETC...
+
+library(rtracklayer)
+
+gtf_table <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+
+gtf_table <- dplyr::select(gtf_table, -source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
+
+colnames(gtf_table) <- c("chr", "start", "end", "width", "strand", "type", "phase", "gene_id", "gene_name", "gene_biotype", "transcript_id", "transcript_name", "transcript_biotype", "exon_number", "exon_id", "protein_id") 
+
+gtf_table <- gtf_table %>% mutate_if(is.factor, as.character) %>% as_tibble
+
+dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# 
+# testuniprotID <- getBM(filters = "ensembl_peptide_id", values = SNF2_enriched_isoforms_consequence$overlapping_annotated_regions$ATRX$protein_id %>% na.omit %>% unique, attributes = "uniprotsptrembl", mart = ensembl_mart) %>% setNames("uniprotkb_entry")
+# 
+# test2 <- semi_join(dbPTM_allhuman_annotations, testuniprotID, by = "uniprotkb_entry")
+
+```
+
+## transcript and domain analyses! :)
+
+```{r}
+
+# sometimes, JUM seems to call novel splice junctions that are DIRECTLY adjacent to annotated regions but do not overlap. if we expand the genomic coordinates by 1 on each side, we can capture these regions too.
+
+enable_greedy_genome_coordinates <- function(tibble_chr_strand_start_end) {
+  
+  tibble_chr_strand_start_end[, "start"] <- tibble_chr_strand_start_end$start - 1
+  tibble_chr_strand_start_end[, "end"] <- tibble_chr_strand_start_end$end + 1
+  
+  return(tibble_chr_strand_start_end)
+  
+}
+
+list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable <- list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID %>% purrr::map(as_tibble)
+
+SNF2_enriched_isoforms <- tibble() %>%
+bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["9d"]] %>% .[.$Gene == "SMARCA2", ]) %>%
+bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["9d"]] %>% .[.$Gene == "SRCAP", ]) %>%
+bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["9d"]] %>% .[.$Gene == "EP400", ]) %>%
+bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["9d"]] %>% .[.$Gene == "ATRX", ]) %>%
+bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["9d"]] %>% .[.$Gene == "BTAF1", ])
+
+SNF2_enriched_isoforms_chr_strand_start_end <- SNF2_enriched_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end
+
+SNF2_enriched_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(SNF2_enriched_isoforms_chr_strand_start_end, gtf_table, ensembl_mart)
+
+ribonuclease_enriched_isoforms <- tibble() %>% 
+  bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["MSC"]] %>% .[.$Gene == "DROSHA", ]) %>% 
+  bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["MSC"]] %>% .[.$Gene == "DICER1", ])
+
+ribonuclease_enriched_isoforms_chr_strand_start_end <- ribonuclease_enriched_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% enable_greedy_genome_coordinates
+
+ribonuclease_enriched_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(ribonuclease_enriched_isoforms_chr_strand_start_end, gtf_table, ensembl_mart)
+
+LIM_domain_BP_enriched_isoforms <- tibble() %>%
+  bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["6d"]] %>% .[.$Gene == "LDB1", ]) %>%
+  bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["6d"]] %>% .[.$Gene == "LDB2", ])
+
+LIM_domain_BP_enriched_isoforms_chr_strand_start_end <- LIM_domain_BP_enriched_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end
+
+LIM_domain_BP_enriched_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(LIM_domain_BP_enriched_isoforms_chr_strand_start_end, gtf_table, ensembl_mart)
+
+SUZ_domain_enriched_isoforms <- tibble() %>%
+  bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["6d"]] %>% .[.$Gene == "R3HDM1", ]) %>%
+  bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["6d"]] %>% .[.$Gene == "R3HDM2", ])
+
+SUZ_domain_enriched_isoforms_chr_strand_start_end <- SUZ_domain_enriched_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end
+
+SUZ_domain_enriched_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(SUZ_domain_enriched_isoforms_chr_strand_start_end %>% unique, gtf_table, ensembl_mart)
+
+RRM_isoforms <- tibble() %>%
+  bind_rows(., list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable[["15d"]] %>% dplyr::semi_join(., tibble(Gene = c("MATR3", "SRSF2", "TUT1", "RBM39", "RBM25", "RBM41", "SRSF6")), by = "Gene")) %>%
+  bind_rows(., dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries %>% filter(., cluster == 16), tibble(Gene = c("SPEN", "SFPQ"))))
+
+RRM_isoforms_chr_strand_start_end <- RRM_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end
+
+RRM_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(RRM_isoforms_chr_strand_start_end %>% unique, gtf_table, ensembl_mart)
+
+interesting_isoforms <- tibble() %>%
+  bind_rows(., dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries %>% filter(., cluster == 3), tibble(Gene = "ARID4B"))) %>%
+  bind_rows(., dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries %>% filter(., cluster == 15), tibble(Gene = "ARID1A"))) %>%
+  bind_rows(., dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries, tibble(Gene = "CEBPB"))) %>%
+  bind_rows(., dplyr::semi_join(wide_table_all_splicemodes_split_with_na, tibble(Gene = "LEPR"))) %>%
+  bind_rows(., dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries %>% filter(., cluster == 21), tibble(Gene = "MBD6")))
+
+interesting_isoforms_chr_strand_start_end <- interesting_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% unique
+
+interesting_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(interesting_isoforms_chr_strand_start_end, gtf_table, ensembl_mart)
+  
+
+```
+
+# QUALITY CHECK
+
+## create quality check results directory
+
+```{r}
+
+qualitycheck_results_dir <-  paste(results_dir, "qualitycheck/", sep = "")
+
+if(! dir.exists(qualitycheck_results_dir) ) {
+     dir.create(qualitycheck_results_dir, recursive = TRUE)}
+
+JUM_diff_dir <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/"
+
+```
+
+
+## check for stringency of timepointwise top/bottom cutoff
+
+```{r}
+
+for (OBtimepoint in OBseries_timepoints) {
+  
+  ggplot(list_of_highest_PSI_isoforms_per_timepoint_OBseries[[OBtimepoint]] %>% as.data.frame %>% mutate_if(is.factor, as.character) %>% type_convert, aes(x = .x)) + 
+  geom_density() +
+  ggtitle(paste("density_distribution_of_scaled_PSI_for_", OBtimepoint, "_timepoint_any_", p_or_q_value, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+  xlab("scaled PSI") +
+  ylab("proportion of isoforms") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "density_distribution_of_scaled_PSI_for_", OBtimepoint, "_timepoint_any_", p_or_q_value, "_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "density_distribution_of_scaled_PSI_for_", OBtimepoint, "_timepoint_any_", p_or_q_value, "_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+ 
+  ggplot(list_of_highest_PSI_isoforms_per_timepoint_OBseries[[OBtimepoint]] %>% as.data.frame %>% mutate_if(is.factor, as.character) %>% type_convert, aes(x = .x)) + 
+  stat_ecdf(geom = "smooth", colour = "black") +
+  geom_hline(aes(yintercept = 0.1), color = "red", linetype = "dashed", size = 1) +
+  ggtitle(paste("CDF_distribution_of_scaled_PSI_for_", OBtimepoint, "_timepoint_any_", p_or_q_value, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+  xlab("scaled PSI") +
+  ylab("proportion of isoforms") +
+  scale_y_continuous(breaks = c(0.0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0)) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "CDF_distribution_of_scaled_PSI_for_", OBtimepoint, "_timepoint_any_", p_or_q_value, "_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "CDF_distribution_of_scaled_PSI_for_", OBtimepoint, "_timepoint_any_", p_or_q_value, "_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  
+}
+
+```
+
+## check for whether there is any dependence of number of junctions detected vs. coverage
+
+```{r}
+
+number_of_junctions_detected_per_sample <- read.delim(paste(qualitycheck_results_dir, "number_of_junctions_detected_per_sample.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE) %>% as_tibble
+
+coveragedata <- read.delim(paste(qualitycheck_results_dir, "coveragedata.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+
+num_junctions_vs_coverage <- dplyr::inner_join(number_of_junctions_detected_per_sample, coveragedata, by = "timepoint_name")
+
+num_junctions_vs_coverage_pearson <- cor(num_junctions_vs_coverage[, 2], num_junctions_vs_coverage[, 3], method = "pearson") %>% signif(4)
+
+num_junctions_vs_coverage_gradient <- lm(formula = junction_counts ~ read_count, num_junctions_vs_coverage) %>% .[[1]] %>% .[2] %>% signif(digits = 4)
+
+num_junctions_vs_coverage_intercept <- lm(formula = junction_counts ~ read_count, num_junctions_vs_coverage) %>% .[[1]] %>% .[1] %>% signif(4)
+
+ggplot(num_junctions_vs_coverage, aes(y = junction_counts, x = read_count)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y~x, colour = "red") +
+  annotate(geom = "text", label = bquote("R"^2 ~ "=" ~ .(num_junctions_vs_coverage_pearson)), x = 3.5e7, y = 280000, color = "red") +
+  annotate(geom = "text", label = bquote("y =" ~ .(num_junctions_vs_coverage_gradient) ~ "x +" ~ .(num_junctions_vs_coverage_intercept)), x = 3.5e7, y = 276000, color = "red") +
+  ggtitle(paste("plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", sep = "")) +
+  xlab("number of splice junctions detected") +
+  ylab("read count") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+
+```
+
+## PCA analysis of junction counts per sample (replicate)
+
+read the combined counts in the environment
+```{r}
+
+library(Amelia)
+
+list_combined_count_filenames <- list.files(path = paste(JUM_diff_dir, sep = "")) %>% .[grep(x = ., pattern = "(.*)__combined_count.txt")] %>% array_tree
+vector_combined_count_filenames <- list_combined_count_filenames %>% unlist
+list_of_timepoint_names <- vector_combined_count_filenames %>% gsub(x = ., pattern = "(.*)__combined_count.txt", replacement = "\\1") %>% array_tree
+# list_of_assigned_table_names <- vector_combined_count_filenames %>% gsub(x = ., pattern = "(.*)__combined_count.txt", replacement = "\\1_combined_count_table") %>% array_tree
+
+
+length(list_combined_count_filenames)
+length(list_of_timepoint_names)
+
+list_of_combined_count_files <- purrr::map2(.x = list_combined_count_filenames, .y = list_of_timepoint_names, .f = ~read.delim(file = paste(JUM_diff_dir, .x, sep = ""), sep = "\t", header = FALSE, na.strings = c("NONE", "NA", "INF", "Inf")) %>% setNames(c("sub_junction_id", paste(.y, "_count", sep = ""))) %>% as_tibble %>% mutate_if(is.factor, as.character))
+
+wide_table_of_all_combined_count_files <- purrr::reduce(list_of_combined_count_files, dplyr::full_join)
+
+# CHECK FOR MISSING VALUES IN THE COMBINED COUNT TABLE. THERE SHOULD BE NONE.
+
+missmap(wide_table_of_all_combined_count_files, pdfstub = paste(qualitycheck_results_dir, "heatmap_missingness_combinedcount_tables.pdf", sep = ""))
+
+# PCA analysis
+
+PCA_combined_count <- prcomp(wide_table_of_all_combined_count_files[, 2:ncol(wide_table_of_all_combined_count_files)])
+
+# plot standard deviations 
+
+PCA_stdev <- tibble(PC = 1:(PCA_combined_count[["sdev"]] %>% length), stdev = PCA_combined_count[["sdev"]])
+PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
+PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
+
+ggplot(PCA_variance) + 
+  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+  scale_fill_gradientn(colours = heat.colors(n = (PCA_combined_count[["sdev"]] %>% length))) +
+  ggtitle(paste("PCA variance distribution amongst PCs based on JUM combined count", sep = "")) +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# plot loadings
+
+PCA_loadings <- PCA_combined_count[["rotation"]] %>% as_tibble(rownames = "sample")
+PCA_loadings <- add_column(PCA_loadings, timepoint = gsub(x = PCA_loadings$sample, pattern = "(BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\3\\4"))
+PCA_loadings <- add_column(PCA_loadings, replicatenumber = gsub(x = PCA_loadings$sample, pattern = "(BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\5"))
+
+ggplot(PCA_loadings) + 
+  geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral") +
+  ggtitle(paste("PCA standard deviations based on JUM combined count", sep = "")) +
+  xlab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC3 (", PCA_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# I wonder if filtering for low junction counts improves the clustering
+
+### FILTERING FOR JUNCTIONS WITH AT LEAST 5 REOBS IN ALL 3 REPLICATES OF EACH TIMEPOINT
+
+# generate column partitioning indices (subset every 3 columns for each timepoint made up of 3 replicates)
+a <- seq(from = 2, to = wide_table_of_all_combined_count_files %>% ncol, by = 3)
+b <- seq(from = 4, to = wide_table_of_all_combined_count_files %>% ncol, by = 3)
+c <- purrr::map2(a, b, ~.x:.y)
+
+# generate logical tests for each partition each row. does each timepoint have at least 5 junction reads in all replicates?
+d <- apply(wide_table_of_all_combined_count_files, MARGIN = 1, FUN = function(X) {purrr::map(c, ~all(X[.x] %>% as.numeric >= 5))})
+
+# logical table to show the junction coordinates which have at least one timepoint which has a sufficient number of mapped read counts.
+e <- purrr::map(d, ~any(.x == TRUE))
+
+# filter for juunctions backed by sufficient read counts only
+wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples <- wide_table_of_all_combined_count_files[which(e == TRUE), ]
+
+# repeat the PCA plots
+# PCA analysis
+
+PCA_combined_count_filtered <- prcomp(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples[, 2:ncol(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples)])
+
+# plot standard deviations 
+
+PCA_stdev_filtered <- tibble(PC = 1:(PCA_combined_count_filtered[["sdev"]] %>% length), stdev = PCA_combined_count_filtered[["sdev"]])
+PCA_variance_filtered <- tibble(PC = PCA_stdev_filtered$PC, variance = PCA_stdev_filtered$stdev ^ 2)
+PCA_variance_filtered <- add_column(PCA_variance_filtered, variance_explained = PCA_variance_filtered$variance/sum(PCA_variance_filtered$variance) * 100)
+
+ggplot(PCA_variance_filtered) + 
+  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+  scale_fill_gradientn(colours = heat.colors(n = (PCA_combined_count_filtered[["sdev"]] %>% length))) +
+  ggtitle(paste("PCA variance distribution amongst PCs based on JUM combined count filtered (> 5 in all replicates each timepoint)", sep = "")) +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# plot loadings
+
+PCA_loadings_filtered <- PCA_combined_count_filtered[["rotation"]] %>% as_tibble(rownames = "sample")
+PCA_loadings_filtered <- add_column(PCA_loadings_filtered, timepoint = gsub(x = PCA_loadings_filtered$sample, pattern = "(BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\3\\4"))
+PCA_loadings_filtered <- add_column(PCA_loadings_filtered, replicatenumber = gsub(x = PCA_loadings_filtered$sample, pattern = "(BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\5"))
+
+ggplot(PCA_loadings_filtered) + 
+  geom_point(aes(y = PC4, x = PC3, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral") +
+  ggtitle(paste("PCA standard deviations based on JUM combined count filtered (> 5 in all replicates each timepoint)", sep = "")) +
+  xlab(paste("PC3 (", PCA_variance_filtered[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC4 (", PCA_variance_filtered[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_JUM_combined_count_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_JUM_combined_count_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+```
+
+
+## k-sweep and consensus matrix validation of som
+
+```{r}
+
+
+# SET THESE TWO. script will sweep using the "dot product" of the two ranges.
+xdim_range <- 5
+ydim_range <- 2:5
+
+som_seed_number <- 7
+
+# OB series #####
+
+set.seed(som_seed_number)
+
+wide_table_som_sweep_clusters <- purrr::map2(.x = xdim_range, .y = ydim_range, .f = ~som(som_5_by_5_OBseries_table, grid = somgrid(xdim = .x, ydim = .y, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE, dist.fcts = "sumofsquares") %>% .[["unit.classif"]] %>% tibble::enframe(., name = NULL)) %>% purrr::reduce(bind_cols)
+
+wide_table_som_sweep_clusters <- wide_table_som_sweep_clusters %>% as.data.frame
+
+rownames(wide_table_som_sweep_clusters) <- paste(PSI_levels_timeseries_OB_wide_processed$Gene, "_", PSI_levels_timeseries_OB_wide_processed$isoform_ID, sep = "")
+
+# wide_table_som_sweep_clusters <- bind_cols(wide_table_som_sweep_clusters, gene_isoform_ID = paste(PSI_levels_timeseries_OB_wide_processed$Gene, "_", PSI_levels_timeseries_OB_wide_processed$isoform_ID, sep = ""))
+
+list_matchtest_som_sweep_byisoform <- purrr::map(wide_table_som_sweep_clusters %>% array_tree, ~unlist(.x)) %>% purrr::map(.f = ~apply(X = wide_table_som_sweep_clusters, MARGIN = 1, FUN = function(X){.x == X}))
+
+list_percentage_consensus_byisoform <- purrr::map(list_matchtest_som_sweep_byisoform, ~apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble)
+
+tibble_consensus_matrix <- purrr::reduce(list_percentage_consensus_byisoform, bind_rows)
+
+matrix_consensus_matrix <- tibble_consensus_matrix %>% as.matrix
+# 
+# 
+# dist_result <- tibble_consensus_matrix2 %>% dist(method = "euclidean")
+# 
+# hclust_result <- hclust(dist_result)
+# 
+# 
+# tibble_consensus_matrix2 <- tibble_consensus_matrix2[, hclust_result[["order"]]]
+# 
+# 
+# tibble_consensus_matrix2[, "gene_isoform_ID"] <- names(list_percentage_consensus_byisoform)
+
+# tibble_consensus_matrix2 <- arrange(transform(tibble_consensus_matrix2, gene_isoform_ID = factor(gene_isoform_ID, levels = hclust_result[["order"]])), gene_isoform_ID)
+
+# tibble_consensus_matrix2 <- tibble_consensus_matrix2[hclust_result[["order"]], ]
+
+rownames(matrix_consensus_matrix) <- names(list_percentage_consensus_byisoform)
+
+
+# tibble_consensus_matrix_long <- reshape2::melt(tibble_consensus_matrix2, id = c("gene_isoform_ID"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_if(is.factor, as.character)
+
+# tibble_consensus_matrix_long$order_variable <-  lapply(tibble_consensus_matrix2$order_id, FUN = function(x) {rep(x, times = nrow(tibble_consensus_matrix2))}) %>% unlist
+
+# ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
+  # geom_tile(aes(x = gene_isoform_ID, y = variable)) + 
+  # scale_x_discrete(breaks = tibble_consensus_matrix2$gene_isoform_ID, labels = NULL) +
+  # scale_y_discrete(breaks = tibble_consensus_matrix2$gene_isoform_ID, labels = NULL)
+  # theme(axis.text.x = element_blank(), axis.text.y = element_blank())
+
+# library(ggdendro)
+
+# ggdendrogram(hclust_result)
+
+library(lessR)
+
+library(corrplot)
+
+matrix_consensus_matrix_reordered <- corReorder(matrix_consensus_matrix, order = "hclust", hclust_type = "ward.D2", heat_map = FALSE, diagonal_new = FALSE)
+
+png(file = paste(qualitycheck_results_dir, "som_consensus_matrix_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_isoforms_OBseries_any_", p_or_q_value, "_dPSI_greaterthan_", dPSI_cutoff, "_isoforms_sweep_from_", min(xdim_range), "x", min(ydim_range), "_to_", max(xdim_range), "x", max(ydim_range), ".png", sep = ""), 
+    width = 6000, height = 6000)
+
+corrplot(matrix_consensus_matrix_reordered, 
+         method = "color", 
+         diag = TRUE,
+         tl.pos = "n",
+         addgrid.col = NA,
+         cl.lim = c(0, 1), is.corr = FALSE, 
+         col = colorRampPalette(c("white", "white", "yellow", "red", "black"))(200),
+         addgrid = FALSE,
+         title = paste("Consensus matrix for som sweep x from", min(xdim_range), "to", max(xdim_range), "y from", min(ydim_range), "to", max(ydim_range)))
+
+ dev.off()
+
+# ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
+  # geom_tile(aes(x = gene_isoform_ID, y = variable)) + 
+  # scale_x_discrete(breaks = tibble_consensus_matrix2$gene_isoform_ID, labels = NULL) +
+  # scale_y_discrete(breaks = tibble_consensus_matrix2$gene_isoform_ID, labels = NULL)
+  # theme(axis.text.x = element_blank(), axis.text.y = element_blank())
+
+# 
+# png(file = "H:/OTHER HAX/HAX (B)/Downloads/Project_Jessica_backup/Project Jessica/isoform usage project/project_files/test_consensus2.png", 
+#     width = 6000, height = 6000)
+# 
+# corrplot(matrix_consensus_matrix, 
+#          method = "color", 
+#          diag = TRUE,
+#          tl.pos = "n",
+#          cl.pos = "n",
+#          addgrid.col = NA,
+#          cl.lim = c(0, 1), is.corr = FALSE, 
+#          order = "hclust", hclust.method = "ward.D2", 
+#          col = colorRampPalette(c("white", "white", "yellow", "red", "black"))(200),
+#          addgrid = FALSE,
+#          title = paste("Consensus matrix for som sweep x from", min(xdim_range), "to", max(xdim_range), "y from", min(ydim_range), "to", max(ydim_range)))
+# 
+# dev.off()
+# 
+# 
+# test_mf <- GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = rownames(matrix_consensus_matrix_reordered) %>% .[1:372] %>% gsub(x = ., pattern = "(.*)_(A3SS|A5SS)(.*)", replacement = "\\1")) %>% GOHyperGAll_benjamini_correction
+# 
+# test_bp <- GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = rownames(matrix_consensus_matrix_reordered) %>% .[1:372] %>% gsub(x = ., pattern = "(.*)_(A3SS|A5SS)(.*)", replacement = "\\1")) %>% GOHyperGAll_benjamini_correction
+# 
+# 
+# test_mf <- GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = rownames(matrix_consensus_matrix_reordered) %>% .[373:541] %>% gsub(x = ., pattern = "(.*)_(A3SS|A5SS)(.*)", replacement = "\\1")) %>% GOHyperGAll_benjamini_correction
+# 
+# test_bp <- GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = rownames(matrix_consensus_matrix_reordered) %>% .[373:541] %>% gsub(x = ., pattern = "(.*)_(A3SS|A5SS)(.*)", replacement = "\\1")) %>% GOHyperGAll_benjamini_correction
+
+```
+
+## removal of unwanted variation in the junction count data
+
+### define functions
+
+```{r}
+
+# function to transform a numerical array/matrix/tibble into an RLE plot, assuming genes are given on the y-axis and samples/replicates/timepoints are given on the x axis.
+
+transformRLE <- function(input_array) {
+  
+  input_array <- log10(input_array)
+  
+  vec_gene_medians <- apply(X = input_array, MARGIN = 1, FUN = function(X) {median(X)})
+  
+  RLE_array <- apply(X = input_array, MARGIN = 2, FUN = function(X) {X - vec_gene_medians})
+  
+  return(RLE_array)
+  
+}
+
+```
+
+
+### before normalisation
+
+```{r}
+
+wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE <- wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples
+
+wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE[, 2:ncol(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE)] <- transformRLE(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE[, 2:ncol(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE)])
+
+long_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE <- reshape2::melt(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE, value.name = "junction_counts", id = "sub_junction_id", variable.name = "samplename")
+
+ggplot(long_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples_RLE) +
+  geom_boxplot(aes(x = samplename, y = junction_counts)) +
+  # ylim(1, 100000) +
+  theme_bw() +
+  xlab("replicate name")+
+  ylab("relative log10 junction counts (RLE)") +
+  ggtitle("RLE plot of raw junction counts") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), legend.title.align = 0.5, text = element_text(family="Helvetica"))
+
+```
+
+### RUV
+
+```{r warning=FALSE}
+
+library(RUVnormalize)
+
+# Sort genes by their standard deviation
+
+wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples <- wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples %>% type_convert
+
+sd <- apply(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples[, 2:ncol(wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples)], 1, FUN = function(X) {sd(X)})
+
+ssd <- wide_table_of_all_combined_count_files_more_than_5_read_in_at_least_3_samples[order(sd, decreasing = TRUE), ]
+
+# Cluster the samples
+
+kmres <- kmeans(ssd[, 2:ncol(ssd)], centers = OBseries_timepoints %>% length, nstart = 200)
+
+vclust <- kmres$cluster
+
+# Compute the distance between clustering by replicate and clustering obtained by k-means
+
+uScore <- clScore(ssd[, 2:4], ssd[, 5:7])
+
+```
+
+centering genes by replicate
+
+```{r}
+
+ssd_centred <- apply(ssd[, 2:ncol(ssd)], 2, FUN = function(X) {scale(X)}) %>% as_tibble
+ssd_centred <- bind_cols(tibble(sub_junction_id = ssd$sub_junction_id), ssd_centred)
+
+ssd_centred_RLE <- ssd_centred
+ssd_centred_RLE[, 2:ncol(ssd_centred_RLE)] <- transformRLE(ssd_centred_RLE[, 2:ncol(ssd_centred_RLE)])
+tibble_ssd_centred_RLE_long <- reshape2::melt(ssd_centred_RLE, value.name = "junction_counts", id = "sub_junction_id", variable.name = "samplename")
+
+ggplot(tibble_ssd_centred_RLE_long) +
+  geom_boxplot(aes(x = samplename, y = junction_counts)) +
+  # ylim(1, 100000) +
+  xlab("replicate name")+
+  ylab("relative log10 junction counts (RLE)") +
+  ggtitle("RLE plot of centred junction counts") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), legend.title.align = 0.5, text = element_text(family = "Helvetica"))
+
+```
+
+Naive RUV-2 no shrinkage
+
+```{r}
+
+replicate_rownumbers <- tribble(~rep1, ~rep2, ~rep3,
+            1,     2,     3,
+            4,     5,     6,
+            7,     8,     9,
+            10,    11,    12,
+            13,    14,    15,
+            16,    17,    18,
+            19,    20,    21,
+            22,    23,    24) %>% as.matrix
+
+nsY <- naiveReplicateRUV(t(ssd_centred[, 2:ncol(ssd_centred)]), scIdx = replicate_rownumbers, k = 5)
+
+tibble_ssd_RUV_wide <- bind_cols(ssd_centred[, "sub_junction_id"], t(nsY$cY) %>% as_tibble)
+
+tibble_ssd_RUV_wide_RLE <- tibble_ssd_RUV_wide
+tibble_ssd_RUV_wide_RLE[, 2:ncol(ssd_RUV)] <- transformRLE(tibble_ssd_RUV_wide_RLE[, 2:ncol(tibble_ssd_RUV_wide_RLE)])
+tibble_ssd_RUV_RLE_long <- reshape2::melt(tibble_ssd_RUV_wide_RLE, value.name = "junction_counts", id = "sub_junction_id", variable.name = "samplename")
+
+ggplot(tibble_ssd_RUV_RLE_long) +
+  geom_boxplot(aes(x = samplename, y = junction_counts)) +
+  # ylim(1, 100000) +
+  xlab("replicate name")+
+  ylab("relative log10 junction counts (RLE)") +
+  ggtitle("RLE plot of RUV junction counts") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), legend.title.align = 0.5, text = element_text(family = "Helvetica"))
+
+```
+
+plot PCA
+
+```{r}
+
+# repeat the PCA plots
+# PCA analysis
+
+PCA_combined_count_filtered <- prcomp(tibble_ssd_RUV_wide[, 2:ncol(tibble_ssd_RUV_wide)])
+
+# plot standard deviations 
+
+PCA_stdev_filtered <- tibble(PC = 1:(PCA_combined_count_filtered[["sdev"]] %>% length), stdev = PCA_combined_count_filtered[["sdev"]])
+PCA_variance_filtered <- tibble(PC = PCA_stdev_filtered$PC, variance = PCA_stdev_filtered$stdev ^ 2)
+PCA_variance_filtered <- add_column(PCA_variance_filtered, variance_explained = PCA_variance_filtered$variance/sum(PCA_variance_filtered$variance) * 100)
+
+ggplot(PCA_variance_filtered) + 
+  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+  scale_fill_gradientn(colours = heat.colors(n = (PCA_combined_count_filtered[["sdev"]] %>% length))) +
+  ggtitle(paste("PCA variance distribution amongst PCs based on JUM combined count filtered then RUV (> 5 in all replicates each timepoint)", sep = "")) +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count_filtered_RUV.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count_filtered_RUV.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# plot loadings
+
+PCA_loadings_filtered <- PCA_combined_count_filtered[["rotation"]] %>% as_tibble(rownames = "sample")
+PCA_loadings_filtered <- add_column(PCA_loadings_filtered, timepoint = gsub(x = PCA_loadings_filtered$sample, pattern = "(BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\3\\4"))
+PCA_loadings_filtered <- add_column(PCA_loadings_filtered, replicatenumber = gsub(x = PCA_loadings_filtered$sample, pattern = "(BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\5"))
+
+ggplot(PCA_loadings_filtered) + 
+  geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral") +
+  ggtitle(paste("PCA standard deviations based on JUM combined count filtered then RUV (> 5 in all replicates each timepoint)", sep = "")) +
+  xlab(paste("PC1 (", PCA_variance_filtered[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC2 (", PCA_variance_filtered[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count_filtered_RUV.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count_filtered_RUV.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+```
+

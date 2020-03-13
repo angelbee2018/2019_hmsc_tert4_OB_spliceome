@@ -1,0 +1,127 @@
+---
+title: "Processing Whippet analysis of PGNEXUS RNA-Seq ADseries"
+author: "Angel Liang"
+date: "25/11/2019"
+output: html_document
+---
+
+# Setting the running environment
+
+```{r}
+
+library(dplyr)
+library(purrr)
+
+sampleandaccessionlists_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_AD_fastqc/analysis_Whippet/"
+
+results_dir <- paste(sampleandaccessionlists_dir, "results/", sep = "")
+
+results_directory_figures <- paste(results_dir, "figures/", sep = "")
+
+if(! dir.exists(results_directory_figures) ) {
+     dir.create(results_directory_figures, recursive = TRUE)}
+
+```
+
+## defining functions
+
+```{r}
+
+# function to do Benjamini-Hochberg FDR correction for Gene Ontology output tables from GOHyperGall
+
+## takes the output of the GOHyperGall GO enrichment table and over-writes the Padj column with benjamini-corrected values from the Phyper column
+## spits out the resulting table with modified single column.
+
+## NOTE: BENJAMINI PVALUES ABOVE 0.05 ARE RENAMED NA
+
+GOHyperGAll_benjamini_correction <- function(raw_GOHyperGAll_table)
+
+  {
+  
+  benjamini_GOHyperGAll_table <- raw_GOHyperGAll_table
+  
+  benjamini_GOHyperGAll_table <- benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$SampleMatch != 0, ]
+  
+  benjamini_GOHyperGAll_table[, "Padj"] <- p.adjust(p = benjamini_GOHyperGAll_table[, "Phyper"], method = "BH", n = length(benjamini_GOHyperGAll_table[, "Phyper"]))
+  
+  benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$Padj > 0.05, "Padj"] <- NA
+
+  return(benjamini_GOHyperGAll_table)
+  
+  }
+
+# the equivalent for bc3net::enrichment() output table
+
+bc3net_benjamini_correction <- function(raw_bc3net_table)
+
+  {
+  
+  benjamini_bc3net_table <- raw_bc3net_table
+  
+  benjamini_bc3net_table <- benjamini_bc3net_table[benjamini_bc3net_table$genes != 0, ]
+  
+  benjamini_bc3net_table[, "padj"] <- p.adjust(p = benjamini_bc3net_table[, "pval"], method = "BH", n = length(benjamini_bc3net_table[, "pval"]))
+  
+  benjamini_bc3net_table[benjamini_bc3net_table$padj > 0.05, "padj"] <- NA
+  
+  return(benjamini_bc3net_table)
+  
+}
+
+# bc3net::enrichment() does not show captured genes for each family enriched, so we have to add it in. but in doing so, i want to avoid a purrr within a purrr
+
+# this function selects genes from the background in each family which are ONLY input genes.
+
+filtering_genehits_from_background_catalogue <- function(catalogue, genehit_vector){
+  
+  filtered_catalogue <- purrr::map(.x = catalogue, .f = ~intersect(.x, genehit_vector))
+  
+  return(filtered_catalogue)
+  
+}
+
+```
+
+# Importing the .psi files
+
+```{r}
+
+annotated_fastqnames_replicatenumber_underscore <- read.delim(paste(sampleandaccessionlists_dir, "annotated_fastqnames_replicatenumber_underscore.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL)
+
+print(head(annotated_fastqnames_replicatenumber_underscore))
+
+for (replicatename_underscore in annotated_fastqnames_replicatenumber_underscore[, 1])
+  {
+  
+  assign(x = paste(replicatename_underscore, "_psitable_raw", sep = ""), value = read.delim(file = paste(results_dir, replicatename_underscore, ".psi", sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf"), colClasses = "character"))
+  
+  }
+
+# this must be equal to the total number of replicates
+
+length(ls(pattern = "(.*)_psitable_raw$"))
+
+
+```
+
+# chopping raw psi files into a net summary table
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_raw_psi_table_names <- ls(pattern = "(.*)(_psitable_raw$)")
+print(paste("There are", length(list_of_raw_psi_table_names), "output Whippet psi output tables loaded", sep = " "))
+
+## convert from column of names to column of dfs
+list_of_raw_psi_tables <- purrr::map(list_of_raw_psi_table_names, get)
+names(list_of_raw_psi_tables) <- list_of_raw_psi_table_names
+
+## filter out rubbish rows - whippet outputs a few hundred lines that are just nonsense every so often
+list_of_raw_psi_tables_2 <- purrr::map(.x = list_of_raw_psi_tables, .f = .x <- ~.x[.x$Strand == "+" |.x$Strand == "-", ])
+
+## annotate each nested df with a row stating the sample name
+list_of_raw_psi_tables_2 <- purrr::map2(.x = list_of_raw_psi_tables_2, .y = names(list_of_raw_psi_tables_2) %>% as.list, .f = ~cbind(.x, samplename = gsub(x = .y, pattern = "(.*)(__psitable_raw)", replacement = "\\1") %>% as.character))
+
+
+```
+

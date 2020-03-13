@@ -1,0 +1,34 @@
+# RUNNING WHIPPET TO ANALYSE THE PGNEXUS OBSERIES
+
+whippet_dir="/home/sbi/.julia/v0.6/Whippet/"
+
+fastq_gz_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/fastq_gz/"
+
+sampleandaccessionlists="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_Whippet/"
+
+results_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_Whippet/results/"
+
+genomeDir="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/"
+
+# WHIPPET STEP 2 ###
+# indexing
+
+cd $whippet_dir
+
+julia bin/whippet-index.jl --gtf $genomeDir"gtf/Homo_sapiens.GRCh38.98.gtf" --fasta $genomeDir"raw_genome_fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz"
+
+# WHIPPET STEP 3 ###
+# calculating PSI values
+
+cd $fastq_gz_dir
+
+for replicatename in $(cat $sampleandaccessionlists"annotated_fastqnames_replicatenumber_underscore.txt"); do julia $whippet_dir"bin/whippet-quant.jl" $replicatename"pair1.fastq.gz" $replicatename"pair2.fastq.gz" -o $results_dir$replicatename; done
+
+# WHIPPET STEP 4 ###
+# generating comparisons between PSI
+
+list_of_timepoint_comparisons_final=$sampleandaccessionlists"list_of_timepoint_comparisons_final.txt"
+
+cd $results_dir
+
+for comparisonname in $(cat $list_of_timepoint_comparisons_final); do julia $whippet_dir"bin/whippet-delta.jl" -a $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1/g') -b $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\3/g') -o $results_dir$comparisonname; done

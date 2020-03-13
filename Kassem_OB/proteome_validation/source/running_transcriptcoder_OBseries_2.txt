@@ -1,0 +1,97 @@
+# commands to run transcriptcoder based on transcript reconstruction (e.g. Strawberry)
+
+transcriptcoder_dir="/media/Ubuntu/sharedfolder/PGNEXUS_software/transcriptcoder/dist/"
+
+ref_gtf_dir="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/"
+ref_fasta_dir="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract/"
+translation_table_path="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/translation_standard_code.txt"
+
+reconstructed_gtf_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_strawberry/results_assemblyonly/merged/"
+
+output_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/"
+
+mkdir $output_dir
+
+# remove unstranded for reconstructed transcriptomes
+
+cd $reconstructed_gtf_dir
+
+for reconstructedgtf in $(ls *_denovo_reconstructed_stringtiemerged.gtf); do head -n 2 $reconstructedgtf > $reconstructedgtf".transcriptcoder_ready"; cat $reconstructedgtf | awk '{if ($7 == "+" || $7 == "-") {print $0} }' >> $reconstructedgtf".transcriptcoder_ready"; done
+
+# remove chromosomes which are not 1-22, X/Y in reconstructed transcriptome
+
+for reconstructedgtf in $(ls *_denovo_reconstructed_stringtiemerged.gtf); do cat $reconstructedgtf".transcriptcoder_ready" | awk '{if (substr($1, 1) == "1" || 
+substr($1, 1) == "2" || 
+substr($1, 1) == "3" || 
+substr($1, 1) == "4" || 
+substr($1, 1) == "5" || 
+substr($1, 1) == "6" || 
+substr($1, 1) == "7" || 
+substr($1, 1) == "8" || 
+substr($1, 1) == "9" || 
+substr($1, 1) == "10" || 
+substr($1, 1) == "11" || 
+substr($1, 1) == "12" || 
+substr($1, 1) == "13" || 
+substr($1, 1) == "14" || 
+substr($1, 1) == "15" || 
+substr($1, 1) == "16" || 
+substr($1, 1) == "17" || 
+substr($1, 1) == "18" || 
+substr($1, 1) == "19" || 
+substr($1, 1) == "20" || 
+substr($1, 1) == "21" || 
+substr($1, 1) == "22" || 
+substr($1, 1) == "X" || 
+substr($1, 1) == "Y") {print $0} }' > $reconstructedgtf".transcriptcoder_ready_2"; done
+
+# CHECKS
+#head -n 20 BM_MSC_to_OB_12d_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2
+#cat BM_MSC_to_OB_12d_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2 | awk '{print $1}' | sort -u
+#cat BM_MSC_to_OB_12d_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2 | grep GL000195.1
+
+##########################
+
+# execute transcriptcoder
+
+cd $transcriptcoder_dir
+
+for reconstructedgtf in $(ls $reconstructed_gtf_dir"BM_MSC"*"denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2" | awk -F $reconstructed_gtf_dir '{print $2}'); do java -jar TranscriptCoder.jar \
+-d $(echo $reconstructedgtf | sed 's/_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2/_transcriptcoder/g') \
+-c $ref_fasta_dir \
+-t $translation_table_path \
+-s $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf" \
+-q $reconstructed_gtf_dir$reconstructedgtf \
+-o $(echo $output_dir$reconstructedgtf | sed 's/\_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2/.fasta/g') \
+-l $(echo $output_dir$reconstructedgtf | sed 's/\_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2/.log/g') \
+-p $(echo $output_dir$reconstructedgtf | sed 's/\_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready_2/.gff/g'); done
+
+
+# test
+
+cd $transcriptcoder_dir
+
+# java -jar TranscriptCoder.jar \
+-d BM_MSC_to_OB_12d_transcriptcoder \
+-c /media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract/ \
+-t /media/Ubuntu/sharedfolder/hg38_ensembl_reference/translation_standard_code.txt \
+-s /media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready \
+-q /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_strawberry/results_assemblyonly/merged/BM_MSC_to_OB_12d_denovo_reconstructed_stringtiemerged.gtf.transcriptcoder_ready \
+-o /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.fasta \
+-l /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.log \
+-p /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.gff
+
+# testing
+
+# java -jar TranscriptCoder.jar \
+-d reference.test \
+-c /media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract/ \
+-t /media/Ubuntu/sharedfolder/hg38_ensembl_reference/translation_standard_code.txt \
+-s /media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf \
+-q /media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf \
+-o /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/reference.test.fasta \
+-l /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/reference.test.log \
+-p /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/reference.test.gff
+
+
+

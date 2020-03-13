@@ -1,0 +1,47 @@
+# run strawberry without quantification - we just want the assembled(reconstructed) transcriptome.
+
+strawberry_dir="/media/Ubuntu/sharedfolder/strawberry-1.1.1"
+
+strawberry_results_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_strawberry/results_assemblyonly/"
+
+bam_bai_sj_sam_dir="/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/bam_bai_sj_sam_files/"
+
+reference_gtf_dir="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/"
+
+cd $strawberry_dir
+
+# reference guided - deprecated
+# for sortedbamfile in $(ls $bam_bai_sj_sam_dir*"sorted.bam" | awk -F $bam_bai_sj_sam_dir '{print $2}'); do ./strawberry $bam_bai_sj_sam_dir$sortedbamfile -o $(echo $strawberry_results_dir$sortedbamfile | sed 's/_Aligned.out_sorted.bam/_reconstructed_transcriptome.gtf/g') -g $reference_gtf_dir"Homo_sapiens.GRCh38.98.gtf" -p 4 --no-quant; done
+
+# non-reference guided
+for sortedbamfile in $(ls $bam_bai_sj_sam_dir*"sorted.bam" | awk -F $bam_bai_sj_sam_dir '{print $2}'); do ./strawberry $bam_bai_sj_sam_dir$sortedbamfile -o $(echo $strawberry_results_dir$sortedbamfile | sed 's/_Aligned.out_sorted.bam/_denovo_reconstructed_transcriptome.gtf/g') -p 4 --no-quant; done
+
+# merging of GTF from all replicates of each timepoint using StringTie
+
+stringtie_dir="/media/Ubuntu/sharedfolder/stringtie-2.1.0.Linux_x86_64/"
+
+timepointname_list="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/timepointname_list.txt"
+
+cd $stringtie_dir
+
+for timepoint in $(cat $timepointname_list); do ./stringtie --merge -i $strawberry_results_dir$timepoint*"_denovo_reconstructed_transcriptome.gtf" -o $strawberry_results_dir$timepoint"_denovo_reconstructed_stringtiemerged.gtf"; done
+
+cd $strawberry_results_dir
+
+mkdir merged
+
+mv *_denovo_reconstructed_stringtiemerged.gtf merged/
+mv *_fully.reference_reconstructed_stringtiemerged.gtf merged/
+
+# do another merge - this time, merge ALL transcripts from ALL the timepoints.
+
+cd $stringtie_dir
+
+./stringtie --merge -i $strawberry_results_dir"merged/"*"_denovo_reconstructed_stringtiemerged.gtf" -o $strawberry_results_dir"merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+
+# do a final merge - this time, merge the ALL timepoints transcripts with the reference GTF
+
+cd $stringtie_dir
+
+./stringtie --merge -i $strawberry_results_dir"merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf" $reference_gtf_dir"Homo_sapiens.GRCh38.98.gtf" -o $strawberry_results_dir"merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
+

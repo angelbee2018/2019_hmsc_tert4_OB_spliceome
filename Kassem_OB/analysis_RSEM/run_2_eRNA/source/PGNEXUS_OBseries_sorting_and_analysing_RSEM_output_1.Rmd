@@ -1,0 +1,1000 @@
+---
+title: "PGNEXUS_OBseries Sorting and analysing RSEM output"
+author: "Angel Liang"
+date: "11/01/2020"
+output: html_document
+---
+
+# Set the running environment
+
+## Packages and directories
+
+```{r}
+
+library(tidyverse)
+library(gtools)
+library(extrafont)
+loadfonts(device="win")
+windowsFonts("Helvetica" = windowsFont("Helvetica"))
+library(RColorBrewer)
+
+library(edgeR)
+
+library(genefilter)
+
+library(ggplot2)
+library(kohonen)
+library(genefilter)
+library(gplots)
+library(lattice)
+library(svglite)
+library(scales)
+library(stringr)
+
+library(biomaRt)
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
+
+library(systemPipeR)
+library(GOstats)
+library(PFAM.db)
+library(bc3net)
+
+OBseries_sampleandaccessionlists_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/"
+
+OBseries_rsem_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_RSEM/run_2_eRNA/RSEM_quant_results/"
+
+OBseries_R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_RSEM/run_2_eRNA/R_processing_results/"
+
+OBseries_results_directory_figures <- paste(OBseries_R_processing_results_dir, "figures/", sep="")
+
+if(! dir.exists(OBseries_results_directory_figures) ) {
+     dir.create(OBseries_results_directory_figures, recursive = TRUE)}
+
+
+```
+
+# read all the RSEM output tables into environment
+
+```{r}
+
+list_of_replicatenames_OBseries <- read.delim(paste(OBseries_sampleandaccessionlists_dir, "annotated_fastqnames_replicatenumber.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree
+
+list_genecounts_OBseries <- purrr::map(.x = list_of_replicatenames_OBseries, .f = ~read.delim(file = paste(OBseries_rsem_results_dir, .x, ".genes.results", sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf")))
+
+list_isoformcounts_OBseries <- purrr::map(.x = list_of_replicatenames_OBseries, .f = ~read.delim(file = paste(OBseries_rsem_results_dir, .x, ".isoforms.results", sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf")))
+
+```
+
+## create lists of each timpoint expression table which will be the mainstay of the rest of the analysis
+
+```{r message=FALSE}
+
+list_genecounts_OBseries_renamed <- purrr::map2(.x = list_genecounts_OBseries, 
+                                                .y = list_of_replicatenames_OBseries, 
+                                                .f = ~setNames(.x, c("ensembl_gene_id", 
+                                                                     "ensembl_transcript_id", 
+                                                                     paste("length", .y, sep = "_"), 
+                                                                     paste("effective_length", .y, sep = "_"), 
+                                                                     paste("expected_count", .y, sep = "_"), 
+                                                                     paste("TPM", .y, sep = "_"), 
+                                                                     paste("FPKM", .y, sep = "_"))) %>% type_convert %>% as_tibble)
+
+list_isoformcounts_OBseries_renamed <- purrr::map2(.x = list_isoformcounts_OBseries, 
+                                                   .y = list_of_replicatenames_OBseries, 
+                                                   .f = ~setNames(.x, c("ensembl_transcript_id", 
+                                                                        "ensembl_gene_id", 
+                                                                        paste("length", .y, sep = "_"), 
+                                                                        paste("effective_length", .y, sep = "_"), 
+                                                                        paste("expected_count", .y, sep = "_"), 
+                                                                        paste("TPM", .y, sep = "_"), 
+                                                                        paste("FPKM", .y, sep = "_"),
+                                                                        paste("PSI", .y, sep = "_"))) %>% type_convert %>% as_tibble)
+
+
+```
+
+# Gene and isoform expression analysis
+
+## create wide TPM table
+
+```{r}
+
+wide_table_of_genecounts_OBseries_expectedcount <- purrr::map(.x = list_genecounts_OBseries_renamed, .f = ~.x[, c(1, 5)]) %>% 
+                                                        purrr::reduce(dplyr::full_join)
+
+print(head(wide_table_of_genecounts_OBseries_expectedcount))
+
+
+wide_table_of_isoformcounts_OBseries_expectedcount <- purrr::map(.x = list_isoformcounts_OBseries_renamed, .f = ~.x[, c(1, 2, 5)]) %>% 
+                                                        purrr::reduce(dplyr::full_join)
+
+print(head(wide_table_of_isoformcounts_OBseries_expectedcount))
+
+wide_table_of_isoformcounts_OBseries_PSI <- purrr::map(.x = list_isoformcounts_OBseries_renamed, .f = ~.x[, c(1, 2, 6)]) %>% 
+                                                        purrr::reduce(dplyr::full_join)
+
+print(head(wide_table_of_isoformcounts_OBseries_PSI))
+
+
+```
+
+## edgeR/RUVSeq workflow
+
+### create design matrix for use in this workflow
+
+```{r}
+
+timepoints_OB <- factor(gsub(x = list_of_replicatenames_OBseries %>% unlist, pattern = "(BM_MSC_to_OB_)(.*)_(r[1-3])", replacement = "\\1\\2"), levels = gsub(x = list_of_replicatenames_OBseries %>% unlist, pattern = "(BM_MSC_to_OB_)(.*)_(r[1-3])", replacement = "\\1\\2") %>% unique)
+replicates_OB <- factor(gsub(x = list_of_replicatenames_OBseries %>% unlist, pattern = "(BM_MSC_to_OB_)(.*)_(r[1-3])", replacement = "\\3"))
+
+design_matrix <- model.matrix(~ 0 + timepoints_OB + replicates_OB)
+
+```
+
+### data triaging and quality control
+
+#### set environment
+
+set quality check directory and packages
+
+```{r}
+
+library(RUVSeq)
+
+library(Amelia)
+
+OBseries_qualitycheck_results_dir <-  paste(OBseries_R_processing_results_dir, "qualitycheck/", sep = "")
+
+if(! dir.exists(OBseries_qualitycheck_results_dir) ) {
+     dir.create(OBseries_qualitycheck_results_dir, recursive = TRUE)}
+
+```
+
+set functions
+
+```{r}
+
+# function to transform a numerical array/matrix/tibble into an RLE plot, assuming genes are given on the y-axis and samples/replicates/timepoints are given on the x axis.
+
+transformRLE <- function(input_array) {
+  
+  input_array <- log10(input_array)
+  
+  vec_gene_medians <- apply(X = input_array, MARGIN = 1, FUN = function(X) {median(X)})
+  
+  RLE_array <- apply(X = input_array, MARGIN = 2, FUN = function(X) {X - vec_gene_medians})
+  
+  return(RLE_array)
+  
+}
+
+# transformRLE except if the values were already log transformed beforehand
+
+transformRLEfromlogvalues <- function(input_array) {
+  
+  vec_gene_medians <- apply(X = input_array, MARGIN = 1, FUN = function(X) {median(X)})
+  
+  RLE_array <- apply(X = input_array, MARGIN = 2, FUN = function(X) {X - vec_gene_medians})
+  
+  return(RLE_array)
+  
+}
+
+# function to filter out genes(rows) which dont have at least x read counts for every replicate of any one time point
+
+# input_matrix: must input a matrix - columns are replicates and must be grouped by replicate. assumed equal number of replicates. otherwise, we have to use a design matrix approach for more complicated setups
+# replicateamount: number of replicates per timepoint
+# threshold: the minimum number of counts that ALL timepoints of the same replicates must have in order to pass cutoff.
+# no_annotation_cols: the number of annotation columns on the left of the table
+
+filteratleast_x_reads_in_anytimepoint <- function(input_matrix, replicateamount, threshold, no_annotation_cols) {
+
+### FILTERING FOR JUNCTIONS WITH AT LEAST 5 REOBS IN ALL 3 REPLICATES OF EACH TIMEPOINT
+
+# generate column partitioning indices (subset every 3 columns for each timepoint made up of 3 replicates)
+a <- seq(from = 1 + no_annotation_cols, to = (input_matrix %>% ncol) - replicateamount + 1, by = replicateamount)
+b <- seq(from = replicateamount + no_annotation_cols, to = input_matrix %>% ncol, by = replicateamount)
+c <- purrr::map2(a, b, ~.x:.y)
+
+# generate logical tests for each partition each row. does each timepoint have at least 5 junction reads in all replicates?
+d <- apply(input_matrix, MARGIN = 1, FUN = function(X) {purrr::map(c, ~all(X[.x] %>% as.numeric >= threshold))})
+
+# logical table to show the junction coordinates which have at least one timepoint which has a sufficient number of mapped read counts.
+e <- purrr::map(d, ~any(.x == TRUE))
+
+# filter for juunctions backed by sufficient read counts only
+output_matrix <- input_matrix[which(e == TRUE), ]
+
+return(output_matrix)
+
+}
+
+## END filteratleast_x_reads_in_anytimepoint
+
+average_counts_from_triplicate <- function(input_matrix, no_annotation_cols) {
+  
+input_matrix <- input_matrix %>% as_tibble
+
+a <- seq(from = 1 + no_annotation_cols, to = (input_matrix %>% ncol) - 3 + 1, by = 3)
+b <- seq(from = 3 + no_annotation_cols, to = input_matrix %>% ncol, by = 3)
+c <- purrr::map2(a, b, ~.x:.y)
+
+# generate logical tests for each partition each row. does each timepoint have at least 5 junction reads in all replicates?
+d <- purrr::map(.x = c, .f = ~input_matrix[, .x])
+
+e <- purrr::map(.x = d, .f = ~apply(.x, 1, FUN = mean) %>% as_tibble %>% setNames(gsub(x = colnames(.x), pattern = "(.*)(_r[1-3])", replacement = "\\1_avg") %>% unique))
+
+f <- purrr::reduce(e, bind_cols) %>% as_tibble
+
+output_matrix <- bind_cols(input_matrix[, 1:no_annotation_cols], f)
+
+return(output_matrix)
+
+}
+
+## END average_counts_from_triplicate
+
+# function to do Benjamini-Hochberg FDR correction for Gene Ontology output tables from GOHyperGall
+
+## takes the output of the GOHyperGall GO enrichment table and over-writes the Padj column with benjamini-corrected values from the Phyper column
+## spits out the resulting table with modified single column.
+
+## NOTE: BENJAMINI PVALUES ABOVE 0.05 ARE RENAMED NA
+
+GOHyperGAll_benjamini_correction <- function(raw_GOHyperGAll_table)
+
+  {
+  
+  benjamini_GOHyperGAll_table <- raw_GOHyperGAll_table
+  
+  benjamini_GOHyperGAll_table <- benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$SampleMatch != 0, ]
+  
+  benjamini_GOHyperGAll_table[, "Padj"] <- p.adjust(p = benjamini_GOHyperGAll_table[, "Phyper"], method = "BH", n = length(benjamini_GOHyperGAll_table[, "Phyper"]))
+  
+  benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$Padj > 0.05, "Padj"] <- NA
+
+  return(benjamini_GOHyperGAll_table)
+  
+  }
+
+# the equivalent for bc3net::enrichment() output table
+
+bc3net_benjamini_correction <- function(raw_bc3net_table)
+
+  {
+  
+  benjamini_bc3net_table <- raw_bc3net_table
+  
+  benjamini_bc3net_table_processed <- benjamini_bc3net_table[benjamini_bc3net_table$genes != 0, ]
+  
+  if (nrow(benjamini_bc3net_table_processed) != 0) {
+  
+  benjamini_bc3net_table_processed[, "padj"] <- p.adjust(p = benjamini_bc3net_table_processed[, "pval"], method = "BH", n = length(benjamini_bc3net_table_processed[, "pval"]))
+  
+  benjamini_bc3net_table_processed[benjamini_bc3net_table_processed$padj > 0.05, "padj"] <- NA
+  
+  } else {
+    
+    benjamini_bc3net_table_processed <- benjamini_bc3net_table
+    
+    benjamini_bc3net_table_processed[, "padj"] <- NA
+    
+  }
+  
+  return(benjamini_bc3net_table_processed)
+  
+}
+
+# bc3net::enrichment() does not show captured genes for each family enriched, so we have to add it in. but in doing so, i want to avoid a purrr within a purrr
+
+
+```
+
+
+#### RUV: removal of unwanted variation
+
+##### define packages, paths and functions
+
+the OB series 6dr2 and 9dr3 samples may have been swapped.
+
+we shall use RUVg (with housekeeping genes only, making no assumptions about the grouping of replicates by timepoint) to see if normalisation in this way improves PCA clustering.
+
+RUVseq workflow 
+
+http://bioconductor.org/packages/release/bioc/vignettes/RUVSeq/inst/doc/RUVSeq.pdf
+
+Housekeeping genes:
+  * ACTB ENSG00000075624
+  * GAPDH ENSG00000111640
+  * B2M ENSG00000166710
+  * ef1a1 ENSG00000156508
+  * HSPCB ENSG00000096384
+  * rpl7 ENSG00000147604
+  * rpl13a ENSG00000142541
+  * PPIA ENSG00000196262
+  * ubiquitin C ENSG00000150991
+
+```{r message=FALSE, warning=FALSE}
+
+library(RUVSeq)
+
+# filter for at least read count of 2 in all 3 replicates of any one time point
+
+OBseries_gene_expectedcount_raw_highpass <- wide_table_of_genecounts_OBseries_expectedcount %>% filteratleast_x_reads_in_anytimepoint(., replicateamount = 3, threshold = 2, no_annotation_cols = 1)
+
+  pdf(paste(OBseries_qualitycheck_results_dir, "RLE_boxplot_raw_gene_expectedcount_originalconfig.pdf", sep = "")) 
+  
+  par(mar = c(20, 4.1, 4.1, 2.1))
+
+  plotRLE(OBseries_gene_expectedcount_raw_highpass[, 2:ncol(OBseries_gene_expectedcount_raw_highpass)] %>% as.matrix, outline = FALSE, ylim = c(-2, 2), col = timepoints_OB, las = 2, main = "RLE plot of raw expected count")
+  
+  dev.off()
+
+# RUV
+  
+# upper quantile normalisation
+
+OBseries_gene_expectedcount_raw_highpass_upperQN <- betweenLaneNormalization(OBseries_gene_expectedcount_raw_highpass[, 2:ncol(OBseries_gene_expectedcount_raw_highpass)] %>% as.matrix, which = "upper")
+
+replicate_rownumbers <- tribble(~rep1, ~rep2, ~rep3,
+            1,     2,     3,
+            4,     5,     6,
+            7,     8,     9,
+            10,    11,    12,
+            13,    14,    15,
+            16,    17,    18,
+            19,    20,    21,
+            22,    23,    24) %>% as.matrix
+
+housekeeping_gene_colnumbers <- c(which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000075624"),
+                                  which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000111640"),
+                                  which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000166710"),
+                                  which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000156508"),
+                                  which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000096384"),
+                                  which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000147604"),
+                                  which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000142541"))
+                                  # which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000196262"),
+                                  # which(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id == "ENSG00000150991"))
+
+
+## FINDING THE EMPIRICAL CONTROL GENES
+## determining the genes with the highest pvalue for RUVg normalisation
+## basically running edgeR GLM with the unnormalised (but count filtered) data
+
+dge_raw <- DGEList(counts = OBseries_gene_expectedcount_raw_highpass[, 2:ncol(OBseries_gene_expectedcount_raw_highpass)], genes = OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id, group = timepoints_OB)
+dge_raw <- calcNormFactors(dge_raw, method = "upperquartile")
+dge_raw <- estimateGLMCommonDisp(dge_raw, design_matrix)
+dge_raw <- estimateGLMTagwiseDisp(dge_raw, design_matrix)
+
+fit_QL_raw <- glmQLFit(dge_raw, design_matrix)
+
+#####
+
+assigntwovaluestocolumn <- function(position1, value1, position2, value2, lengthofcolumn) {
+    
+    column <- rep(0, times = lengthofcolumn)
+    column[[position1]] <- value1
+    column[[position2]] <- value2
+    
+    return(column)
+    
+}
+
+#####
+
+contrasts_alltimepoints <- makeContrasts(delete = (timepoints_OB %>% unique %>% .[1]) - (timepoints_OB %>% unique %>% .[2]), levels = design_matrix)
+
+allcomparisons_coordinates <- combn(1:(timepoints_OB %>% unique %>% length), 2) %>% t %>% array_tree %>% purrr::map(.x = ., .f = ~assigntwovaluestocolumn(position1 = .x[[1]], value1 = -1, position2 = .x[[2]], value2 = 1, lengthofcolumn = timepoints_OB %>% unique %>% length)) %>% bind_cols %>% as.matrix %>% rbind(., 0) %>% rbind(., 0)
+
+contrasts_alltimepoints <- cbind(contrasts_alltimepoints, allcomparisons_coordinates)
+
+contrasts_alltimepoints <- contrasts_alltimepoints[, -1]
+
+contrastnames <- combn(1:(timepoints_OB %>% unique %>% length), 2) %>% t %>% array_tree %>% purrr::map(.x = ., .f = ~paste(levels(timepoints_OB)[.x[[2]]], "_minus_", levels(timepoints_OB)[.x[[1]]], sep = ""))
+
+colnames(contrasts_alltimepoints) <- contrastnames
+
+lrt_raw <- glmQLFTest(fit_QL_raw, contrast = contrasts_alltimepoints)
+
+empiricalcontrolgenes <- topTags(lrt_raw, n = OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id %>% length)$table %>% .[.$FDR > 0.9, "genes"]
+
+empiricalcontrolgenes_row_positions <- lapply(empiricalcontrolgenes, FUN = function(x){which(x ==  OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id)}) %>% unlist
+
+###########
+
+# set k
+
+k.value <- 3
+
+# RUVg
+
+nsYg <- RUVg(OBseries_gene_expectedcount_raw_highpass_upperQN %>% as.matrix, cIdx = empiricalcontrolgenes_row_positions, k = k.value)
+ 
+OBseries_gene_expectedcount_RUVg <- bind_cols(OBseries_gene_expectedcount_raw_highpass[, 1], nsYg$normalizedCounts %>% as_tibble)
+  
+  pdf(paste(OBseries_qualitycheck_results_dir, "RLE_boxplot_RUVg_gene_expectedcount_originalconfig_k", k.value, ".pdf", sep = "")) 
+  
+  par(mar = c(20, 4.1, 4.1, 2.1))
+  
+  plotRLE(OBseries_gene_expectedcount_RUVg[, 2:ncol(OBseries_gene_expectedcount_RUVg)] %>% as.matrix, outline = FALSE, ylim = c(-1.5, 1.5), col = timepoints_OB, las = 2, main = paste("RLE plot of RUVg expected count, k =", k.value), )
+  
+  dev.off()
+  
+# RUVs
+
+nsYs <- RUVs(OBseries_gene_expectedcount_raw_highpass_upperQN %>% as.matrix, scIdx = replicate_rownumbers, k = k.value)
+ 
+OBseries_gene_expectedcount_RUVs <- bind_cols(OBseries_gene_expectedcount_raw_highpass[, 1], nsYs$normalizedCounts %>% as_tibble)
+  
+  pdf(paste(OBseries_qualitycheck_results_dir, "RLE_boxplot_RUVs_gene_expectedcount_originalconfig_k", k.value, ".pdf", sep = "")) 
+  
+  par(mar = c(20, 4.1, 4.1, 2.1))
+  
+  plotRLE(OBseries_gene_expectedcount_RUVs[, 2:ncol(OBseries_gene_expectedcount_RUVs)] %>% as.matrix, outline = FALSE, ylim = c(-1.5, 1.5), col = timepoints_OB, las = 2, main = paste("RLE plot of RUVs expected count, k =", k.value), )
+  
+  dev.off() 
+  
+# RUVr: normalisation based on residuals
+  # gotta test with or without upper quantile normalisation first
+  # meaning dge_raw or dge_upperonly
+  
+###
+dge_upperonly <- DGEList(counts = OBseries_gene_expectedcount_raw_highpass_upperQN, genes = OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id, group = timepoints_OB)
+dge_upperonly <- calcNormFactors(dge_upperonly, method = "upperquartile")
+dge_upperonly <- estimateGLMCommonDisp(dge_upperonly, design_matrix)
+dge_upperonly <- estimateGLMTagwiseDisp(dge_upperonly, design_matrix) 
+###
+
+### * * * ###
+fit_raw <- glmFit(dge_raw, design_matrix)
+residuals_raw <- residuals(fit_raw, type = "deviance")
+###       ###
+fit_upperonly <- glmFit(dge_upperonly, design_matrix)
+residuals_upperonly <- residuals(fit_upperonly, type = "deviance")
+### * * * ###
+
+# nsYr_raw <- RUVr(OBseries_gene_expectedcount_raw_highpass_upperQN %>% as.matrix, cIdx = 1:length(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id), k = 1, residuals = residuals_raw)
+
+nsYr_upperonly <- RUVr(OBseries_gene_expectedcount_raw_highpass_upperQN %>% as.matrix, cIdx = 1:length(OBseries_gene_expectedcount_raw_highpass$ensembl_gene_id), k = k.value, residuals = residuals_upperonly)
+
+OBseries_gene_expectedcount_RUVr <- bind_cols(OBseries_gene_expectedcount_raw_highpass[, 1], nsYr_upperonly$normalizedCounts %>% as_tibble)
+  
+  pdf(paste(OBseries_qualitycheck_results_dir, "RLE_boxplot_RUVr_gene_expectedcount_originalconfig_k", k.value, ".pdf", sep = "")) 
+  
+  par(mar = c(20, 4.1, 4.1, 2.1))
+  
+  plotRLE(OBseries_gene_expectedcount_RUVr[, 2:ncol(OBseries_gene_expectedcount_RUVr)] %>% as.matrix, outline = FALSE, ylim = c(-1.5, 1.5), col = timepoints_OB, las = 2, main = paste("RLE plot of RUVr expected count, k =", k.value), )
+  
+  dev.off()
+
+```
+
+#### PCA plot of expected counts 
+
+```{r}
+
+order_of_timepoints_OB <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+
+```
+
+
+##### plot PCA of raw expected counts
+
+```{r}
+
+# CHECK FOR MISSING VALUES IN THE COMBINED COUNT TABLE. THERE SHOULD BE NONE IF WE ARE TO DO PCA WITHOUT IMPUTATION.
+
+missmap(OBseries_gene_expectedcount_raw_highpass[, 2:ncol(OBseries_gene_expectedcount_raw_highpass)], pdfstub = paste(qualitycheck_results_dir, "heatmap_missingness_gene_expectedcount_raw_originalconfig.pdf", sep = ""))
+
+# PCA analysis
+
+PCA_gene_expectedcount_raw <- prcomp(OBseries_gene_expectedcount_raw_highpass[, 2:ncol(OBseries_gene_expectedcount_raw_highpass)])
+
+# plot standard deviations 
+
+PCA_gene_expectedcount_raw_stdev <- tibble(PC = 1:(PCA_gene_expectedcount_raw[["sdev"]] %>% length), stdev = PCA_gene_expectedcount_raw[["sdev"]])
+PCA_gene_expectedcount_raw_variance <- tibble(PC = PCA_gene_expectedcount_raw_stdev$PC, variance = PCA_gene_expectedcount_raw_stdev$stdev ^ 2)
+PCA_gene_expectedcount_raw_variance <- add_column(PCA_gene_expectedcount_raw_variance, variance_explained = PCA_gene_expectedcount_raw_variance$variance/sum(PCA_gene_expectedcount_raw_variance$variance) * 100)
+
+ggplot(PCA_gene_expectedcount_raw_variance) + 
+  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+  scale_fill_gradientn(colours = heat.colors(n = (PCA_gene_expectedcount_raw[["sdev"]] %>% length))) +
+  ggtitle(paste("PCA variance distribution amongst PCs based on raw gene expected counts", sep = "")) +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_raw_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_raw_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# plot loadings
+
+PCA_gene_expectedcount_raw_loadings <- PCA_gene_expectedcount_raw[["rotation"]] %>% as_tibble(rownames = "sample")
+PCA_gene_expectedcount_raw_loadings <- add_column(PCA_gene_expectedcount_raw_loadings, timepoint = gsub(x = PCA_gene_expectedcount_raw_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\3\\4"))
+PCA_gene_expectedcount_raw_loadings <- add_column(PCA_gene_expectedcount_raw_loadings, replicatenumber = gsub(x = PCA_gene_expectedcount_raw_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\5"))
+
+## ggplot - purrr doesnt work
+
+# y_PC_raw <- c(2:6) %>% array_tree
+# x_PC_raw <- c(1:5) %>% array_tree
+# 
+# purrr::map2(.x = x_PC_raw, .y = y_PC_raw, .f = ~(ggplot(PCA_gene_expectedcount_raw_loadings) + 
+#   geom_point(aes(y = PCA_gene_expectedcount_raw_loadings[, paste("PC", .y, sep = "")], x = PCA_gene_expectedcount_raw_loadings[, paste("PC", .x, sep = "")], shape = replicatenumber, color = timepoint, size = 2)) +
+#   scale_color_brewer(palette = "Spectral") +
+#   ggtitle(paste("PCA standard deviations based on raw gene expected counts", sep = "")) +
+#   xlab(paste("PC", .x, " (", PCA_gene_expectedcount_raw_variance[paste(.x) %>% as.numeric, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+#   ylab(paste("PC", .y, " (", PCA_gene_expectedcount_raw_variance[paste(.y) %>% as.numeric, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+#   theme_bw() +
+#   theme(text = element_text(family = "Helvetica")) +
+#   ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC", .y, "_vs_PC", .x, "_based_on_raw_gene_expectedcount.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+#   ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC", .y, "_vs_PC", .x, "_based_on_raw_gene_expectedcount.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")))
+# 
+
+ggplot(PCA_gene_expectedcount_raw_loadings) + 
+  geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on raw gene expected counts", sep = "")) +
+  xlab(paste("PC1 (", PCA_gene_expectedcount_raw_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC2 (", PCA_gene_expectedcount_raw_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_raw_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_raw_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_raw_loadings) + 
+  geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on raw gene expected counts", sep = "")) +
+  xlab(paste("PC2 (", PCA_gene_expectedcount_raw_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC3 (", PCA_gene_expectedcount_raw_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_raw_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_raw_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_raw_loadings) + 
+  geom_point(aes(y = PC4, x = PC3, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on raw gene expected counts", sep = "")) +
+  xlab(paste("PC3 (", PCA_gene_expectedcount_raw_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC4 (", PCA_gene_expectedcount_raw_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_raw_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_raw_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_raw_loadings) + 
+  geom_point(aes(y = PC5, x = PC4, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on raw gene expected counts", sep = "")) +
+  xlab(paste("PC4 (", PCA_gene_expectedcount_raw_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC5 (", PCA_gene_expectedcount_raw_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_raw_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_raw_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_raw_loadings) + 
+  geom_point(aes(y = PC6, x = PC5, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on raw gene expected counts", sep = "")) +
+  xlab(paste("PC5 (", PCA_gene_expectedcount_raw_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC6 (", PCA_gene_expectedcount_raw_variance[6, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_raw_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_raw_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+
+```
+
+##### plot PCA of expected counts with RUVg treatment
+
+```{r}
+
+# repeat the PCA plots
+# PCA analysis
+
+PCA_gene_expectedcount_RUVg <- prcomp(OBseries_gene_expectedcount_RUVg[, 2:ncol(OBseries_gene_expectedcount_RUVg)])
+
+# plot standard deviations 
+
+PCA_gene_expectedcount_RUVg_stdev <- tibble(PC = 1:(PCA_gene_expectedcount_RUVg[["sdev"]] %>% length), stdev = PCA_gene_expectedcount_RUVg[["sdev"]])
+
+PCA_gene_expectedcount_RUVg_variance <- tibble(PC = PCA_gene_expectedcount_RUVg_stdev$PC, variance = PCA_gene_expectedcount_RUVg_stdev$stdev ^ 2)
+PCA_gene_expectedcount_RUVg_variance <- add_column(PCA_gene_expectedcount_RUVg_variance, variance_explained = PCA_gene_expectedcount_RUVg_variance$variance/sum(PCA_gene_expectedcount_RUVg_variance$variance) * 100)
+
+ggplot(PCA_gene_expectedcount_RUVg_variance) + 
+  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+  scale_fill_gradientn(colours = heat.colors(n = (PCA_gene_expectedcount_RUVg[["sdev"]] %>% length))) +
+  ggtitle(paste("PCA variance distribution amongst PCs based on gene expected count with RUVg treament", sep = "")) +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_RUVg_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_RUVg_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# plot loadings
+
+PCA_gene_expectedcount_RUVg_loadings <- PCA_gene_expectedcount_RUVg[["rotation"]] %>% as_tibble(rownames = "sample")
+PCA_gene_expectedcount_RUVg_loadings <- add_column(PCA_gene_expectedcount_RUVg_loadings, timepoint = gsub(x = PCA_gene_expectedcount_RUVg_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\3\\4"))
+PCA_gene_expectedcount_RUVg_loadings <- add_column(PCA_gene_expectedcount_RUVg_loadings, replicatenumber = gsub(x = PCA_gene_expectedcount_RUVg_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\5"))
+
+ggplot(PCA_gene_expectedcount_RUVg_loadings) + 
+  geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVg treament", sep = "")) +
+  xlab(paste("PC1 (", PCA_gene_expectedcount_RUVg_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC2 (", PCA_gene_expectedcount_RUVg_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVg_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVg_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVg_loadings) + 
+  geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVg treament", sep = "")) +
+  xlab(paste("PC2 (", PCA_gene_expectedcount_RUVg_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC3 (", PCA_gene_expectedcount_RUVg_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_RUVg_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_RUVg_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVg_loadings) + 
+  geom_point(aes(y = PC4, x = PC3, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVg treament", sep = "")) +
+  xlab(paste("PC3 (", PCA_gene_expectedcount_RUVg_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC4 (", PCA_gene_expectedcount_RUVg_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_RUVg_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_RUVg_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVg_loadings) + 
+  geom_point(aes(y = PC5, x = PC4, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVg treament", sep = "")) +
+  xlab(paste("PC4 (", PCA_gene_expectedcount_RUVg_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC5 (", PCA_gene_expectedcount_RUVg_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_RUVg_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_RUVg_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVg_loadings) + 
+  geom_point(aes(y = PC6, x = PC5, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVg treament", sep = "")) +
+  xlab(paste("PC5 (", PCA_gene_expectedcount_RUVg_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC6 (", PCA_gene_expectedcount_RUVg_variance[6, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_RUVg_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_RUVg_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+```
+
+##### plot PCA of expected counts with RUVs treatment
+
+```{r}
+
+# repeat the PCA plots
+# PCA analysis
+
+PCA_gene_expectedcount_RUVs <- prcomp(OBseries_gene_expectedcount_RUVs[, 2:ncol(OBseries_gene_expectedcount_RUVs)])
+
+# plot standard deviations 
+
+PCA_gene_expectedcount_RUVs_stdev <- tibble(PC = 1:(PCA_gene_expectedcount_RUVs[["sdev"]] %>% length), stdev = PCA_gene_expectedcount_RUVs[["sdev"]])
+
+PCA_gene_expectedcount_RUVs_variance <- tibble(PC = PCA_gene_expectedcount_RUVs_stdev$PC, variance = PCA_gene_expectedcount_RUVs_stdev$stdev ^ 2)
+PCA_gene_expectedcount_RUVs_variance <- add_column(PCA_gene_expectedcount_RUVs_variance, variance_explained = PCA_gene_expectedcount_RUVs_variance$variance/sum(PCA_gene_expectedcount_RUVs_variance$variance) * 100)
+
+ggplot(PCA_gene_expectedcount_RUVs_variance) + 
+  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+  scale_fill_gradientn(colours = heat.colors(n = (PCA_gene_expectedcount_RUVs[["sdev"]] %>% length))) +
+  ggtitle(paste("PCA variance distribution amongst PCs based on gene expected count with RUVs treament", sep = "")) +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_RUVs_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_RUVs_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# plot loadings
+
+PCA_gene_expectedcount_RUVs_loadings <- PCA_gene_expectedcount_RUVs[["rotation"]] %>% as_tibble(rownames = "sample")
+PCA_gene_expectedcount_RUVs_loadings <- add_column(PCA_gene_expectedcount_RUVs_loadings, timepoint = gsub(x = PCA_gene_expectedcount_RUVs_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\3\\4"))
+PCA_gene_expectedcount_RUVs_loadings <- add_column(PCA_gene_expectedcount_RUVs_loadings, replicatenumber = gsub(x = PCA_gene_expectedcount_RUVs_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\5"))
+
+ggplot(PCA_gene_expectedcount_RUVs_loadings) + 
+  geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVs treament", sep = "")) +
+  xlab(paste("PC1 (", PCA_gene_expectedcount_RUVs_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC2 (", PCA_gene_expectedcount_RUVs_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVs_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVs_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVs_loadings) + 
+  geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVs treament", sep = "")) +
+  xlab(paste("PC2 (", PCA_gene_expectedcount_RUVs_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC3 (", PCA_gene_expectedcount_RUVs_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_RUVs_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_RUVs_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVs_loadings) + 
+  geom_point(aes(y = PC4, x = PC3, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVs treament", sep = "")) +
+  xlab(paste("PC3 (", PCA_gene_expectedcount_RUVs_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC4 (", PCA_gene_expectedcount_RUVs_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_RUVs_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_RUVs_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVs_loadings) + 
+  geom_point(aes(y = PC5, x = PC4, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVs treament", sep = "")) +
+  xlab(paste("PC4 (", PCA_gene_expectedcount_RUVs_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC5 (", PCA_gene_expectedcount_RUVs_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_RUVs_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_RUVs_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVs_loadings) + 
+  geom_point(aes(y = PC6, x = PC5, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVs treament", sep = "")) +
+  xlab(paste("PC5 (", PCA_gene_expectedcount_RUVs_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC6 (", PCA_gene_expectedcount_RUVs_variance[6, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_RUVs_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_RUVs_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+```
+
+##### plot PCA of expected counts with RUVr treatment
+
+```{r}
+
+# repeat the PCA plots
+# PCA analysis.
+
+PCA_gene_expectedcount_RUVr <- prcomp(OBseries_gene_expectedcount_RUVr[, 2:ncol(OBseries_gene_expectedcount_RUVr)])
+
+# plot standard deviations 
+
+PCA_gene_expectedcount_RUVr_stdev <- tibble(PC = 1:(PCA_gene_expectedcount_RUVr[["sdev"]] %>% length), stdev = PCA_gene_expectedcount_RUVr[["sdev"]])
+
+PCA_gene_expectedcount_RUVr_variance <- tibble(PC = PCA_gene_expectedcount_RUVr_stdev$PC, variance = PCA_gene_expectedcount_RUVr_stdev$stdev ^ 2)
+PCA_gene_expectedcount_RUVr_variance <- add_column(PCA_gene_expectedcount_RUVr_variance, variance_explained = PCA_gene_expectedcount_RUVr_variance$variance/sum(PCA_gene_expectedcount_RUVr_variance$variance) * 100)
+
+ggplot(PCA_gene_expectedcount_RUVr_variance) + 
+  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+  scale_fill_gradientn(colours = heat.colors(n = (PCA_gene_expectedcount_RUVr[["sdev"]] %>% length))) +
+  ggtitle(paste("PCA variance distribution amongst PCs based on gene expected count with RUVr treament", sep = "")) +
+  xlab("PC") +
+  ylab("Variance explained (%)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# plot loadings
+
+PCA_gene_expectedcount_RUVr_loadings <- PCA_gene_expectedcount_RUVr[["rotation"]] %>% as_tibble(rownames = "sample")
+PCA_gene_expectedcount_RUVr_loadings <- add_column(PCA_gene_expectedcount_RUVr_loadings, timepoint = gsub(x = PCA_gene_expectedcount_RUVr_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\3\\4"))
+PCA_gene_expectedcount_RUVr_loadings <- add_column(PCA_gene_expectedcount_RUVr_loadings, replicatenumber = gsub(x = PCA_gene_expectedcount_RUVr_loadings$sample, pattern = "(expected_count_BM_MSC_to_)(.*)_([0-9]{0,2})(d|h|ud)_(r[1-3])(.*)", replacement = "\\5"))
+
+ggplot(PCA_gene_expectedcount_RUVr_loadings) + 
+  geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVr treament", sep = "")) +
+  xlab(paste("PC1 (", PCA_gene_expectedcount_RUVr_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC2 (", PCA_gene_expectedcount_RUVr_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVr_loadings) + 
+  geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVr treament", sep = "")) +
+  xlab(paste("PC2 (", PCA_gene_expectedcount_RUVr_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC3 (", PCA_gene_expectedcount_RUVr_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVr_loadings) + 
+  geom_point(aes(y = PC4, x = PC3, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVr treament", sep = "")) +
+  xlab(paste("PC3 (", PCA_gene_expectedcount_RUVr_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC4 (", PCA_gene_expectedcount_RUVr_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC4_vs_PC3_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVr_loadings) + 
+  geom_point(aes(y = PC5, x = PC4, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVr treament", sep = "")) +
+  xlab(paste("PC4 (", PCA_gene_expectedcount_RUVr_variance[4, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC5 (", PCA_gene_expectedcount_RUVr_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC5_vs_PC4_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+ggplot(PCA_gene_expectedcount_RUVr_loadings) + 
+  geom_point(aes(y = PC6, x = PC5, shape = replicatenumber, color = timepoint, size = 2)) +
+  scale_color_brewer(palette = "Spectral", breaks = order_of_timepoints_OB, limits = order_of_timepoints_OB) +
+  ggtitle(paste("PCA standard deviations based on gene expected count with RUVr treament", sep = "")) +
+  xlab(paste("PC5 (", PCA_gene_expectedcount_RUVr_variance[5, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  ylab(paste("PC6 (", PCA_gene_expectedcount_RUVr_variance[6, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC6_vs_PC5_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+
+```
+
+### Differential Expression Analysis
+
+#### setup the GLM and exacttests
+
+```{r}
+
+OBseries_dge_genecounts_clean <- DGEList(counts = OBseries_gene_expectedcount_RUVr[, 2:ncol(OBseries_gene_expectedcount_RUVr)], genes = OBseries_gene_expectedcount_RUVr$ensembl_gene_id, group = timepoints_OB)
+OBseries_dge_genecounts_normfactors <- calcNormFactors(OBseries_dge_genecounts_clean, method = "upperquartile")
+
+# estimate dispersion
+OBseries_dge_genecounts_disp <- estimateDisp(OBseries_dge_genecounts_normfactors, design_matrix)
+
+pdf(paste(OBseries_qualitycheck_results_dir, "quality.plot_BCV_post.normalisation.pdf", sep = "")) 
+
+plotBCV(OBseries_dge_genecounts_disp)
+
+dev.off()
+
+```
+
+#### either: pairwise exacttest for significant genes
+
+```{r}
+
+# generate a final wide table of all the pairwise comparison data
+
+no_of_timepoints_OBseries = 1:length(timepoints_OB %>% unique)
+
+timepoint_comparisons_OBseries <- combn(no_of_timepoints_OBseries, 2) %>% t
+
+timepoint_comparison_1_OBseries <- timepoint_comparisons_OBseries[, 1] %>% array_tree
+timepoint_comparison_2_OBseries <- timepoint_comparisons_OBseries[, 2] %>% array_tree
+
+# join together all the topTags into one wide table
+
+list_edgeR_pairwise_topTags_OBseries <- purrr::map2(.x = timepoint_comparison_1_OBseries, .y = timepoint_comparison_2_OBseries, .f = ~topTags(exactTest(OBseries_dge_genecounts_disp, pair = c(.x, .y)), n = length(OBseries_gene_expectedcount_RUVr$ensembl_gene_id)))
+
+column_anysig_DEgenes_OBseries <- purrr::map(.x = list_edgeR_pairwise_topTags_OBseries, .f = ~.x$table %>% .[.$FDR <= 0.01 & abs(.$logFC) > 1, "genes"]) %>% purrr::reduce(union) %>% as_tibble %>% setNames("ensembl_gene_id")
+
+```
+
+#### or: GLM test for significant genes
+
+```{r}
+
+OBseries_dge_genecounts_GLM <- estimateGLMCommonDisp(OBseries_dge_genecounts_normfactors, design_matrix)
+OBseries_dge_genecounts_GLM <- estimateGLMTagwiseDisp(OBseries_dge_genecounts_GLM, design_matrix)
+
+# calculate QL fit
+OBseries_dge_genecounts_QLFit <- glmQLFit(OBseries_dge_genecounts_GLM, design_matrix)
+
+pdf(paste(OBseries_qualitycheck_results_dir, "quality.plot_QL.fit_post.normalisation.pdf", sep = "")) 
+plotQLDisp(OBseries_dge_genecounts_QLFit)
+dev.off()
+
+pdf(paste(OBseries_qualitycheck_results_dir, "quality.plot_logfc.vs.logCPM_post.normalisation.pdf", sep = "")) 
+plotMD(OBseries_dge_genecounts_QLFit)
+dev.off()
+
+OBseries_dge_genecounts_LRT <- glmQLFTest(OBseries_dge_genecounts_QLFit, contrast = contrasts_alltimepoints)
+
+tibble_GLM_OBseries <- topTags(OBseries_dge_genecounts_LRT, n = OBseries_gene_expectedcount_RUVr$ensembl_gene_id %>% length)$table %>% as_tibble 
+
+logFC_colnums <- grep(x = colnames(tibble_GLM_OBseries), pattern = "logFC")
+FDR_colnum <- grep(x = colnames(tibble_GLM_OBseries), pattern = "FDR")
+
+tibble_GLM_OBseries_DEGrownums <- which(apply(tibble_GLM_OBseries, 1, FUN = function(X) {(any(abs(as.numeric(X[logFC_colnums])) > 1)) & (X[FDR_colnum] %>% as.numeric < 0.01)}))
+
+column_GLMsig_DEgenes_OBseries <- tibble_GLM_OBseries[tibble_GLM_OBseries_DEGrownums, "genes"] %>% setNames("ensembl_gene_id")
+
+```
+
+#### CREATION OF THE LOGCPM TABLE
+
+normalise ALL gene counts based on library and export
+
+```{r}
+
+logCPM_OBseries_allgenes <- bind_cols(OBseries_gene_expectedcount_RUVr$ensembl_gene_id %>% as_tibble %>% setNames("ensembl_gene_id"), cpm(OBseries_dge_genecounts_normfactors, normalized.lib.sizes = TRUE, log = TRUE, prior.count = 2) %>% as_tibble)
+
+colnames(logCPM_OBseries_allgenes) <- gsub(x = colnames(logCPM_OBseries_allgenes), pattern = "expected_count", replacement = "logCPM")
+
+write.table(x = logCPM_OBseries_allgenes, file = paste(OBseries_R_processing_results_dir, "edgeR_allgenes_logCPM.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+FILTERING CPM TABLE FOR DEG, FDR AND LOG FOLD CHANGE AND EXPORT
+
+```{r}
+
+dplyr::anti_join(column_anysig_DEgenes_OBseries, column_GLMsig_DEgenes_OBseries) %>% nrow
+dplyr::semi_join(column_anysig_DEgenes_OBseries, column_GLMsig_DEgenes_OBseries) %>% nrow
+
+# purrr::map2(.x = timepoint_comparison_1_OBseries, .y = timepoint_comparison_2_OBseries, .f = ~plotSmear(exactTest(OBseries_dge_genecounts_normfactors, pair = c(.x, .y)), de.tags = rownames(DEGresult$table)[which(DEGresult$table$FDR < 0.05 & abs(DEGresult$table$logFC) > 1.5)]))
+
+# filter the logCPM table by anysig DEGs
+
+logCPM_OBseries_anysig_DEGs <- dplyr::semi_join(logCPM_OBseries_allgenes, column_anysig_DEgenes_OBseries, by = "ensembl_gene_id")
+
+write.table(x = logCPM_OBseries_anysig_DEGs, file = paste(OBseries_R_processing_results_dir, "edgeR_anysig_DEGs_logCPM.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# filter the logCPM table by GLM significant DEGs
+
+logCPM_OBseries_GLM_DEGs <- dplyr::semi_join(logCPM_OBseries_allgenes, column_GLMsig_DEgenes_OBseries, by = "ensembl_gene_id")
+
+write.table(x = logCPM_OBseries_GLM_DEGs, file = paste(OBseries_R_processing_results_dir, "edgeR_GLM_DEGs_logCPM.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+#### gene ontology to confirm function
+
+##### create catdb
+
+```{r}
+
+# # GOTERM
+
+polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "go_id", "namespace_1003"), mart = ensembl_mart) %>% .[.$namespace_1003 != "",]
+
+polyA_RNAseq_GO_background[, "namespace_1003"] <- as.character(polyA_RNAseq_GO_background[, "namespace_1003"])
+
+write.table(x = polyA_RNAseq_GO_background, file = paste(OBseries_R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+
+## Create catDB instance (takes a while but needs to be done only once)
+# note: you had to save the GO annotation file to disk in the previous steps above
+catdb <- makeCATdb(myfile = paste(OBseries_R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+
+```
+
+##### GO analysis
+
+```{r}
+
+list_of_OBseries_DEGs_hyperGOresult_allGO_tables <- purrr::map(.x = list("MF", "BP", "CC"), .f = ~GOHyperGAll(catdb = catdb, gocat = .x, Nannot = 2, sample = logCPM_OBseries_GLM_DEGs$ensembl_gene_id %>% getBM(filters = "ensembl_gene_id", values = ., attributes = "external_gene_name", mart = ensembl_mart) %>% unique %>% unlist) %>% GOHyperGAll_benjamini_correction)
+
+purrr::map(.x = list_of_OBseries_DEGs_hyperGOresult_allGO_tables, .f = ~print(head(.x, n = 20)))
+
+```
+
+

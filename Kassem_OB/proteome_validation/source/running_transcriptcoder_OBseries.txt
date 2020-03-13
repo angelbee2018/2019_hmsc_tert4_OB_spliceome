@@ -1,0 +1,91 @@
+# commands to run transcriptcoder based on transcript reconstruction (e.g. Strawberry)
+
+transcriptcoder_dir="/media/Ubuntu/sharedfolder/PGNEXUS_software/transcriptcoder/dist/"
+
+ref_gtf_dir="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/"
+ref_fasta_dir="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract/"
+translation_table_path="/media/Ubuntu/sharedfolder/hg38_ensembl_reference/translation_standard_code.txt"
+
+reconstructed_gtf_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_strawberry/results_assemblyonly/merged/"
+
+output_dir="/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/"
+
+mkdir $output_dir
+
+
+# remove header
+# cat $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready" | sed 's/\(.*\)\("EN\)\(.*"\)/\1\2\3;/g' | tail -n +4  > $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready"
+
+## reference_gtf
+
+tail -n +6 $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf" | awk '{if ($3 == "exon" || $3 == "start_codon" || $3 == "stop_codon") {
+print $1 "\011" $2 "\011" $3 "\011" $4 "\011" $5 "\011" $6 "\011" $7 "\011" $8 "\011" $13 " " $14 " "
+} }' > $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready"
+
+# filter out all the ENST id's that do not have BOTH a start AND stop codon.
+
+# THIS IS A LIST OF ALL THE UNIQUE ENST ID'S: 
+
+cat $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready" | awk '{print $10}' | sed 's/"\(.*\)";/\1/g' | sort -u > $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_ENSTonly"
+
+cat $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready" | grep "start_codon\|stop_codon" > $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_startstoponly"
+
+# awk 'FNR==NR {a[$0]; next} $3~/start_codon/ {count_start++}; $3~/stop_codon/ {count_stop++} END {$10 in a && count_start==1 && count_stop==1}' $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_ENSTonly" $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_startstoponly"
+
+# test
+# awk 'FNR==NR {a[$0]; next} $10 in a {print $0}' $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_ENSTonly" $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_startstoponly"
+
+# fuck using awk
+
+ENST="ENST00000000233"
+
+for ENST in $(awk 'NR==162406, NR==227368' $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_ENSTonly"); do if [ $(cat $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_startstoponly" | awk -v ENST=$ENST '$10~ENST {print $0}' | grep "start_codon" | wc -l) = "1" ] && [ $(cat $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_startstoponly" | awk -v ENST=$ENST '$10~ENST {print $0}' | grep "stop_codon" | wc -l) = "1" ]; then cat $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready" | awk -v ENST=$ENST '$10~ENST {print $0}' >> $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_2"; fi; done
+
+# there were some incomplete lines for some reason
+
+cat $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_2" | sort | tail -n +61 > $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_3"
+
+## reconstructed gtf
+
+cd $reconstructed_gtf_dir
+
+for reconstructedgtf in $(ls *.gtf); do tail -n +3 $reconstructedgtf | awk '{if($3 == "exon") {
+print $1 "\011" $2 "\011" $3 "\011" $4 "\011" $5 "\011" $6 "\011" $7 "\011" $8 "\011" $11 " " $12 " "
+} }' > $reconstructedgtf".transcriptcoder_ready"; done
+
+
+# execute transcriptcoder
+
+cd $transcriptcoder_dir
+
+for reconstructedgtf in $(ls $reconstructed_gtf_dir*".gtf.transcriptcoder_ready" | awk -F $reconstructed_gtf_dir '{print $2}'); do java -jar transcriptcoder.jar \
+-d $(echo $reconstructedgtf | sed 's/_reconstructed_stringtiemerged.gtf.transcriptcoder_ready/_transcriptcoder/g') \
+-c $ref_fasta_dir \
+-t $translation_table_path \
+-s $ref_gtf_dir"Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_2" \
+-q $reconstructed_gtf_dir$reconstructedgtf \
+-o $(echo $output_dir$reconstructedgtf | sed 's/\_reconstructed_stringtiemerged.gtf.transcriptcoder_ready/.fasta/g') \
+-l $(echo $output_dir$reconstructedgtf | sed 's/\_reconstructed_stringtiemerged.gtf.transcriptcoder_ready/.log/g') \
+-p $(echo $output_dir$reconstructedgtf | sed 's/\_reconstructed_stringtiemerged.gtf.transcriptcoder_ready/.gff/g') \
+-v $(echo $output_dir$reconstructedgtf | sed 's/\_reconstructed_stringtiemerged.gtf.transcriptcoder_ready/.graph/g') \
+-z $(echo $output_dir$reconstructedgtf | sed 's/\_reconstructed_stringtiemerged.gtf.transcriptcoder_ready/.score/g'); done
+
+
+# test
+
+cd $transcriptcoder_dir
+
+java -jar transcriptcoder.jar \
+-d "BM_MSC_to_OB_12d_transcriptcoder" \
+-c /media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract/ \
+-t /media/Ubuntu/sharedfolder/hg38_ensembl_reference/translation_standard_code.txt \
+-s /media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf.transcriptcoder_ready_2 \
+-q /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_strawberry/results_assemblyonly/merged/BM_MSC_to_OB_12d_reconstructed_stringtiemerged.gtf.transcriptcoder_ready \
+-o /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.fasta \
+-l /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.log \
+-p /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.gff \
+-v /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.graph \
+-z /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/transcriptcoder_output/BM_MSC_to_OB_12d.score
+
+
+

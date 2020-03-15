@@ -1,8 +1,8 @@
 script_description <- "# THREE-FRAME TRANSLATION ######
 Attempts to translate the nucleotides of all transcripts flanking all the splice junctions given.
 Uses PARALLEL PURRR (FURRR) ^___^ is much faster than the last version
-Recommended CPU/RAM connsumption: 12 cores/60GB for ~30,000 junctions. 4 cores/32GB for ~4000 junctions. 2 cores/16GB for ~1000 junctions. 
-I personally would not use more than 12 cores because you get diminishing returns due to the longer time it takes to delegate the tasks to each worker.
+Recommended CPU/RAM connsumption: 12-16 cores/60GB for ~30,000 junctions. 4-8 cores/32GB for ~4000 junctions. 2-4 cores/16GB for ~1000 junctions. 
+I personally would not use more than 16 cores because you get diminishing returns due to the longer time it takes to delegate the tasks to each worker.
 RAM usage  scales by the number of cores you use. I do not recommend going lower than 16GB."
 
 # print the arguments received by the R script
@@ -33,19 +33,17 @@ tictoc::tic("Overall execution time")
 # manage arguments
 list_input_arg_info = list(
   "1" = make_option(c("-F", "--file_information_path"), type = "character", default = NULL, 
-              help = "Compulsory. path to a table containing the junction, reconstructed GTF file and desired output name information. should be in the format of a tab separated tibble to minimise the risk of error. each row describes A PATH the file to the junction table and reconstr. GTF to be translated. This program will automatically loop thru them. The column names must be: c(\"reconstructed_GTF_path\", \"exon_table_path\", \"output_database_name\", \"splicemode_column_name\" and \"IR_regex_string\").
-              - exon_table_path: path to table containing junctions of interest. for example, UNION_junc_coor type files. MUST contain columns start, end, chr, strand, and fasta_header. one row per junction. should be in the form of a tibble. the fasta header you want included in the final FASTA file needs to be in the column called \"fasta_header\".
+              help = "Compulsory. path to a table containing the junction, reconstructed GTF file and desired output name information. should be in the format of a tab separated tibble to minimise the risk of error. each row describes A PATH the file to the junction table and reconstr. GTF to be translated. This program will automatically loop thru them. The column names must be: c(\"reconstructed_GTF_path\", \"junction_table_path\" and \"output_database_name\").
+              - junction_table_path: path to table containing junctions of interest. for example, UNION_junc_coor type files. MUST contain columns start, end, chr, strand, and fasta_header. one row per junction. should be in the form of a tibble. the fasta header you want included in the final FASTA file needs to be in the column called \"fasta_header\".
               - reconstructed_GTF_path: path to the actual reconstructed GTF file (e.g. from Cufflinks, Strawberry). NOT THE CONTAINING DIRECTORY. tip: for better junction matching, combine the reconstructed GTF with reference GTF beforehand e.g. using StringTie
-              - output_database_name: a character string of what the final FASTA database file name and output table will be called
-              - splicemode_column_name: a character string of what the column name of splice mode is called. This column contains values like IR, A3SS, MXE, MXS, cassette etc...
-              - IR_regex_string: a regular expression capturing all the splice modes which describe retained-intron entries. for example, \"IR\" will tell the program that all splicemodes which contain \"IR\" refer to retained introns. Case sensitive. This parameter is necessary because the matching requirements are slightly different for retained intron type exons. If you find that there are no translation results for all retained introns, this parameter was probably specified wrong.", metavar = "character"),
+              - output_database_name: a character string of what the final FASTA database file name and output table will be called.", metavar = "character"),
   "2" = make_option(c("-R", "--reference_genome_fasta_dir"), type = "character", default = NULL, 
               help = "Compulsory. path to the directory containing the genome FASTA files. Ideally from Ensembl... you need separate files by chromosomes, NOT the primary assembly. 
               FORMATTING IMPORTANT!!!! MAKE SURE THE REF. GENOME FASTA FILES ARE IN THE FORMAT: <_anything_><chr>.fa e.g. \"Homo_sapiens.GRCh38.dna.chromosome.MT.fa\" OR \"chr16.fa\" OR \"Y.fa\". What will not work: anything which does not have .fa extension e.g. \"chr16.fasta\", anything between the chromosome number and the .fa extension e.g. \"chromosome1.ensembl.fa\"", metavar = "character"),
-  # "3" = make_option(c("-U", "--upstream_window_size"), type = "double", default = 50, 
-  #             help = "Optional. how many nucleotides to translate upstream W.R.T. the middle of the exon for junction-based mode, the total nt. length to be translated will be arg3 + arg4. default for both is 50.", metavar = "double"),
-  # "4" = make_option(c("-D", "--downstream_window_size"), type = "double", default = 50, 
-              # help = "Optional. how many nt to translate downstream W.R.T. the transcript. for exon-based mode, both will be 50 by default. instead, the window size is taken as the MINIMUM required length to be considered for translation starting from the middle of the exon.", metavar = "double"),
+  "3" = make_option(c("-U", "--upstream_window_size"), type = "double", default = 50,
+              help = "Optional. how many nucleotides to translate upstream W.R.T. the middle of the exon for junction-based mode, the total nt. length to be translated will be arg3 + arg4. default for both is 50.", metavar = "double"),
+  "4" = make_option(c("-D", "--downstream_window_size"), type = "double", default = 50,
+  help = "Optional. how many nt to translate downstream W.R.T. the transcript. for exon-based mode, both will be 50 by default. instead, the window size is taken as the MINIMUM required length to be considered for translation starting from the middle of the exon.", metavar = "double"),
   "5" = make_option(c("-O", "--output_dir"), type = "character", default = NULL, 
               help = "Compulsory. output directory. where do you want to save the custom databases? IMPORTANT: directory must end in a \"/\". e.g. correct: ~/outputdir/ incorrect: ~/outputdir", metavar = "character"),
   "6" = make_option(c("-C", "--ncores"), type = "integer", default = 0, 
@@ -73,7 +71,7 @@ file_information_path <- input_args$file_information_path
 file_information_table <- read_delim(file_information_path, delim = "\t")
 # CHECK IF THE FILE INFO TABLE PROVIDED CONTAINS ALL THE COLUMNS WE WANT. STOP IF WE DONT SEE ANY OF THE COLNAMES WE WANT TO FIND.
 if (
-  any(str_detect(string = colnames(file_information_table), pattern = c("exon_table_path", "reconstructed_GTF_path", "output_database_name", "splicemode_column_name", "IR_regex_string")) == FALSE)
+  any(str_detect(string = colnames(file_information_table), pattern = c("junction_table_path", "reconstructed_GTF_path", "output_database_name")) == FALSE)
     ) {
   
   stop("Error. Please check that the file information table is formatted properly. Use --help command for more info.", call. = FALSE)
@@ -81,8 +79,8 @@ if (
 }
 
 reference_genome_fasta_dir <- input_args$reference_genome_fasta_dir
-# upstream_window_size <- input_args$upstream_window_size
-# downstream_window_size <- input_args$downstream_window_size
+upstream_window_size <- input_args$upstream_window_size
+downstream_window_size <- input_args$downstream_window_size
 output_dir <- input_args$output_dir
 
 if(!dir.exists(output_dir) ) {
@@ -215,64 +213,6 @@ extract_junction.flanking.exons <- function(spliceregion_list, tibble_gtf_table,
 
 # END extract_junction.flanking.exons ########
 
-# FUNCTION TO EXTRACT REFERENCE EXONS WHICH OVERLAP EXACTLY WITH QUERY EXONS
-# NOTE: to be used with purrr
-# input: spliceregion_list: a list containing details of ONE junction: $diff_exon_chr, $diff_exon_start, $diff_exon_end
-# tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
-# index: loop progress marker to be used with imap
-
-extract_exon.flanking.exons <- function(spliceregion_list, tibble_gtf_table, index) {
-  
-  # DEBUG ###################
-  # 
-  #   index <- 1
-  #   spliceregion_list <- wide_tibble_of_all_unique_exon_coords_array.tree[[index]]
-  #   # tibble_gtf_table <- tibble_ref_gtf
-  #   tibble_gtf_table <- tibble_alltimepoints_reconstructed_gtf
-  
-  ###########################
-  
-  print(paste("now processing junction number", index))
-  
-  if (spliceregion_list$strand %>% trimws == ".") {
-    
-    # +/- 1 nt tolerance
-    tibble_gtf_subset_overlapping_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% 
-      .[.$start > ((spliceregion_list$start %>% as.numeric) - 2) & .$end < ((spliceregion_list$end %>% as.numeric) + 2), ] %>% 
-      .[(.$start < ((spliceregion_list$start %>% as.numeric) + 2) & .$end > ((spliceregion_list$end %>% as.numeric) - 2)), ] %>% 
-      .[.$type == "exon", ]
-    
-  } else if (spliceregion_list$strand %>% trimws == "+" | spliceregion_list$strand %>% trimws == "-") {
-    
-    # +/- 1 nt tolerance
-    tibble_gtf_subset_overlapping_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws & tibble_gtf_table$strand == spliceregion_list$strand %>% trimws, ] %>% 
-      .[.$start > ((spliceregion_list$start %>% as.numeric) - 2) & .$end < ((spliceregion_list$end %>% as.numeric) + 2), ] %>% 
-      .[(.$start < ((spliceregion_list$start %>% as.numeric) + 2) & .$end > ((spliceregion_list$end %>% as.numeric) - 2)), ] %>% 
-      .[.$type == "exon", ]
-    
-  } else {
-    
-    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
-    
-  }
-  
-  list_of_exon_associated_transcripts <- tibble_gtf_subset_overlapping_exons$transcript_id %>% unique %>% array_tree %>% flatten
-  
-  # make a list for each exon entry matched.
-  # then add the rows of exon PAIRS which are directly connected in the mature (spliced) transcript
-  list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_exon_associated_transcripts, 
-                                                                         .f = ~list(
-                                                                           "matched_overlapping_exon" = tibble_gtf_subset_overlapping_exons[tibble_gtf_subset_overlapping_exons$transcript_id == .x, ] %>%
-                                                                             dplyr::arrange(exon_number %>% as.numeric), 
-                                                                           "parent_transcript" = tibble_gtf_table[tibble_gtf_table$transcript_id == .x, ] %>% .[-which(is.na(.$exon_number)), ] %>%
-                                                                             dplyr::arrange(exon_number %>% as.numeric)))
-  
-  return(list_of_tibbles_flanking_exon_gtf.entries_per_transcript)
-  
-}
-
-# END extract_exon.flanking.exons #######
-
 # FUNCTION to calculate where the exon's amino acid sequence will be within a whole stretch of translated transcript
 # which is the ceiling of the distance /3 - translation frame + 1. reverse for reverse strand.
 calculate_translation_frame_relative_start_end_position <- function(ES, EE, TL, strand, frame) {
@@ -298,15 +238,16 @@ calculate_translation_frame_relative_start_end_position <- function(ES, EE, TL, 
 find_valid_uORF <- function(list) {
   
   AA_sequence <- list[[1]] %>% unlist
-  exon_start_AA_position <- list[[2]] %>% paste %>% as.numeric
-  exon_end_AA_position <- list[[3]] %>% paste %>% as.numeric
+  window_start_AA_position <- list[[2]] %>% paste %>% as.numeric
+  window_end_AA_position <- list[[3]] %>% paste %>% as.numeric
+  junction_AA_position <- list[[4]] %>% paste %>% as.numeric 
   
-  validity_test <- stringr::str_detect(AA_sequence[1:(exon_start_AA_position - 1)] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
+  validity_test <- stringr::str_detect(AA_sequence[1:(window_start_AA_position - 1)] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
   
-  exonic_uORF_sequence <- AA_sequence[exon_start_AA_position:exon_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% first
+  exonic_uORF_sequence <- AA_sequence[window_start_AA_position:window_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% first
   
   # if there is indeed a valid uORF then translate the first part within the exon
-  if (validity_test == TRUE & nchar(exonic_uORF_sequence) >= 7) {
+  if (validity_test == TRUE & nchar(exonic_uORF_sequence) >= (junction_AA_position - window_start_AA_position + 1)) {
     
     return(exonic_uORF_sequence)
     
@@ -323,15 +264,16 @@ find_valid_uORF <- function(list) {
 find_valid_dORF <- function(list) {
   
   AA_sequence <- list[[1]] %>% unlist
-  exon_start_AA_position <- list[[2]] %>% paste %>% as.numeric
-  exon_end_AA_position <- list[[3]] %>% paste %>% as.numeric
+  window_start_AA_position <- list[[2]] %>% paste %>% as.numeric
+  window_end_AA_position <- list[[3]] %>% paste %>% as.numeric
+  junction_AA_position <- list[[4]] %>% paste %>% as.numeric 
   
-  validity_test <- stringr::str_detect(AA_sequence[exon_start_AA_position:exon_end_AA_position] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
+  validity_test <- stringr::str_detect(AA_sequence[window_start_AA_position:window_end_AA_position] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
   
-  exonic_dORF_sequence <- AA_sequence[exon_start_AA_position:exon_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% last
+  exonic_dORF_sequence <- AA_sequence[window_start_AA_position:window_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% last
   
   # if there is indeed a valid dORF then translate the first part within the exon
-  if (validity_test == TRUE & nchar(exonic_dORF_sequence) >= 7) {
+  if (validity_test == TRUE & nchar(exonic_dORF_sequence) >= (junction_AA_position - window_start_AA_position + 1)) {
     
     return(exonic_dORF_sequence)
     
@@ -345,14 +287,11 @@ find_valid_dORF <- function(list) {
 
 # END find_valid_uORF() and find_valid_dORF() #######################################################################
 
-# MAIN FUNCTION TO DO 3FT OF EXONS
-# Behaviour: for each exon, look up every single transcript that it's associated with. Translate in three frames and find which frame can validly translate the exon.
+# MAIN FUNCTION TO DO 3FT OF JUNCTIONS
+# Behaviour: for each junction, look up every single transcript that it's associated with. Translate in three frames and find which frame can validly translate the exon.
 # These transcripts are matched according to both reference and reconstructed GTF.
 # The smallest protein in humans is 44 AA so the smallest valid translatable nucleotide length is 132 nt. 
-# Now stop codon(s) may lie in distinct critical locations.
-#   - stop codon upstream of the exon ONLY: must be followed by a methionine in order to be translated.
-#   - stop codon downstream of the exon ONLY: always translated
-#   - more than one stop codon inside exon: the middle is never translated, left translated only if more than 7 AA belongs to the exon (due to the maxquant minimum AA length). Right translated only if more than 7 AA belongs to the exon downstream of the downstream methionine.
+# Translated region included in the upstream/downstream window must cross the splice junction.
 
 # END FUNCTIONS #####################################################################################################
 #####################################################################################################################
@@ -362,19 +301,19 @@ find_valid_dORF <- function(list) {
 
 # DEBUG ################
 
-# reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
-# reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
-# 
-# reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-# 
-# exon_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na.txt"
-# 
-# tibble_exon_table <- read.delim(exon_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-# splicemode_column_name <- "splicemode"
-# IR_regex_string <- "IR"
-# 
-# upstream_window_size <- 50
-# downstream_window_size <- 50
+reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
+reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+
+reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
+
+junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OBseries_SOM_1663_junctions_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt"
+
+tibble_junction_table <- read.delim(junction_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+splicemode_column_name <- "splicemode"
+IR_regex_string <- "IR"
+
+upstream_window_size <- 50
+downstream_window_size <- 50
 
 ########################
 
@@ -392,8 +331,8 @@ for (i in 1:nrow(file_information_table)) {
   
   reconstructed_gtf_path <- file_information_table[i, "reconstructed_GTF_path"] %>% paste
   cat("reconstructed_gtf_path:", reconstructed_gtf_path, "\n")
-  exon_table_path <- file_information_table[i, "exon_table_path"] %>% paste
-  cat("exon_table_path:", exon_table_path, "\n")
+  junction_table_path <- file_information_table[i, "junction_table_path"] %>% paste
+  cat("junction_table_path:", junction_table_path, "\n")
   output_database_name <- file_information_table[i, "output_database_name"] %>% paste
   cat("output_database_name:", output_database_name, "\n")
   splicemode_column_name <- file_information_table[i, "splicemode_column_name"] %>% paste
@@ -405,9 +344,9 @@ for (i in 1:nrow(file_information_table)) {
 
   cat("GTF importing done\n")
 
-  tibble_exon_table <- read.delim(exon_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+  tibble_junction_table <- read.delim(junction_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
   
-  list_tibble_exon_table_array.tree <- tibble_exon_table %>% array_tree
+  list_tibble_junction_table_array.tree <- tibble_junction_table %>% array_tree
   
   # specify the chromosomes to be run, according to user option --chrmode
   if (input_args$chrmode == 1) {

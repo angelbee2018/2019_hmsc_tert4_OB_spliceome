@@ -29,6 +29,8 @@ options(future.globals.maxSize = 30000000000)
 ```{r}
 
 output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/angel_3FT_junctions/"
+output_file_name_JUM <- "junction_table_OBseries_SOM_1663_junctions_any_qvalue0.01_any_deltaPSI_greaterthan_0.2"
+
 
 ```
 
@@ -294,6 +296,8 @@ UNION_junc_coor_table_4 <- UNION_junc_coor_table_3 %>% na.omit
 UNION_junc_coor_table_4[, "start"] <- UNION_junc_coor_table_4[, "start"] + 1
 UNION_junc_coor_table_4[, "end"] <- UNION_junc_coor_table_4[, "end"] + 1
 
+tibble_junction_table <- UNION_junc_coor_table_4
+
 ```
 
 ### import reference GTF, filter it for transcripts with JUNCTION-FLANKING EXONS ONLY and append to UNION junc coord table
@@ -311,7 +315,7 @@ case 4: junction is not in either ref nor reconstructed GTF: junction is discard
 
 set.seed(7)
 
-UNION_junc_coor_table_4_array.tree <- UNION_junc_coor_table_4 %>% array_tree
+tibble_junction_table_array.tree <- tibble_junction_table %>% array_tree
 
 # %>% .[sample(1:100, 20)]
 
@@ -321,38 +325,76 @@ alltimepoints_reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysi
 
 tibble_alltimepoints_reconstructed_gtf <- rtracklayer::import(alltimepoints_reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
-# FUNCTION TO ANNOTATE EACH JUNCTION WITH FASTA HEADERS from reference GTF
+# get junction-flanking exon matches for IR events
+list_ref_matching_junction_entries <- future_imap(.x = tibble_junction_table_array.tree, .f = ~list(
+  "chr" = .x$chr,
+  "start" = .x$start,
+  "end" = .x$end,
+  "strand" = .x$strand,
+  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y), 
+  "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y)), 
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble")))
 
-# format: >diff.splice.tool_transcript.reconstruction.tool|junction_ID|ENST.id|external_gene_name
-# example: >JUM_strawberry|Junction_100084|ENST00000536720.1|ALKBH2
+# turn those GTF matches into gene/transcript names
+list_annotated_junction_entries <- future_map(.x = list_ref_matching_junction_entries, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_matched_entries")))
 
-list_ref.and.reconstructed_gtf_matching.entries <- future_imap(.x = UNION_junc_coor_table_4_array.tree, .f = ~list("reference_gtf_flanking_exon_entries_per_transcript" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y), "reconstructed_gtf_flanking_exon_entries_per_transcript" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y), "external_gene_names" = extract_external.gene.name_from_reference_GTF(.x, tibble_ref_gtf, .y), "junction_ID" = .x$junction_ID), .progress = TRUE, globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "extract_external.gene.name_from_reference_GTF"))
+# collapse list into tibble
+tibble_annotated_junction_entries <- list_annotated_junction_entries %>% rbindlist %>% as_tibble
 
-list_ref.and.reconstructed_gtf_matching.entries_with.length <- purrr::map(.x = list_ref.and.reconstructed_gtf_matching.entries, .f = ~purrr::splice(.x, "reference.gtf_number.of.transcripts.matched" = length(.x$reference_gtf_flanking_exon_entries_per_transcript), "reconstructed.gtf_number.of.transcripts.matched" = length(.x$reconstructed_gtf_flanking_exon_entries_per_transcript)))
+# remove whitespace because it can cause problems
+tibble_annotated_junction_entries[, "chr"] <- tibble_annotated_junction_entries$chr %>% trimws
+tibble_annotated_junction_entries[, "start"] <- tibble_annotated_junction_entries$start %>% trimws
+tibble_annotated_junction_entries[, "end"] <- tibble_annotated_junction_entries$end %>% trimws
+tibble_annotated_junction_entries[, "strand"] <- tibble_annotated_junction_entries$strand %>% trimws
+tibble_annotated_junction_entries <- tibble_annotated_junction_entries %>% type_convert
 
-list_fasta_headers <- purrr::map(.x = list_ref.and.reconstructed_gtf_matching.entries_with.length, .f = ~generate_fasta_header_from_subset_gtf(.x, diff.splice.tool_name = "JUM", transcript.reconstruction.tool_name = "strawberry", species.name = "Homo sapiens"))
+# add exon width column for filtering baseed on exon length
+tibble_annotated_junction_entries <- tibble_annotated_junction_entries %>% add_column("width" = tibble_annotated_junction_entries$end - tibble_annotated_junction_entries$start + 1)
 
-UNION_junc_coor_table_5 <- add_column(UNION_junc_coor_table_4, "fasta_header" = list_fasta_headers %>% unlist)
+# remove junctions that did not have a match in either reference nor reconstructed GTF
+## get row indices which have NA for both matched gene name and transcript name
+row.indices_rows_with_non_translatable <- which(is.na(tibble_annotated_junction_entries$matched_gene_names) & is.na(tibble_annotated_junction_entries$matched_recon_transcript_names))
+                                                
+cat("Number of exons before filtering:", nrow(tibble_annotated_junction_entries), "\n")
+cat("Number of untranslatable exons:", length(row.indices_rows_with_non_translatable), "\n")
+cat("Percentage untranslatable:", length(row.indices_rows_with_non_translatable) * 100/nrow(tibble_annotated_junction_entries), "% \n")
 
-UNION_junc_coor_table_5 <- UNION_junc_coor_table_5 %>% na.omit
+# filter out all the non-translatable exons
+tibble_ref_matching_junction_entries_all_translatable <- tibble_annotated_junction_entries[-row.indices_rows_with_non_translatable, ]
 
-print(paste("Number of junctions before filtering:", nrow(UNION_junc_coor_table_4)))
-print(paste("Number of junctions after filtering, translatable:", nrow(UNION_junc_coor_table_5)))
-print(paste("Number of junctions filtered out:", (nrow(UNION_junc_coor_table_4) - nrow(UNION_junc_coor_table_5))))
+# add identifier column
+tibble_ref_matching_junction_entries_all_translatable <- tibble_ref_matching_junction_entries_all_translatable %>% add_column("identifier" = paste(tibble_ref_matching_junction_entries_all_translatable$chr, ":", tibble_ref_matching_junction_entries_all_translatable$start, "-", tibble_ref_matching_junction_entries_all_translatable$end, ":", as.numeric(paste(tibble_ref_matching_junction_entries_all_translatable$strand, "1", sep = "")), sep = ""))
 
 ```
 
-### export final UNION_junc_coor table
+## Join the matched gene/transcript names back onto original table, add in fasta header
 
 ```{r}
 
-write.table(UNION_junc_coor_table_5, file = paste(output_dir, output_file_name, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+tibble_junction_table_matched <- dplyr::left_join(tibble_ref_matching_junction_entries_all_translatable, tibble_junction_table)
 
-write.table(UNION_junc_coor_table_5[sample(1:nrow(UNION_junc_coor_table_5), 20), ], file = paste(output_dir, output_file_name, ".txt_test", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+tibble_junction_table_matched_with_fasta_header <- tibble_junction_table_matched %>% add_column("fasta_header" = convert_annotation_to_fasta_header(
+                                                                                            diff.splice.tool_name = "psi.sigma", 
+                                                                                            transcript.reconstruction.tool_name = "strawberry", 
+                                                                                            identifier = tibble_junction_table_matched$identifier, 
+                                                                                            transcript_ids = tibble_junction_table_matched$matched_recon_transcript_names, 
+                                                                                            species_name = "Homo sapiens", 
+                                                                                            gene_id = tibble_junction_table_matched$matched_gene_names))
 
-write.table(dplyr::anti_join(UNION_junc_coor_table_3, UNION_junc_coor_table_5, by = "junction_ID"), file = paste(output_dir, output_file_name, "_discardedjunctions.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+```
 
-write.table(wide_table_of_all_detailed_tables_diffonly, file = paste(output_dir, output_file_name, "_detailedtables.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+### export final fasta table
+
+```{r}
+
+# write the final fasta info table
+write.table(tibble_junction_table_matched_with_fasta_header, file = paste(output_dir, output_file_name_JUM, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+# write a test version consisting of 20 rows selected at random
+write.table(tibble_junction_table_matched_with_fasta_header[sample(1:nrow(tibble_junction_table_matched_with_fasta_header), 20), ], file = paste(output_dir, output_file_name_JUM, ".txt_test", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+# output the discarded entries
+write.table(dplyr::anti_join(tibble_junction_table, tibble_junction_table_matched_with_fasta_header), file = paste(output_dir, output_file_name_JUM, "_discarded.entries.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -360,10 +402,9 @@ write.table(wide_table_of_all_detailed_tables_diffonly, file = paste(output_dir,
 
 ```{r}
 
-junc_bed_table <- UNION_junc_coor_table_5[, c("chr", "start", "end", "junction_ID", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name")
+junc_bed_table <- tibble_junction_table_matched_with_fasta_header[, c("chr", "start", "end", "identifier", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name")
 
-cat(paste("track name=\"Splice Junctions\" description=\"", output_file_name, "\" graphType=junctions\n", sep = ""), file = paste(output_dir, output_file_name, ".bed", sep = ""))
-write.table(junc_bed_table, file = paste(output_dir, output_file_name, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+write.table(junc_bed_table, file = paste(output_dir, output_file_name_JUM, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
 
 ```
 
@@ -399,6 +440,7 @@ if(! dir.exists(output_dir) ) {
 
 output_file_name_PSI.Sigma <- "exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na"
 
+
 table_of_exon_coords_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_differential_exons_coords_10_anypvalue0.01_3272_exons_anysig_with_na.txt"
 
 ref_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
@@ -418,7 +460,7 @@ IR_regex_string <- "IR"
 # input: a list containing ref + recon GTF entries, a single element of a list of all the matches for each exon.
 # things to annotate: gene name, strand, all exons are NMD in the reference GTF, first/last/only exon in reference or recon. GTF
 
-annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
+annotate_matched_entries <- function(list_matched_ref_recon_gtf) {
   
   # DEBUG ######
   
@@ -588,9 +630,9 @@ list_ref_matching_exon_entries_IR <- future_imap(.x = tibble_exon_coords_array.t
   "strand" = .x$strand,
   "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y), 
   "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y)), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons")))
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble")))
 
-list_ref_matching_exon_entries_IR <- future_map(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE)
+list_ref_matching_exon_entries_IR <- future_map(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE)
 
 ```
 
@@ -608,9 +650,9 @@ list_ref_matching_exon_entries_not_IR <- future_imap(.x = tibble_exon_coords_arr
   "strand" = .x$strand,
   "reference_gtf_match" = extract_overlapping.exons(.x, tibble_ref_gtf, .y), 
   "reconstructed_gtf_match" = extract_overlapping.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y)), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons")))
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble")))
 
-list_ref_matching_exon_entries_not_IR <- future_map(.x = list_ref_matching_exon_entries_not_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE)
+list_ref_matching_exon_entries_not_IR <- future_map(.x = list_ref_matching_exon_entries_not_IR, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE)
 
 ```
 
@@ -691,9 +733,9 @@ write.table(dplyr::anti_join(tibble_exon_coords, tibble_exon_coords_matched_with
 
 ```{r}
 
-junc_bed_table <- tibble_exon_coords_matched_with_fasta_header[, c("chr", "start", "end", "identifier", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name")
+exon_bed_table <- tibble_exon_coords_matched_with_fasta_header[, c("chr", "start", "end", "identifier", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name")
 
 # cat(paste("track name=\"Alternative exons\" description=\"", output_file_name_PSI.Sigma, "\" graphType=junctions\n", sep = ""), file = paste(output_dir, output_file_name, ".bed", sep = ""))
-write.table(junc_bed_table, file = paste(output_dir, output_file_name_PSI.Sigma, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
+write.table(exon_bed_table, file = paste(output_dir, output_file_name_PSI.Sigma, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
 
 ```

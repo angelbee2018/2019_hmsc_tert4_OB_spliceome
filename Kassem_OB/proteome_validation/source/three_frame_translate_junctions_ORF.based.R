@@ -297,20 +297,20 @@ find_valid_dORF <- function(list) {
 #####################################################################################################################
 #####################################################################################################################
 
-# BEGIN EXECUTION #################################
+cat("# BEGIN EXECUTION #################################\n")
 
 # DEBUG ################
 
-reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
-reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
-
-reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-
-junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OBseries_SOM_1663_junctions_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt"
-
-tibble_junction_table <- read.delim(junction_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-upstream_window_size <- 50
-downstream_window_size <- 50
+# reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
+# reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+# 
+# reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
+# 
+# junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OBseries_SOM_1663_junctions_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt"
+# 
+# tibble_junction_table <- read.delim(junction_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# upstream_window_size <- 50
+# downstream_window_size <- 50
 
 ########################
 
@@ -333,10 +333,6 @@ for (i in 1:nrow(file_information_table)) {
   cat("junction_table_path:", junction_table_path, "\n")
   output_database_name <- file_information_table[i, "output_database_name"] %>% paste
   cat("output_database_name:", output_database_name, "\n")
-  splicemode_column_name <- file_information_table[i, "splicemode_column_name"] %>% paste
-  cat("splicemode_column_name:", splicemode_column_name, "\n")
-  IR_regex_string <- file_information_table[i, "IR_regex_string"] %>% paste 
-  cat("IR_regex_string:", IR_regex_string, "\n")
     
   reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 

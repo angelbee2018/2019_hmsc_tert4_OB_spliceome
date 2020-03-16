@@ -242,12 +242,12 @@ find_valid_uORF <- function(list) {
   window_end_AA_position <- list[[3]] %>% paste %>% as.numeric
   junction_AA_position <- list[[4]] %>% paste %>% as.numeric 
   
-  validity_test <- stringr::str_detect(AA_sequence[1:(window_start_AA_position - 1)] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
+  validity_test <- stringr::str_detect(AA_sequence[1:(window_start_AA_position - 1)] %>% rev %>% paste(collapse = ""), "^[^\\*]+M|^[^\\*]+$")
   
   exonic_uORF_sequence <- AA_sequence[window_start_AA_position:window_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% first
   
   # if there is indeed a valid uORF then translate the first part within the exon
-  if (validity_test == TRUE & nchar(exonic_uORF_sequence) >= (junction_AA_position - window_start_AA_position + 1)) {
+  if (validity_test == TRUE & nchar(exonic_uORF_sequence) > (junction_AA_position - window_start_AA_position + 1)) {
     
     return(exonic_uORF_sequence)
     
@@ -268,12 +268,12 @@ find_valid_dORF <- function(list) {
   window_end_AA_position <- list[[3]] %>% paste %>% as.numeric
   junction_AA_position <- list[[4]] %>% paste %>% as.numeric 
   
-  validity_test <- stringr::str_detect(AA_sequence[window_start_AA_position:window_end_AA_position] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
+  validity_test <- stringr::str_detect(AA_sequence[window_start_AA_position:window_end_AA_position] %>% rev %>% paste(collapse = ""), "^[^\\*]+M|^[^\\*]+$")
   
   exonic_dORF_sequence <- AA_sequence[window_start_AA_position:window_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% last
   
   # if there is indeed a valid dORF then translate the first part within the exon
-  if (validity_test == TRUE & nchar(exonic_dORF_sequence) >= (junction_AA_position - window_start_AA_position + 1)) {
+  if (validity_test == TRUE & nchar(exonic_dORF_sequence) > (junction_AA_position - window_start_AA_position + 1)) {
     
     return(exonic_dORF_sequence)
     
@@ -309,13 +309,11 @@ reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome
 junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OBseries_SOM_1663_junctions_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt"
 
 tibble_junction_table <- read.delim(junction_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-splicemode_column_name <- "splicemode"
-IR_regex_string <- "IR"
-
 upstream_window_size <- 50
 downstream_window_size <- 50
 
 ########################
+
 
 vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(reference_genome_fasta_dir)[list.files(reference_genome_fasta_dir) %>% grep(., pattern = ".*.fa$")], sep = "")
 
@@ -345,9 +343,7 @@ for (i in 1:nrow(file_information_table)) {
   cat("GTF importing done\n")
 
   tibble_junction_table <- read.delim(junction_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-  
-  list_tibble_junction_table_array.tree <- tibble_junction_table %>% array_tree
-  
+
   # specify the chromosomes to be run, according to user option --chrmode
   if (input_args$chrmode == 1) {
     
@@ -391,14 +387,14 @@ for (i in 1:nrow(file_information_table)) {
     cat("temporary subsetting of reconstructed GTF to reduce overhead when exporting\n")
     reconstructed_gtf_temp <- reconstructed_gtf[reconstructed_gtf$seqnames == chr, ]
     
-    cat("subset by intronic exons or not intronic\n")
-    tibble_exon_table_temp_IR_array.tree <- tibble_exon_table[grep(x = tibble_exon_table[, splicemode_column_name] %>% unlist, pattern = IR_regex_string), ] %>% .[.$chr == chr, ] %>% array_tree
-    tibble_exon_table_temp_not_IR_array.tree <- tibble_exon_table[-grep(x = tibble_exon_table[, splicemode_column_name] %>% unlist, pattern = IR_regex_string), ] %>% .[.$chr == chr, ] %>% array_tree
+    cat("prepare to loop thru each junction entry.\n")
+    tibble_junction_table_temp_array.tree <- tibble_junction_table[tibble_junction_table$chr == chr, ] %>% array_tree
     
-    # Strategy: for IR event, translate the intronic junction for all the trancripts which have junction-flanking exons.
-    # this means the total virtual uORF will include the intronic junction artificially spliced in,
-    cat("get junction-flanking exon matches for IR events\n")
-    list_GTF_matching_exon_entries_IR <- future_imap(.x = tibble_exon_table_temp_IR_array.tree, .f = ~list(
+    # Strategy: match junctions to transcripts with directly flanking exons
+    # add artificial entry alongside the parent transcript entries indicating the junction
+    # later, we use the junction coords to determine the start/end coords according to the specified window using the transcript topology.
+    cat("get junction-flanking exon matches from the GTF\n")
+    list_GTF_matching_junction_entries <- future_imap(.x = tibble_junction_table_temp_array.tree, .f = ~list(
       # "chr" = .x$chr %>% trimws,
       # "start" = .x$start %>% trimws,
       # "end" = .x$end %>% trimws,
@@ -409,42 +405,26 @@ for (i in 1:nrow(file_information_table)) {
         # add artificial overlapping exon element using the flanking exons.
         # it will be a single GTF row, with median exon number, spanning the intron junction of the matched transcript.
         purrr::map(.x = ., .f = ~.x %>% purrr::splice(
-          "matched_overlapping_exon" = .x$matched_flanking_exons %>% .[1, ] %>% dplyr::select(., -start, -end, -width, -exon_number) %>% add_column("start" = (.x$matched_flanking_exons %>% .[1, "end"] %>% paste %>% as.numeric + 1), "end" = (.x$matched_flanking_exons %>% .[2, "start"] %>% paste %>% as.numeric - 1), "exon_number" = mean(.x$matched_flanking_exons %>% .$exon_number %>% as.numeric)) %>% add_column("width" = .$end %>% as.numeric - .$start %>% as.numeric + 1)
-        )) %>%
-        # add in the artificial RI exon into the parent transcript list
-        purrr::map(.x = ., .f = ~list("matched_flanking_exons" = .x$matched_flanking_exons, "matched_overlapping_exon" = .x$matched_overlapping_exon, "parent_transcript" = dplyr::bind_rows(.x$parent_transcript %>% type_convert, .x$matched_overlapping_exon %>% type_convert)))),
+          "junction_specifications" = .x$matched_flanking_exons %>% .[1, ] %>% dplyr::select(., -start, -end, -width, -exon_number) %>% add_column("start" = (.x$matched_flanking_exons %>% .[1, "end"] %>% paste %>% as.numeric + 1), "end" = (.x$matched_flanking_exons %>% .[2, "start"] %>% paste %>% as.numeric - 1), "exon_number" = mean(.x$matched_flanking_exons %>% .$exon_number %>% as.numeric)) %>% add_column("width" = .$end %>% as.numeric - .$start %>% as.numeric + 1)
+        ))),
       .progress = TRUE, .options = future_options(globals = c("reconstructed_gtf_temp", "extract_junction.flanking.exons", "splicemode_column_name", "data.table", "type_convert", "dplyr", "tibble")))
-    
-    cat("get overlapping exon matches for non-IR events\n")
-    list_GTF_matching_exon_entries_not_IR <- future_imap(.x = tibble_exon_table_temp_not_IR_array.tree, .f = ~list(
-      # "chr" = .x$chr %>% trimws,
-      # "start" = .x$start %>% trimws,
-      # "end" = .x$end %>% trimws,
-      # "strand" = .x$strand %>% trimws,
-      # "splicemode" = .x[[splicemode_column_name]] %>% trimws,
-      "fasta_header" = .$fasta_header,
-      "matching_GTF_entries" = extract_exon.flanking.exons(.x, reconstructed_gtf_temp, .y)), 
-      .progress = TRUE, .options = future_options(globals = c("reconstructed_gtf_temp", "extract_exon.flanking.exons", "splicemode_column_name", "data.table", "type_convert", "dplyr", "tibble")))
-    
-    cat("merge IR and non-IR entries\n")
-    list_GTF_matching_exon_entries_combined_temp <- purrr::splice(list_GTF_matching_exon_entries_not_IR, list_GTF_matching_exon_entries_IR)
     
     cat("get co-ordinates for all nucleotides in the associated transcripts, then add in the forward nucleotide sequence for the whole transcript\n")
     cat("lookup reference FASTA for transcript co-ordinates\n")
-    list_matched_exon_coords_3FT_result_combined_temp <- purrr::imap(.x = list_GTF_matching_exon_entries_combined_temp, .f = function(.x, .y) {
+    list_matched_coords_temp <- purrr::imap(.x = list_GTF_matching_junction_entries, .f = function(.x, .y) {
       
-      cat("now processing entry number", .y, "/", length(list_GTF_matching_exon_entries_combined_temp), "\n")
+      cat("now processing entry number", .y, "/", length(list_GTF_matching_junction_entries), "\n")
       
       result <- list("fasta_header" = .x[["fasta_header"]], "3FT_info" = purrr::map(.x = .x[["matching_GTF_entries"]], .f = ~list(
-        "matched_exon_chr" = chr,
-        "matched_exon_start" = .x[["matched_overlapping_exon"]]$start %>% paste,
-        "matched_exon_end" = .x[["matched_overlapping_exon"]]$end %>% paste,
-        "matched_exon_strand" = .x[["matched_overlapping_exon"]]$strand %>% paste,
+        "matched_junction_chr" = chr,
+        "matched_junction_start" = .x[["junction_specifications"]]$start %>% paste,
+        "matched_junction_end" = .x[["junction_specifications"]]$end %>% paste,
+        "matched_junction_strand" = .x[["junction_specifications"]]$strand %>% paste,
         # generate vector of all nucleotide coors from $start to $end
         "all_parent_transcript_coords" = purrr::map2(.x = .x[["parent_transcript"]]$start, .y = .x[["parent_transcript"]]$end, .f = ~.x:.y) %>% unlist %>% sort) %>%
-          # add in the TRANSCRIPT-RELATIVE POSITIONS of the matched exon
-          purrr::splice(., "matched_exon_start_transcript.relative" = which(.$all_parent_transcript_coords == .$matched_exon_start), 
-                        "matched_exon_end_transcript.relative" = which(.$all_parent_transcript_coords == .$matched_exon_end),
+          # add in the TRANSCRIPT-RELATIVE POSITIONS of the JUNCTION ACCORDING TO THE SPECIFIED WINDOW
+          purrr::splice(., "translation_window_start_transcript.relative" = max(1, which(.$all_parent_transcript_coords == (.$matched_junction_start %>% as.numeric - 1)) - upstream_window_size + 1), 
+                        "translation_window_end_transcript.relative" = min(length(.$all_parent_transcript_coords), which(.$all_parent_transcript_coords == (.$matched_junction_end %>% as.numeric + 1)) + downstream_window_size - 1),
                         # add in all the nucleotide coords of the PARENT transcript
                         "parent_transcript_forward_nucleotides" = reference_genome_fasta_chr_temp[[chr %>% paste]][.$all_parent_transcript_coords])))
       
@@ -453,26 +433,29 @@ for (i in 1:nrow(file_information_table)) {
     })
     
     cat("doing three-frame translate using the fetched co-ordinates\n")
-    list_matched_exon_coords_3FT_result_combined_temp <- future_map(.x = list_matched_exon_coords_3FT_result_combined_temp, .f = ~list("fasta_header" = .x[["fasta_header"]], "3FT_info" = purrr::map(.x = .x[["3FT_info"]], .f = ~.x %>%
-                                                                                                                                                                                                        # three frame translation, add translation frame-relative coordinates of exon start and end
-                                                                                                                                                                                                        purrr::splice(., nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = .$parent_transcript_forward_nucleotides, strand = .$matched_exon_strand),
-                                                                                                                                                                                                                      "exon_start_AA_position_frame_0" = calculate_translation_frame_relative_start_end_position(ES = .$matched_exon_start_transcript.relative, EE = .$matched_exon_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_exon_strand, frame = 0)$exon_start_AA_position,
-                                                                                                                                                                                                                      "exon_start_AA_position_frame_1" = calculate_translation_frame_relative_start_end_position(ES = .$matched_exon_start_transcript.relative, EE = .$matched_exon_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_exon_strand, frame = 1)$exon_start_AA_position,
-                                                                                                                                                                                                                      "exon_start_AA_position_frame_2" = calculate_translation_frame_relative_start_end_position(ES = .$matched_exon_start_transcript.relative, EE = .$matched_exon_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_exon_strand, frame = 2)$exon_start_AA_position,
-                                                                                                                                                                                                                      "exon_end_AA_position_frame_0" = calculate_translation_frame_relative_start_end_position(ES = .$matched_exon_start_transcript.relative, EE = .$matched_exon_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_exon_strand, frame = 0)$exon_end_AA_position,
-                                                                                                                                                                                                                      "exon_end_AA_position_frame_1" = calculate_translation_frame_relative_start_end_position(ES = .$matched_exon_start_transcript.relative, EE = .$matched_exon_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_exon_strand, frame = 1)$exon_end_AA_position,
-                                                                                                                                                                                                                      "exon_end_AA_position_frame_2" = calculate_translation_frame_relative_start_end_position(ES = .$matched_exon_start_transcript.relative, EE = .$matched_exon_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_exon_strand, frame = 2)$exon_end_AA_position) %>%
+    list_3FT_result_temp <- future_map(.x = list_matched_coords_temp, .f = ~list("fasta_header" = .x[["fasta_header"]], "3FT_info" = purrr::map(.x = .x[["3FT_info"]], .f = ~.x %>%
+                                                                                                                                                                                                        # three frame translation, add translation frame-relative coordinates of window start and end
+                                                                                                                                                                                                        purrr::splice(., nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = .$parent_transcript_forward_nucleotides, strand = .$matched_junction_strand),
+                                                                                                                                                                                                                      "window_start_AA_position_frame_0" = calculate_translation_frame_relative_start_end_position(ES = .$translation_window_start_transcript.relative, EE = .$translation_window_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 0)$exon_start_AA_position,
+                                                                                                                                                                                                                      "window_start_AA_position_frame_1" = calculate_translation_frame_relative_start_end_position(ES = .$translation_window_start_transcript.relative, EE = .$translation_window_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 1)$exon_start_AA_position,
+                                                                                                                                                                                                                      "window_start_AA_position_frame_2" = calculate_translation_frame_relative_start_end_position(ES = .$translation_window_start_transcript.relative, EE = .$translation_window_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 2)$exon_start_AA_position,
+                                                                                                                                                                                                                      "window_end_AA_position_frame_0" = calculate_translation_frame_relative_start_end_position(ES = .$translation_window_start_transcript.relative, EE = .$translation_window_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 0)$exon_end_AA_position,
+                                                                                                                                                                                                                      "window_end_AA_position_frame_1" = calculate_translation_frame_relative_start_end_position(ES = .$translation_window_start_transcript.relative, EE = .$translation_window_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 1)$exon_end_AA_position,
+                                                                                                                                                                                                                      "window_end_AA_position_frame_2" = calculate_translation_frame_relative_start_end_position(ES = .$translation_window_start_transcript.relative, EE = .$translation_window_end_transcript.relative, TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 2)$exon_end_AA_position,
+                                                                                                                                                                                                                      "junction_AA_position_frame_0" = calculate_translation_frame_relative_start_end_position(ES = mean(c(.$translation_window_start_transcript.relative, .$translation_window_end_transcript.relative)), EE = mean(c(.$translation_window_start_transcript.relative, .$translation_window_end_transcript.relative)), TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 1)$exon_start_AA_position,
+                                                                                                                                                                                                                      "junction_AA_position_frame_1" = calculate_translation_frame_relative_start_end_position(ES = mean(c(.$translation_window_start_transcript.relative, .$translation_window_end_transcript.relative)), EE = mean(c(.$translation_window_start_transcript.relative, .$translation_window_end_transcript.relative)), TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 1)$exon_end_AA_position,
+                                                                                                                                                                                                                      "junction_AA_position_frame_2" = calculate_translation_frame_relative_start_end_position(ES = mean(c(.$translation_window_start_transcript.relative, .$translation_window_end_transcript.relative)), EE = mean(c(.$translation_window_start_transcript.relative, .$translation_window_end_transcript.relative)), TL = length(.$all_parent_transcript_coords), strand = .$matched_junction_strand, frame = 1)$exon_end_AA_position) %>%
                                                                                                                                                                                                         # check for upstream ORF as well as downstream ORF (starting from within the exon) by seeing if you reverse the AA sequence, do you see a methionine always before the first stop codon
                                                                                                                                                                                                         # will enter logical indicating whether the exon has a valid uORF or not in the given translation frame
                                                                                                                                                                                                         purrr::splice(
                                                                                                                                                                                                           # uORF
-                                                                                                                                                                                                          "uORF_valid_frame_0" = find_valid_uORF(.[c("translation_frame_0", "exon_start_AA_position_frame_0", "exon_end_AA_position_frame_0")]),
-                                                                                                                                                                                                          "uORF_valid_frame_1" = find_valid_uORF(.[c("translation_frame_0", "exon_start_AA_position_frame_1", "exon_end_AA_position_frame_1")]),
-                                                                                                                                                                                                          "uORF_valid_frame_2" = find_valid_uORF(.[c("translation_frame_0", "exon_start_AA_position_frame_2", "exon_end_AA_position_frame_2")]),
+                                                                                                                                                                                                          "uORF_valid_frame_0" = find_valid_uORF(.[c("translation_frame_0", "window_start_AA_position_frame_0", "window_end_AA_position_frame_0", "junction_AA_position_frame_0")]),
+                                                                                                                                                                                                          "uORF_valid_frame_1" = find_valid_uORF(.[c("translation_frame_0", "window_start_AA_position_frame_1", "window_end_AA_position_frame_1", "junction_AA_position_frame_1")]),
+                                                                                                                                                                                                          "uORF_valid_frame_2" = find_valid_uORF(.[c("translation_frame_0", "window_start_AA_position_frame_2", "window_end_AA_position_frame_2", "junction_AA_position_frame_2")]),
                                                                                                                                                                                                           # dORF
-                                                                                                                                                                                                          "dORF_valid_frame_0" = find_valid_dORF(.[c("translation_frame_0", "exon_start_AA_position_frame_0", "exon_end_AA_position_frame_0")]),
-                                                                                                                                                                                                          "dORF_valid_frame_1" = find_valid_dORF(.[c("translation_frame_1", "exon_start_AA_position_frame_1", "exon_end_AA_position_frame_1")]),
-                                                                                                                                                                                                          "dORF_valid_frame_2" = find_valid_dORF(.[c("translation_frame_2", "exon_start_AA_position_frame_2", "exon_end_AA_position_frame_2")])
+                                                                                                                                                                                                          "dORF_valid_frame_0" = find_valid_dORF(.[c("translation_frame_0", "window_start_AA_position_frame_0", "window_end_AA_position_frame_0", "junction_AA_position_frame_0")]),
+                                                                                                                                                                                                          "dORF_valid_frame_1" = find_valid_dORF(.[c("translation_frame_1", "window_start_AA_position_frame_1", "window_end_AA_position_frame_1", "junction_AA_position_frame_1")]),
+                                                                                                                                                                                                          "dORF_valid_frame_2" = find_valid_dORF(.[c("translation_frame_2", "window_start_AA_position_frame_2", "window_end_AA_position_frame_2", "junction_AA_position_frame_2")])
                                                                                                                                                                                                         ) %>%
                                                                                                                                                                                                         # collapse the forward nucleotide and 3FT sequences into string from a vector
                                                                                                                                                                                                         purrr::modify_at(.x = ., .at = c("parent_transcript_forward_nucleotides", "translation_frame_0", "translation_frame_1", "translation_frame_2"), .f = ~.x %>% paste(collapse = "")) %>% 
@@ -480,14 +463,14 @@ for (i in 1:nrow(file_information_table)) {
                                                                                                                                                                                                         purrr::modify_at(.x = ., .at = c("all_parent_transcript_coords"), .f = ~.x %>% paste(collapse = ",")))), .progress = TRUE)
     
     # flatten and distribute the fasta header into all of its child 3FT results
-    list_matched_exon_coords_3FT_result_combined_unnest_temp <- purrr::map(.x = list_matched_exon_coords_3FT_result_combined_temp, .f = ~purrr::cross2(.x$`fasta_header`, .$`3FT_info`)) %>% flatten %>%
+    list_3FT_result_unnest_temp <- purrr::map(.x = list_3FT_result_temp, .f = ~purrr::cross2(.x$`fasta_header`, .$`3FT_info`)) %>% flatten %>%
       ## rename the fasta header entry (first element of each list) then flatten
       purrr::map(.x = ., .f = ~set_names(.x, c("fasta_header", "3FT_result")) %>% flatten)
     
     # rearrange info into a tibble. one translation frame per row.
     # first, tibblise the translation frame elements of the list, then as_tibble the rest.
     cat("rearrange the three-frame translate results into a tibble\n")
-    list_matched_exon_coords_3FT_result_combined_unnest_temp_2 <- future_map(.x = list_matched_exon_coords_3FT_result_combined_unnest_temp, .f = function(.x) {
+    list_3FT_result_unnest_temp_2 <- future_map(.x = list_3FT_result_unnest_temp, .f = function(.x) {
       
       # DEBUG #####
       
@@ -525,7 +508,7 @@ for (i in 1:nrow(file_information_table)) {
     }, .progress = TRUE)
     
     # rbind into a summary tibble
-    tibble_3FT_result_temp <- list_matched_exon_coords_3FT_result_combined_unnest_temp_2 %>% rbindlist %>% as_tibble
+    tibble_3FT_result_temp <- list_3FT_result_unnest_temp_2 %>% rbindlist %>% as_tibble
     
     # remove entries with no valid translations. 
     tibble_3FT_result_temp <- tibble_3FT_result_temp[-which(tibble_3FT_result_temp$uORF_valid == "NONE_VALID" & tibble_3FT_result_temp$dORF_valid == "NONE_VALID"), ]

@@ -301,7 +301,7 @@ find_valid_uORF <- function(list) {
   exon_start_AA_position <- list[[2]] %>% paste %>% as.numeric
   exon_end_AA_position <- list[[3]] %>% paste %>% as.numeric
   
-  validity_test <- stringr::str_detect(AA_sequence[1:(exon_start_AA_position - 1)] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
+  validity_test <- stringr::str_detect(AA_sequence[1:(exon_start_AA_position - 1)] %>% rev %>% paste(collapse = ""), "^[^\\*]+M|^[^\\*]+$")
   
   exonic_uORF_sequence <- AA_sequence[exon_start_AA_position:exon_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% first
   
@@ -326,7 +326,7 @@ find_valid_dORF <- function(list) {
   exon_start_AA_position <- list[[2]] %>% paste %>% as.numeric
   exon_end_AA_position <- list[[3]] %>% paste %>% as.numeric
   
-  validity_test <- stringr::str_detect(AA_sequence[exon_start_AA_position:exon_end_AA_position] %>% rev %>% paste(collapse = ""), "^[^\\*]+M")
+  validity_test <- stringr::str_detect(AA_sequence[exon_start_AA_position:exon_end_AA_position] %>% rev %>% paste(collapse = ""), "^[^\\*]+M|^[^\\*]+$")
   
   exonic_dORF_sequence <- AA_sequence[exon_start_AA_position:exon_end_AA_position] %>% paste(collapse = "") %>% strsplit(., split = "\\*") %>% unlist %>% last
   

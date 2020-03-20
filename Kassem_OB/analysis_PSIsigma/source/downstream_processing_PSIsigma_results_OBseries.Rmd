@@ -1557,6 +1557,186 @@ future_map(.x = list_of_tibbles_family.enrichment_timepointwise_topten, .f = ~wr
 
 ```
 
+# ENRICHMENT OF UPSTREAM SPLICING FACTORS
+
+## import PAR-CLiP, RIP-Seq, CLiP-Seq data and match with GTF information
+
+SRSF3
+
+```{r}
+
+clipseq_dir <- "Z:/isoform_usage_project/"
+
+# PARalyzer user manual: https://ohlerlab.mdc-berlin.de/files/duke/PARalyzer/REOBME.txt
+
+# SRSF3_parclip_GSM1826788_rep1_import <- read.delim("Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/GSM1826788_SRSF3-rep1P_kde_plus3_5deep.tab", header = TRUE, stringsAsFactors = FALSE) %>% as_tibble; SRSF3_parclip_GSM1826788_rep1_import[, "Chromosome"] <- gsub(SRSF3_parclip_GSM1826788_rep1_import$Chromosome, pattern = "chr", replacement = ""); colnames(SRSF3_parclip_GSM1826788_rep1_import) <- c("chr", "strand", "start", "end", "ClusterID", "ClusterSequence", "ReadCount", "ModeLocation", "ModeScore", "ConversionLocationCount", "ConversionEventCount", "NonConversionEventCount")
+
+# SRSF3_parclip_GSM1826788_rep1_annotationbed <- map_genome_coordinate_to_transcriptandprotein(SRSF3_parclip_GSM1826788_rep1_import, mode = "BED_file", targetlevel = "transcript")
+# write.table(SRSF3_parclip_GSM1826788_rep1_annotationbed, file = "Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep1.annotationbed", sep = "\t", row.names = FALSE, quote = FALSE)
+
+SRSF3_parclip_GSM1826788_rep1_annotationbed <- read.delim(paste(clipseq_dir, "srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep1.annotationbed", sep = ""), header = TRUE, sep = "\t")
+
+plot(density(SRSF3_parclip_GSM1826788_rep1_annotationbed$ModeScore %>% as.numeric))
+
+# filter PARalyzer's modescore (SNR) for >= 0.9
+
+SRSF3_parclip_GSM1826788_rep1_annotationbed_filtered <- SRSF3_parclip_GSM1826788_rep1_annotationbed[SRSF3_parclip_GSM1826788_rep1_annotationbed$ModeScore %>% as.numeric >= 0.85, ]
+
+SRSF3_parclip_GSM1826788_rep1_uniquegenes <- SRSF3_parclip_GSM1826788_rep1_annotationbed_filtered$annotation_gene_name %>% unique
+
+
+# SRSF3_parclip_GSM1826788_rep2_import <- read.delim("Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/GSM1826793_SRSF3-rep2P_kde_plus3_5deep.tab", header = TRUE, stringsAsFactors = FALSE) %>% as_tibble; SRSF3_parclip_GSM1826788_rep2_import[, "Chromosome"] <- gsub(SRSF3_parclip_GSM1826788_rep2_import$Chromosome, pattern = "chr", replacement = ""); colnames(SRSF3_parclip_GSM1826788_rep2_import) <- c("chr", "strand", "start", "end", "ClusterID", "ClusterSequence", "ReadCount", "ModeLocation", "ModeScore", "ConversionLocationCount", "ConversionEventCount", "NonConversionEventCount")
+
+# SRSF3_parclip_GSM1826788_rep2_annotationbed <- map_genome_coordinate_to_transcriptandprotein(SRSF3_parclip_GSM1826788_rep2_import, mode = "BED_file", targetlevel = "transcript")
+# write.table(SRSF3_parclip_GSM1826788_rep2_annotationbed, file = "Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep2.annotationbed", sep = "\t", row.names = FALSE, quote = FALSE)
+
+SRSF3_parclip_GSM1826788_rep2_annotationbed <- read.delim(paste(clipseq_dir, "srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep2.annotationbed", sep = ""), header = TRUE, sep = "\t")
+
+plot(density(SRSF3_parclip_GSM1826788_rep2_annotationbed$ModeScore %>% as.numeric))
+
+# filter PARalyzer's modescore (SNR) for >= 0.9
+
+SRSF3_parclip_GSM1826788_rep2_annotationbed_filtered <- SRSF3_parclip_GSM1826788_rep2_annotationbed[SRSF3_parclip_GSM1826788_rep2_annotationbed$ModeScore %>% as.numeric >= 0.85, ]
+
+SRSF3_parclip_GSM1826788_rep2_uniquegenes <- SRSF3_parclip_GSM1826788_rep2_annotationbed_filtered$annotation_gene_name %>% unique
+
+# find intersection between the two replicates
+
+SRSF3_parclip_GSM1826788_targets <- intersect(SRSF3_parclip_GSM1826788_rep1_uniquegenes, SRSF3_parclip_GSM1826788_rep2_uniquegenes)
+
+```
+
+## enrichment of upstream RBPs - clusterwise
+
+```{r}
+
+# prepare enrichment categories for each upstream candidate RBP
+
+list_of_RBP_target_gene_categories_raw <- list(
+  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.01FDR.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  
+  "SRSF3 parclip SRSF3_OE_HeLa GSM1826788 0.8modescorecutoff" = SRSF3_parclip_GSM1826788_targets %>% as.data.frame %>% mutate_if(is.factor, as.character) %>% as.vector,
+  
+  "MBNL2 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl2_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
+  "MBNL1 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl1_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
+  "MBNL3 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl3_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper)
+  )
+
+# look it doesn't make biological sense to enrich for mutant SRSF2 with a P95H cre stuffed in the middle of the coding region
+# "SRSF2 HiTS_CLiP HeLa_P95H GSE111900" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_P95H.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+# FDR 0.05 just generates the same overlaps as FDR 0.01 so it just falsely dilutes our enrichment
+# "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.05FDR" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.05FDR.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+# this can maaaybe substitute for the CLiP seq data, but i dont know. it works for now.
+# "SRSF2 literaturesummary SRSFmutation_trait_loci GSE111900" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/SRSF2_literaturesummary_SRSFmutation_trait_loci_GSE111900.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+
+list_of_RBP_target_gene_categories <- list_of_RBP_target_gene_categories_raw %>% flatten
+
+names(list_of_RBP_target_gene_categories) <- names(list_of_RBP_target_gene_categories_raw)
+
+
+## gene enrichment in each cluster
+ 
+list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_AS_plausible <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened_AS_plausible, .f = ~enrichment(genes = ., reference = reference_geneset, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble)
+
+names(list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_AS_plausible) <- 1:number_of_som_clusters
+
+list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible <- purrr::map2(.x = list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_AS_plausible, .y = 1:number_of_som_clusters, .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., cluster = .y) %>% as_tibble)
+
+# bind rows and calculate ggplot facet x and y coordinates
+wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible <- purrr::reduce(.x = list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, .f = bind_rows) %>% type_convert %>% cbind(., cluster_minus_1 = .$cluster - 1) %>% cbind(., remainder_facet.x = .$cluster_minus_1 %% 5) %>% cbind(., quotient_facet.y = .$cluster_minus_1 %/% 5)
+
+## GGPLOT
+
+ggplot(wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, aes(x = reorder(TermID, -genes), y = genes)) +
+  geom_col(aes(fill = log10(pval))) +
+  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle("Top 10 significantly over-represented UPSTREAM RBP CANDIDATES for each PLAUSIBLE cluster in OB series") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
+  xlab("Upstream RBP with literature reference") +
+  ylab("Number of genes enriched amongst RBP target genes") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 60)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+write.table(x = wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+
+```
+
+## enrichment of upstream RBPs - timepointwise
+
+```{r}
+
+
+### highest PSI 
+
+list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+
+list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible, .y = as.list(names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
+
+# un-nest by binding rows
+wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible, .f = bind_rows)
+
+wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible <- type_convert(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible)
+
+wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible <- arrange(transform(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible$timepoint))), timepoint)
+
+### lowest PSI
+
+list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+
+list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible, .y = as.list(names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
+
+# un-nest by binding rows
+wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible, .f = bind_rows)
+
+wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible <- type_convert(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible)
+
+wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible <- arrange(transform(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible$timepoint))), timepoint)
+
+## GGPLOT
+
+# highest PSI
+
+ggplot(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, aes(x = reorder(TermID, padj), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for the", high_scaledPSIcutoff * 100, "% highest PSI PLAUSIBLE isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
+  xlab("Upstream RBP") +
+  ylab("Number of gene targets in cluster") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# lowest PSI
+
+ggplot(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, aes(x = reorder(TermID, padj), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for the", high_scaledPSIcutoff * 100, "% lowest PSI PLAUSIBLE isoforms in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
+  xlab("Upstream RBP") +
+  ylab("Number of gene targets in cluster") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+
+write.table(x = wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+
+```
+
 # Quality checks
 
 ## Set directory

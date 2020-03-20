@@ -2814,50 +2814,15 @@ print("rip")
 
 ```
 
-## import PAR-CLiP, RIP-Seq, CLiP-Seq data and match with GTF information
+## import MBNL (HiTS-CLiP) and SRSF (FLASH-Seq) data and match with GTF information
 
-SRSF3
+### set directories
 
 ```{r}
 
 clipseq_dir <- "Z:/isoform_usage_project/"
 
-# PARalyzer user manual: https://ohlerlab.mdc-berlin.de/files/duke/PARalyzer/REOBME.txt
-
-# SRSF3_parclip_GSM1826788_rep1_import <- read.delim("Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/GSM1826788_SRSF3-rep1P_kde_plus3_5deep.tab", header = TRUE, stringsAsFactors = FALSE) %>% as_tibble; SRSF3_parclip_GSM1826788_rep1_import[, "Chromosome"] <- gsub(SRSF3_parclip_GSM1826788_rep1_import$Chromosome, pattern = "chr", replacement = ""); colnames(SRSF3_parclip_GSM1826788_rep1_import) <- c("chr", "strand", "start", "end", "ClusterID", "ClusterSequence", "ReadCount", "ModeLocation", "ModeScore", "ConversionLocationCount", "ConversionEventCount", "NonConversionEventCount")
-
-# SRSF3_parclip_GSM1826788_rep1_annotationbed <- map_genome_coordinate_to_transcriptandprotein(SRSF3_parclip_GSM1826788_rep1_import, mode = "BED_file", targetlevel = "transcript")
-# write.table(SRSF3_parclip_GSM1826788_rep1_annotationbed, file = "Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep1.annotationbed", sep = "\t", row.names = FALSE, quote = FALSE)
-
-SRSF3_parclip_GSM1826788_rep1_annotationbed <- read.delim(paste(clipseq_dir, "srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep1.annotationbed", sep = ""), header = TRUE, sep = "\t")
-
-plot(density(SRSF3_parclip_GSM1826788_rep1_annotationbed$ModeScore %>% as.numeric))
-
-# filter PARalyzer's modescore (SNR) for >= 0.9
-
-SRSF3_parclip_GSM1826788_rep1_annotationbed_filtered <- SRSF3_parclip_GSM1826788_rep1_annotationbed[SRSF3_parclip_GSM1826788_rep1_annotationbed$ModeScore %>% as.numeric >= 0.85, ]
-
-SRSF3_parclip_GSM1826788_rep1_uniquegenes <- SRSF3_parclip_GSM1826788_rep1_annotationbed_filtered$annotation_gene_name %>% unique
-
-
-# SRSF3_parclip_GSM1826788_rep2_import <- read.delim("Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/GSM1826793_SRSF3-rep2P_kde_plus3_5deep.tab", header = TRUE, stringsAsFactors = FALSE) %>% as_tibble; SRSF3_parclip_GSM1826788_rep2_import[, "Chromosome"] <- gsub(SRSF3_parclip_GSM1826788_rep2_import$Chromosome, pattern = "chr", replacement = ""); colnames(SRSF3_parclip_GSM1826788_rep2_import) <- c("chr", "strand", "start", "end", "ClusterID", "ClusterSequence", "ReadCount", "ModeLocation", "ModeScore", "ConversionLocationCount", "ConversionEventCount", "NonConversionEventCount")
-
-# SRSF3_parclip_GSM1826788_rep2_annotationbed <- map_genome_coordinate_to_transcriptandprotein(SRSF3_parclip_GSM1826788_rep2_import, mode = "BED_file", targetlevel = "transcript")
-# write.table(SRSF3_parclip_GSM1826788_rep2_annotationbed, file = "Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep2.annotationbed", sep = "\t", row.names = FALSE, quote = FALSE)
-
-SRSF3_parclip_GSM1826788_rep2_annotationbed <- read.delim(paste(clipseq_dir, "srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep2.annotationbed", sep = ""), header = TRUE, sep = "\t")
-
-plot(density(SRSF3_parclip_GSM1826788_rep2_annotationbed$ModeScore %>% as.numeric))
-
-# filter PARalyzer's modescore (SNR) for >= 0.9
-
-SRSF3_parclip_GSM1826788_rep2_annotationbed_filtered <- SRSF3_parclip_GSM1826788_rep2_annotationbed[SRSF3_parclip_GSM1826788_rep2_annotationbed$ModeScore %>% as.numeric >= 0.85, ]
-
-SRSF3_parclip_GSM1826788_rep2_uniquegenes <- SRSF3_parclip_GSM1826788_rep2_annotationbed_filtered$annotation_gene_name %>% unique
-
-# find intersection between the two replicates
-
-SRSF3_parclip_GSM1826788_targets <- intersect(SRSF3_parclip_GSM1826788_rep1_uniquegenes, SRSF3_parclip_GSM1826788_rep2_uniquegenes)
+FLASHseq_dir <- "Y:/2019_FLASHseq/results/R_processing_results/"
 
 ```
 
@@ -2868,21 +2833,20 @@ SRSF3_parclip_GSM1826788_targets <- intersect(SRSF3_parclip_GSM1826788_rep1_uniq
 # prepare enrichment categories for each upstream candidate RBP
 
 list_of_RBP_target_gene_categories_raw <- list(
-  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.01FDR.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
-  
-  "SRSF3 parclip SRSF3_OE_HeLa GSM1826788 0.8modescorecutoff" = SRSF3_parclip_GSM1826788_targets %>% as.data.frame %>% mutate_if(is.factor, as.character) %>% as.vector,
+  "SRSF1 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF1.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF2 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF2.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF3 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF3.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF4 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF4.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF5 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF5.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF6 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF6.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF7 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF7.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF9 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF9.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF11 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF11.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   
   "MBNL2 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl2_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
   "MBNL1 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl1_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
   "MBNL3 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl3_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper)
   )
-
-# look it doesn't make biological sense to enrich for mutant SRSF2 with a P95H cre stuffed in the middle of the coding region
-# "SRSF2 HiTS_CLiP HeLa_P95H GSE111900" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_P95H.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
-# FDR 0.05 just generates the same overlaps as FDR 0.01 so it just falsely dilutes our enrichment
-# "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.05FDR" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.05FDR.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
-# this can maaaybe substitute for the CLiP seq data, but i dont know. it works for now.
-# "SRSF2 literaturesummary SRSFmutation_trait_loci GSE111900" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/SRSF2_literaturesummary_SRSFmutation_trait_loci_GSE111900.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
 
 list_of_RBP_target_gene_categories <- list_of_RBP_target_gene_categories_raw %>% flatten
 

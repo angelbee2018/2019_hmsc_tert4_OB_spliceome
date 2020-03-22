@@ -1557,185 +1557,514 @@ future_map(.x = list_of_tibbles_family.enrichment_timepointwise_topten, .f = ~wr
 
 ```
 
-# ENRICHMENT OF UPSTREAM SPLICING FACTORS
+# ENRICHMENT OF SPLICING FACTORS - didnt work
 
-## import PAR-CLiP, RIP-Seq, CLiP-Seq data and match with GTF information
+## Generate table of all the mRNA sequences of all annotated transcripts
 
-SRSF3
+- mRNA sequences: UNSPLICED, for,
+- Genes: ANYSIG
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
-clipseq_dir <- "Z:/isoform_usage_project/"
-
-# PARalyzer user manual: https://ohlerlab.mdc-berlin.de/files/duke/PARalyzer/REOBME.txt
-
-# SRSF3_parclip_GSM1826788_rep1_import <- read.delim("Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/GSM1826788_SRSF3-rep1P_kde_plus3_5deep.tab", header = TRUE, stringsAsFactors = FALSE) %>% as_tibble; SRSF3_parclip_GSM1826788_rep1_import[, "Chromosome"] <- gsub(SRSF3_parclip_GSM1826788_rep1_import$Chromosome, pattern = "chr", replacement = ""); colnames(SRSF3_parclip_GSM1826788_rep1_import) <- c("chr", "strand", "start", "end", "ClusterID", "ClusterSequence", "ReadCount", "ModeLocation", "ModeScore", "ConversionLocationCount", "ConversionEventCount", "NonConversionEventCount")
-
-# SRSF3_parclip_GSM1826788_rep1_annotationbed <- map_genome_coordinate_to_transcriptandprotein(SRSF3_parclip_GSM1826788_rep1_import, mode = "BED_file", targetlevel = "transcript")
-# write.table(SRSF3_parclip_GSM1826788_rep1_annotationbed, file = "Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep1.annotationbed", sep = "\t", row.names = FALSE, quote = FALSE)
-
-SRSF3_parclip_GSM1826788_rep1_annotationbed <- read.delim(paste(clipseq_dir, "srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep1.annotationbed", sep = ""), header = TRUE, sep = "\t")
-
-plot(density(SRSF3_parclip_GSM1826788_rep1_annotationbed$ModeScore %>% as.numeric))
-
-# filter PARalyzer's modescore (SNR) for >= 0.9
-
-SRSF3_parclip_GSM1826788_rep1_annotationbed_filtered <- SRSF3_parclip_GSM1826788_rep1_annotationbed[SRSF3_parclip_GSM1826788_rep1_annotationbed$ModeScore %>% as.numeric >= 0.85, ]
-
-SRSF3_parclip_GSM1826788_rep1_uniquegenes <- SRSF3_parclip_GSM1826788_rep1_annotationbed_filtered$annotation_gene_name %>% unique
-
-
-# SRSF3_parclip_GSM1826788_rep2_import <- read.delim("Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/GSM1826793_SRSF3-rep2P_kde_plus3_5deep.tab", header = TRUE, stringsAsFactors = FALSE) %>% as_tibble; SRSF3_parclip_GSM1826788_rep2_import[, "Chromosome"] <- gsub(SRSF3_parclip_GSM1826788_rep2_import$Chromosome, pattern = "chr", replacement = ""); colnames(SRSF3_parclip_GSM1826788_rep2_import) <- c("chr", "strand", "start", "end", "ClusterID", "ClusterSequence", "ReadCount", "ModeLocation", "ModeScore", "ConversionLocationCount", "ConversionEventCount", "NonConversionEventCount")
-
-# SRSF3_parclip_GSM1826788_rep2_annotationbed <- map_genome_coordinate_to_transcriptandprotein(SRSF3_parclip_GSM1826788_rep2_import, mode = "BED_file", targetlevel = "transcript")
-# write.table(SRSF3_parclip_GSM1826788_rep2_annotationbed, file = "Z:/isoform_usage_project/srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep2.annotationbed", sep = "\t", row.names = FALSE, quote = FALSE)
-
-SRSF3_parclip_GSM1826788_rep2_annotationbed <- read.delim(paste(clipseq_dir, "srsf3_parclip_bedfiles_GSE71096/SRSF3_parclip_GSM1826788_rep2.annotationbed", sep = ""), header = TRUE, sep = "\t")
-
-plot(density(SRSF3_parclip_GSM1826788_rep2_annotationbed$ModeScore %>% as.numeric))
-
-# filter PARalyzer's modescore (SNR) for >= 0.9
-
-SRSF3_parclip_GSM1826788_rep2_annotationbed_filtered <- SRSF3_parclip_GSM1826788_rep2_annotationbed[SRSF3_parclip_GSM1826788_rep2_annotationbed$ModeScore %>% as.numeric >= 0.85, ]
-
-SRSF3_parclip_GSM1826788_rep2_uniquegenes <- SRSF3_parclip_GSM1826788_rep2_annotationbed_filtered$annotation_gene_name %>% unique
-
-# find intersection between the two replicates
-
-SRSF3_parclip_GSM1826788_targets <- intersect(SRSF3_parclip_GSM1826788_rep1_uniquegenes, SRSF3_parclip_GSM1826788_rep2_uniquegenes)
+anysig_all_mrna_seqs <- getBM(filters = "external_gene_name", values = wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible$Gene, attributes = c("external_gene_name", "ensembl_transcript_id", "transcript_exon_intron"), mart = ensembl_mart) %>% as_tibble
 
 ```
 
-## enrichment of upstream RBPs - clusterwise
+## generate lists of target genes containing motifs of splicing factors
+
+use regex lmao
+
+```{r eval=FALSE, include=FALSE}
+
+RBM41_binding_motif_containing_genes <- anysig_all_mrna_seqs[which(grepl(x = anysig_all_mrna_seqs$transcript_exon_intron, pattern = "(A|T)TAC(A|T)TT")), "external_gene_name"] %>% unique
+
+print(nrow(RBM41_binding_motif_containing_genes))
+
+SRSF2_binding_motif_containing_genes <- anysig_all_mrna_seqs[which(grepl(x = anysig_all_mrna_seqs$transcript_exon_intron, pattern = "AGGAG(A|T)(G|A|T)")), "external_gene_name"] %>% unique
+
+print(nrow(SRSF2_binding_motif_containing_genes))
+
+wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$Gene %>% unique %>% length %>% print
+
+print("rip")
+
+```
+
+## import MBNL (HiTS-CLiP) and SRSF (FLASH-Seq) data and match with GTF information
+
+### set directories
+
+```{r}
+
+clipseq_dir <- "Z:/isoform_usage_project/CLIPseq_files/"
+
+FLASHseq_dir <- "Y:/2019_FLASHseq/results/R_processing_results/"
+
+```
+
+### prepare geneset categories
 
 ```{r}
 
 # prepare enrichment categories for each upstream candidate RBP
 
 list_of_RBP_target_gene_categories_raw <- list(
-  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.01FDR.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
-  
-  "SRSF3 parclip SRSF3_OE_HeLa GSM1826788 0.8modescorecutoff" = SRSF3_parclip_GSM1826788_targets %>% as.data.frame %>% mutate_if(is.factor, as.character) %>% as.vector,
+  # "SRSF1 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF1.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF2 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR5-SRSF2.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF3 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR8-SRSF3.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF4 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR9-SRSF4.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF5 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR10-SRSF5.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF6 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR11-SRSF6.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF7 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR12-SRSF7.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF9 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR13-SRSF9.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF11 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR14-SRSF11.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   
   "MBNL2 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl2_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
   "MBNL1 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl1_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
   "MBNL3 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl3_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper)
   )
 
-# look it doesn't make biological sense to enrich for mutant SRSF2 with a P95H cre stuffed in the middle of the coding region
-# "SRSF2 HiTS_CLiP HeLa_P95H GSE111900" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_P95H.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
-# FDR 0.05 just generates the same overlaps as FDR 0.01 so it just falsely dilutes our enrichment
-# "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.05FDR" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.05FDR.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
-# this can maaaybe substitute for the CLiP seq data, but i dont know. it works for now.
-# "SRSF2 literaturesummary SRSFmutation_trait_loci GSE111900" = read.delim("//VBOXSVR/sharedfolder/isoform_usage_project/SRSF2_hits.clip_GSE111900/SRSF2_literaturesummary_SRSFmutation_trait_loci_GSE111900.txt", header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
-
 list_of_RBP_target_gene_categories <- list_of_RBP_target_gene_categories_raw %>% flatten
 
 names(list_of_RBP_target_gene_categories) <- names(list_of_RBP_target_gene_categories_raw)
 
-
-## gene enrichment in each cluster
- 
-list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_AS_plausible <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened_AS_plausible, .f = ~enrichment(genes = ., reference = reference_geneset, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble)
-
-names(list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_AS_plausible) <- 1:number_of_som_clusters
-
-list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible <- purrr::map2(.x = list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_AS_plausible, .y = 1:number_of_som_clusters, .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., cluster = .y) %>% as_tibble)
-
-# bind rows and calculate ggplot facet x and y coordinates
-wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible <- purrr::reduce(.x = list_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, .f = bind_rows) %>% type_convert %>% cbind(., cluster_minus_1 = .$cluster - 1) %>% cbind(., remainder_facet.x = .$cluster_minus_1 %% 5) %>% cbind(., quotient_facet.y = .$cluster_minus_1 %/% 5)
-
-## GGPLOT
-
-ggplot(wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, aes(x = reorder(TermID, -genes), y = genes)) +
-  geom_col(aes(fill = log10(pval))) +
-  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-  facet_wrap(~cluster, scales = "free") +
-  ggtitle("Top 10 significantly over-represented UPSTREAM RBP CANDIDATES for each PLAUSIBLE cluster in OB series") +
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
-  xlab("Upstream RBP with literature reference") +
-  ylab("Number of genes enriched amongst RBP target genes") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 60)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
-
-write.table(x = wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-
 ```
 
-## enrichment of upstream RBPs - timepointwise
+### enrichment of upstream RBPs - clusterwise, per gene
 
 ```{r}
 
+# note: elements will look like: sep.PSI/MF, sum.PSI/MF, sep.PSI/BP, sum.PSI/BP etc...
+# gene ontology for each combination
 
-### highest PSI 
+list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise <- purrr::map(.x = list_of_vectors_genesets_per_SOM_cluster, .f = ~future_map(.x = .x, .f = ~bc3net::enrichment(genes = .x, reference = reference_geneset_universe, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble, .progress = TRUE))
 
-list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+# filter gene ontology tables for top hits
+list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise_top.hits <- purrr::map_depth(.x = list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise, .depth = 2, .ragged = FALSE, .f = ~dplyr::arrange(.x, pval) %>% head(n = 10))
 
-list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible, .y = as.list(names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
+# add cluster number into each tibble and combine into single tibble
+list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise_top.hits, .f = ~purrr::map2(.x = .x, .y = names(.x), .f = ~cbind(.x, "cluster" = .y)) %>% rbindlist %>% as_tibble)
 
-# un-nest by binding rows
-wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible, .f = bind_rows)
-
-wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible <- type_convert(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible)
-
-wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible <- arrange(transform(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible$timepoint))), timepoint)
-
-### lowest PSI
-
-list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
-
-list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_AS_plausible, .y = as.list(names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_AS_plausible)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
-
-# un-nest by binding rows
-wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_RBPenrichment_OBseries_topten_AS_plausible, .f = bind_rows)
-
-wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible <- type_convert(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible)
-
-wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible <- arrange(transform(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible$timepoint))), timepoint)
-
-## GGPLOT
-
-# highest PSI
-
-ggplot(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, aes(x = reorder(TermID, padj), y = genes)) +
+# plot family enrichment per cluster
+purrr::map2(.x = list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise_top.hits), .f = ~ggplot(.x, aes(x = reorder(TermID, -genes), y = genes)) +
   geom_col(aes(fill = log10(padj))) +
-  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-  facet_wrap(~timepoint, scales = "free") +
-  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for the", high_scaledPSIcutoff * 100, "% highest PSI PLAUSIBLE isoforms in each OB timepoint")) +
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
+  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for each cluster in OB series (", .y %>% strsplit(split = "_") %>% unlist %>% .[1], ")", sep = "")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
   xlab("Upstream RBP") +
-  ylab("Number of gene targets in cluster") +
+  ylab("Number of genes targeted by RBP") +
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[2], "_exons_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_upstreamRBP.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[2], "_exons_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_upstreamRBP.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-write.table(x = wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-# lowest PSI
-
-ggplot(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, aes(x = reorder(TermID, padj), y = genes)) +
-  geom_col(aes(fill = log10(padj))) +
-  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-  facet_wrap(~timepoint, scales = "free") +
-  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for the", high_scaledPSIcutoff * 100, "% lowest PSI PLAUSIBLE isoforms in each OB timepoint")) +
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
-  xlab("Upstream RBP") +
-  ylab("Number of gene targets in cluster") +
-  # coord_cartesian(ylim = c(0, 20)) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
-
-write.table(x = wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
+purrr::map2(.x = list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_upstream.RBP.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[2], "_exons_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_upstreamRBP.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
+
+## enrichment of upstream RBPs - timepointwise, per gene
+
+### perform enrichment step
+
+```{r}
+
+list_of_tibbles_upstream.RBP.enrichment_timepointwise <- future_map(.x = list_of_tibbles_highest.lowest_PSI_by_timepoint, 
+                                                              .f = ~list("family_enrichment" = pmap(.l = list("data" = .x[[1]], 
+                                                                                  "PSI_type" = .x[[2]], 
+                                                                                  "highest_or_lowest_PSI" = .x[[3]],
+                                                                                  "timepoint" = vector_OBseries_timepoints %>% array_tree), .f = ~bc3net::enrichment(genes = ..1$matched_gene_names, reference = reference_geneset_universe, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], ..1$matched_gene_names) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble),
+                                                                         "PSI_type" = .x[[2]],
+                                                                         "highest_or_lowest_PSI" = .x[[3]]), .progress = TRUE)
+
+```
+
+### reprocess the list into form amenable to ggplot
+
+```{r}
+
+# append timepoint column to each enrichment result, arrange in ascending pvalue order, rbindlist into a long tibble
+list_of_tibbles_upstream.RBP.enrichment_timepointwise_topten <- purrr::map(.x = list_of_tibbles_upstream.RBP.enrichment_timepointwise, .f = ~list("family_enrichment" = map2(.x = .x[["family_enrichment"]], .y = names(.x[["family_enrichment"]]), .f = ~.x %>% add_column("timepoint" = .y) %>% dplyr::arrange(., pval) %>% head(n = 10)) %>% rbindlist %>% as_tibble, 
+                                                                                    "PSI_type" = .x[["PSI_type"]],
+                                                                                    "highest_or_lowest_PSI" = .x[["highest_or_lowest_PSI"]]))
+
+```
+
+### ggplot
+
+```{r}
+
+# a single function to call all 12 plots:
+# separate/sum PSI, highest/lowest PSI cutoff, MF/BP/CC categories.
+
+# list_of_data_tibbles <- purrr::map(.x = list_of_tibbles_SOM_hyperGOresult_timepointwise, .f = ~.x$GO_enrichment)
+
+future_map(.x = list_of_tibbles_upstream.RBP.enrichment_timepointwise_topten, .f = ~ggplot(.x[["family_enrichment"]], aes(x = reorder(TermID, -genes), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~timepoint %>% as.factor %>% fct_relevel(., vector_OBseries_timepoints), scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for the ", cutoff_string, .x[["highest_or_lowest_PSI"]], " exons in each OB timepoint")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("Upstream RBP") +
+  ylab("Number of genes targeted by RBP") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "upstream.RBP.enrichment_top10_", cutoff_string, "_", .x[["highest_or_lowest_PSI"]], "_eachtimepoint_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .x[["PSI_type"]], ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "upstream.RBP.enrichment_top10_", cutoff_string, "_", .x[["highest_or_lowest_PSI"]], "_eachtimepoint_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .x[["PSI_type"]], ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm"), .progress = TRUE)
+
+future_map(.x = list_of_tibbles_upstream.RBP.enrichment_timepointwise_topten, .f = ~write.table(x = .x[["family_enrichment"]], file = paste(R_processing_results_dir, "upstream.RBP.enrichment_top10_", cutoff_string, "_", .x[["highest_or_lowest_PSI"]], "_eachtimepoint_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .x[["PSI_type"]], ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+
+```
+
+# COMBINING GENE EXPRESSION DATA WITH THE SPLICEOMIC DATA HERE
+
+## set environment
+
+set directories
+
+```{r}
+
+# the EXACT path of the file, not its containing directory
+
+logCPM_OBseries_anysig_DEGs_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_2_eRNA/R_processing_results/edgeR_GLM_DEGs_logCPM.txt"
+
+```
+
+define functions
+
+```{r}
+
+## END filteratleast_x_reads_in_anytimepoint
+
+average_counts_from_triplicate <- function(input_matrix, no_annotation_cols) {
+  
+input_matrix <- input_matrix %>% as_tibble
+
+a <- seq(from = 1 + no_annotation_cols, to = (input_matrix %>% ncol) - 3 + 1, by = 3)
+b <- seq(from = 3 + no_annotation_cols, to = input_matrix %>% ncol, by = 3)
+c <- purrr::map2(a, b, ~.x:.y)
+
+# generate logical tests for each partition each row. does each timepoint have at least 5 junction reads in all replicates?
+d <- purrr::map(.x = c, .f = ~input_matrix[, .x])
+
+e <- purrr::map(.x = d, .f = ~apply(.x, 1, FUN = mean) %>% as_tibble %>% setNames(gsub(x = colnames(.x), pattern = "(.*)(_r[1-3])", replacement = "\\1_avg") %>% unique))
+
+f <- purrr::reduce(e, bind_cols) %>% as_tibble
+
+output_matrix <- bind_cols(input_matrix[, 1:no_annotation_cols], f)
+
+return(output_matrix)
+
+}
+
+## END average_counts_from_triplicate
+
+```
+
+## extract the RBPs, lncRNAs and snRNAs etc... from expression data and combine with PSI data
+
+```{r}
+
+logCPM_OBseries_anysig_DEGs_import <- read.delim(file = paste(logCPM_OBseries_anysig_DEGs_dir), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf")) %>% as_tibble
+
+ENSG_to_genesymbol_DEGs <- getBM(filters = "ensembl_gene_id", values = logCPM_OBseries_anysig_DEGs_import$ensembl_gene_id, attributes = c("ensembl_gene_id", "external_gene_name"), mart = ensembl_mart)
+
+# append official gene symbol to the DEG table and average the counts
+logCPM_OBseries_anysig_DEGs <- dplyr::right_join(ENSG_to_genesymbol_DEGs, logCPM_OBseries_anysig_DEGs_import, by = "ensembl_gene_id") %>% average_counts_from_triplicate(., 2)
+
+# reorder the columns to make them chronological
+
+logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs[, c("ensembl_gene_id", "external_gene_name", "logCPM_BM_MSC_to_OB_ud_avg", "logCPM_BM_MSC_to_OB_6h_avg", "logCPM_BM_MSC_to_OB_12h_avg", "logCPM_BM_MSC_to_OB_24h_avg", "logCPM_BM_MSC_to_OB_3d_avg", "logCPM_BM_MSC_to_OB_6d_avg", "logCPM_BM_MSC_to_OB_9d_avg", "logCPM_BM_MSC_to_OB_12d_avg")]
+
+colnames(logCPM_OBseries_anysig_DEGs) <- c("ensembl_gene_id", "external_gene_name", "ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+
+# subset CPM table by biological role
+
+  # RBPs
+column_RBP_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("protein_coding", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = c("ensembl_gene_id", "name_1006"), mart = ensembl_mart) %>% as_tibble %>% .[.$name_1006 == "RNA binding" | .$name_1006 == "spliceosomal complex", "ensembl_gene_id"]
+
+logCPM_OBseries_RBP <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_RBP_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("RBP", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+  # lncRNA
+column_lncRNA_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("lncRNA", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = "ensembl_gene_id", mart = ensembl_mart) %>% as_tibble
+
+logCPM_OBseries_lncRNA <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_lncRNA_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("lncRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+  # snRNA
+column_snRNA_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("snRNA", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = "ensembl_gene_id", mart = ensembl_mart) %>% as_tibble %>% mutate_if(is.logical, as.character)
+
+logCPM_OBseries_snRNA <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_snRNA_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("snRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+  # all TF complex 
+column_TFcomplex_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("protein_coding", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = c("ensembl_gene_id", "name_1006"), mart = ensembl_mart) %>% as_tibble %>% .[.$name_1006 == "transcription factor complex", "ensembl_gene_id"]
+
+logCPM_OBseries_TFcomplex <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_TFcomplex_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("TF complex", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+# combine all the individual logCPM tables into one subsetted expression dataset
+logCPM_OBseries_subset <- dplyr::bind_rows(logCPM_OBseries_RBP, logCPM_OBseries_lncRNA, logCPM_OBseries_snRNA, logCPM_OBseries_TFcomplex)
+
+# get rid of ENSG id
+logCPM_OBseries_subset <- logCPM_OBseries_subset[, -1]
+
+# rename column before next join
+
+colnames(logCPM_OBseries_subset)[1] <- "matched_gene_names"
+
+# combine logCPM and PSI values
+list_of_tibbles_combinedexpr_logCPM_PSI_unscaled <- list("combinedexpr_logCPM_PSI_separate" = dplyr::bind_rows(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate %>% setNames(gsub(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate), pattern = "_absolute.psi_average", replacement = "")) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character), logCPM_OBseries_subset) %>% add_column("identifier" = paste(.$database_ID, "/", .$event_region_coords, "/", .$splicemode, "/", .$diff_exon_coords, sep = "")),
+                                                         "combinedexpr_logCPM_PSI_sum" = dplyr::bind_rows(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum %>% setNames(gsub(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum), pattern = "_absolute.psi_average", replacement = "")) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character), logCPM_OBseries_subset) %>% add_column("identifier" = paste(.$event_region_coords, "/", .$splicemode, "/", .$diff_exon_coords, sep = "")))
+
+```
+
+## consensus re-clustering of combined expression and PSI data
+
+```{r}
+
+# SET THESE TWO. script will sweep using the "dot product" of the two ranges.
+xdim_range_combinedexpr <- c(3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7)
+ydim_range_combinedexpr <- c(8, 9, 10, 11, 6, 7, 8, 5, 6, 7, 4, 5, 4)
+
+som_seed_number <- 7
+
+list_of_tibbles_combinedexpr_logCPM_PSI_scaled <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_unscaled, .f = function(.x) {
+  
+  tibble_combinedexpr <- .x
+  
+  tibble_combinedexpr[, c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")] <- tibble_combinedexpr[, c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")] %>% genescale(m = ., axis = 1, method = "Z")
+  
+  return(tibble_combinedexpr)
+  
+})
+
+# LAST TIME ENSEMBL CHANGED HALFWAY THRU THE ANALYSIS. IM NOT REPEATING THAT MISTAKE AGAIN
+
+purrr::map2(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled, .y = names(list_of_tibbles_combinedexpr_logCPM_PSI_scaled), .f = ~write.table(.x, paste(R_processing_results_dir, "tibble", .y, "_GRCh38.99.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = TRUE))
+
+# list_of_tibbles_combinedexpr_logCPM_PSI_scaled <- purrr::map(.x = names(list_of_tibbles_combinedexpr_logCPM_PSI_scaled), .f = ~read_delim(paste(R_processing_results_dir, "tibble", .y, "_GRCh38.99.txt", sep = ""), delim = "\t"))
+
+set.seed(som_seed_number)
+
+list_of_wide_tibbles_combinedexpr_som_sweep_clusters <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled, .f = function(.x) {
+  
+  tibble_combinedexpr_logCPM_PSI_scaled <- .x
+  
+  # calculate the cluster membership for each iteration of the SOM
+  purrr::map2(.x = xdim_range_combinedexpr, .y = ydim_range_combinedexpr, .f = ~som(tibble_combinedexpr_logCPM_PSI_scaled[, c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")] %>% as.matrix, grid = somgrid(xdim = .x, ydim = .y, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE, dist.fcts = "sumofsquares") %>% .[["unit.classif"]] %>% tibble::enframe(., name = NULL)) %>% 
+    purrr::reduce(bind_cols)
+  
+})
+
+# set rownames to be the gene_identifier_ID
+list_of_wide_df_combinedexpr_som_sweep_clusters <- purrr::map2(.x = list_of_wide_tibbles_combinedexpr_som_sweep_clusters, .y = list_of_tibbles_combinedexpr_logCPM_PSI_scaled, .f = function(.x, .y) {
+  
+  df <- .x %>% as.data.frame
+  rownames(df) <- paste(.y$matched_gene_names, "_", .y$identifier, sep = "")
+  
+  return(df)
+  
+})
+
+list_matchtest_combinedexpr_som_sweep_byisoform <- purrr::map(.x = list_of_wide_df_combinedexpr_som_sweep_clusters, .f = function(.x) {
+  
+  # DEBUG ###
+  
+  # df_of_membership <- list_of_wide_df_combinedexpr_som_sweep_clusters[[1]]
+  
+  ###########
+  
+  df_of_membership <- .x
+  
+  list_of_clusters <- purrr::map(.x = df_of_membership %>% array_tree, .f = ~unlist(.x)) 
+  
+  list_of_correlation_2 <- future_map(.x = list_of_clusters, .f = ~apply(X = df_of_membership, MARGIN = 1, FUN = function(X){.x == X}), .progress = TRUE, .options = future_options(globals = c("list_of_clusters", "df_of_membership")))
+  
+})
+
+list_percentage_consensus_byisoform_combinedexpr <- purrr::map(list_matchtest_combinedexpr_som_sweep_byisoform, ~apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble)
+
+# tibble_consensus_matrix_combinedexpr <- purrr::reduce(list_percentage_consensus_byisoform_combinedexpr, bind_rows)
+
+tibble_consensus_matrix_combinedexpr <- list_percentage_consensus_byisoform_combinedexpr %>% rbindlist
+
+matrix_consensus_matrix_combinedexpr <- tibble_consensus_matrix_combinedexpr %>% as.matrix
+
+rownames(matrix_consensus_matrix_combinedexpr) <- names(list_percentage_consensus_byisoform_combinedexpr)
+
+## HOOOOOOOLY SHIT RBINDLIST IS SO QUICK ##########
+# WE DONT EVEN NEED THIS
+# write.table(tibble_consensus_matrix_combinedexpr, paste(results_directory_figures, "tibble_consensus_matrix_combinedexpr.txt", sep = ""), sep = "\t", row.names = TRUE, quote = FALSE, col.names = TRUE)
+
+
+
+# reorder rows of consensus matrix
+
+matrix_consensus_matrix_combinedexpr_dist_result <- matrix_consensus_matrix_combinedexpr %>% Rfast::Dist(method = "euclidean") %>% as.dist
+matrix_consensus_matrix_combinedexpr_hclust_result <- fastcluster::hclust(matrix_consensus_matrix_combinedexpr_dist_result, method = "ward.D2")
+matrix_consensus_matrix_combinedexpr_consensus_dendrogram <- as.dendrogram(matrix_consensus_matrix_combinedexpr_hclust_result)
+# cols/rows should get darker as you move right/down
+matrix_consensus_matrix_combinedexpr_rowmeans <- rowMeans(matrix_consensus_matrix_combinedexpr, na.rm = T)
+# matrix_consensus_matrix_combinedexpr_PCA_loadings_byrow <- prcomp(matrix_consensus_matrix_combinedexpr) %>% .[["rotation"]] %>% .[, 1]
+# matrix_consensus_matrix_combinedexpr_singular_vectors_byrow <- apply(matrix_consensus_matrix_combinedexpr, 1 , FUN = function(X) {svd(X) %>% .$d})
+
+matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered <- reorder(matrix_consensus_matrix_combinedexpr_consensus_dendrogram, matrix_consensus_matrix_combinedexpr_rowmeans)
+
+ggdendrogram(matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered) +
+  xlab("Gene/isoform") +
+  theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_directory_figures, "dendrogram_som_consensus_matrix_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
+
+matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered_order <- matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered %>% unlist
+ 
+matrix_consensus_matrix_combinedexpr_reordered <- matrix_consensus_matrix_combinedexpr[matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered_order, matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered_order] %>% as_tibble(rownames = "gene_isoform_ID")
+ 
+tibble_consensus_matrix_combinedexpr_long <- reshape2::melt(matrix_consensus_matrix_combinedexpr_reordered, id = c("gene_isoform_ID"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_if(is.factor, as.character)
+
+write.table(x = matrix_consensus_matrix_combinedexpr_reordered, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+ggplot(tibble_consensus_matrix_combinedexpr_long, aes(fill = cocluster_percentage)) +
+  geom_tile(aes(x = gene_isoform_ID, y = variable)) +
+  ggtitle(paste("OBseries consensus matrix for som of ", nrow(PSI_levels_timeseries_OB_wide), " isoforms, 
+                ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " 
+                (any ", p_or_q_value, qpvalue_cutoff, " dPSI greaterthan ", dPSI_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
+  scale_x_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
+  scale_y_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
+  scale_fill_gradientn(colours = c("blue", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.25, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".tiff", sep = ""), device = "tiff", dpi = 1200, width = 40, height = 25, units = "cm", limitsize = FALSE)
+
+write.table(x = tibble_consensus_matrix_combinedexpr_long, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+ggplot(tibble_consensus_matrix_combinedexpr_long[1, ], aes(fill = cocluster_percentage)) +
+  geom_tile(aes(x = gene_isoform_ID, y = variable)) +
+  ggtitle(paste("OBseries consensus matrix for som of ", nrow(PSI_levels_timeseries_OB_wide), " isoforms, ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexs", " (any ", p_or_q_value, qpvalue_cutoff, " dPSI greaterthan ", dPSI_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
+  scale_x_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
+  scale_fill_gradientn(colours = c("white", "yellow", "red", "black"), values = c(0, 0.33, 0.67, 1)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 1, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 1, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_directory_figures, "xlabs_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 400, width = 200, height = 10, units = "cm", limitsize = FALSE)
+
+```
+
+cluster determination from consensus matrix
+
+```{r message=FALSE, warning=FALSE}
+
+tibble_consensus_matrix_combinedexpr_long <- read_delim(paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), delim = "\t")
+
+list_genes_or_isoforms_from_combinedexpr <- tibble_consensus_matrix_combinedexpr_long$variable %>% unique %>% array_tree
+
+# testing purposes only 
+
+# list_genes_or_isoforms_from_combinedexpr <- list_genes_or_isoforms_from_combinedexpr[c(1:50, 1000:1050)]
+
+list_genes_or_isoforms_from_combinedexpr_cooccuring <- purrr::map(.x = list_genes_or_isoforms_from_combinedexpr, .f = ~tibble_consensus_matrix_combinedexpr_long[tibble_consensus_matrix_combinedexpr_long$variable == .x & tibble_consensus_matrix_combinedexpr_long$cocluster_percentage >= 0.5, "gene_isoform_ID"])
+
+names(list_genes_or_isoforms_from_combinedexpr_cooccuring) <- list_genes_or_isoforms_from_combinedexpr
+
+# take pairwise intersections
+
+comparisons_genes_or_isoforms_from_combinedexpr <- combn(list_genes_or_isoforms_from_combinedexpr %>% unlist, m = 2) %>% t %>% as_tibble
+
+colnames(comparisons_genes_or_isoforms_from_combinedexpr) <- c("comparison_1", "comparison_2")
+
+# each level 1 element is a comparison of each pairwise intersection
+
+list_comparison_1 <- comparisons_genes_or_isoforms_from_combinedexpr %>% .[, 1] %>% array_tree %>% flatten
+
+list_comparison_2 <- comparisons_genes_or_isoforms_from_combinedexpr %>% .[, 2] %>% array_tree %>% flatten
+
+# NOTE: EACH L1 ELEMENT OF THE LIST MUST BE A TIBBLE. IF IT ISN'T THE WHOLE THING IS STUFFED.
+
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection <- purrr::map2(.x = list_comparison_1, .y = list_comparison_2, .f = ~dplyr::intersect(list_genes_or_isoforms_from_combinedexpr_cooccuring[[.x]], list_genes_or_isoforms_from_combinedexpr_cooccuring[[.y]]) %>% nrow) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_intersection")
+
+list_genes_or_isoforms_from_combinedexpr_itemwise_setdiff <- purrr::map2(.x = list_comparison_1, .y = list_comparison_2, .f = ~dplyr::setdiff(list_genes_or_isoforms_from_combinedexpr_cooccuring[[.x]], list_genes_or_isoforms_from_combinedexpr_cooccuring[[.y]]) %>% nrow)  %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_setdiff")
+
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- bind_cols(comparisons_genes_or_isoforms_from_combinedexpr %>% as_tibble, list_genes_or_isoforms_from_combinedexpr_itemwise_intersection[, 1], list_genes_or_isoforms_from_combinedexpr_itemwise_setdiff[, 1])
+
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- add_column(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, "jaccard" = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection/(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_setdiff + list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection))
+
+write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, file = paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- read_delim(paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
+
+
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3 <- list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2[list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection > 0, ]
+
+plot(density(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3$coclustering_intersection %>% as.numeric))
+
+write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3, file = paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_intersection1_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+### GO TO CYTOSCAPE HERE
+
+```{r}
+
+########### GO TO CYTOSCAPE HERE ###################
+
+tibble_combinedexpr_logCPM_PSI_scaled_2 <- bind_cols(tibble_combinedexpr_logCPM_PSI_scaled, gene_isoform_ID = paste(tibble_combinedexpr_logCPM_PSI_scaled$Gene, "_", tibble_combinedexpr_logCPM_PSI_scaled$isoform_ID, sep = ""))
+
+cytoscape_result <- read_delim(paste(results_directory_figures, "consensus_combinedexpr_intersection1_min25_penalty2_haircut0.1_multi_match_overlap0.8_seedeverynode.tab", sep = ""), delim = "\t", col_names = c("cluster", "gene_isoform_ID"))
+
+cytoscape_result[, "cluster"] <- gsub(x = cytoscape_result$cluster, pattern = "Cluster ", replacement = "") %>% as.numeric
+
+# split the cytoscape cluster result into a list, clusterwise
+list_cytoscape_cluster_results <- purrr::map(.x = cytoscape_result$cluster %>% unique, .f = ~cytoscape_result[cytoscape_result$cluster == .x, ])
+
+# bind the standardised PSI information to the cluster information
+list_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map(.x = list_cytoscape_cluster_results, .f = ~dplyr::left_join(.x, tibble_combinedexpr_logCPM_PSI_scaled_2, by = "gene_isoform_ID"))
+
+wide_table_combinedexpr_logCPM_PSI_scaled_clustered <- list_combinedexpr_logCPM_PSI_scaled_clustered %>% purrr::reduce(dplyr::bind_rows)
+
+# reorder columns
+wide_table_combinedexpr_logCPM_PSI_scaled_clustered <- wide_table_combinedexpr_logCPM_PSI_scaled_clustered[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", "gene_isoform_ID", "MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d", "cluster")]
+
+```
+
+### generate expression profile map
+
+the goal of this is to get extract timepoint PSI tables according to each consensus cluster
+
+```{r}
+
+# reorder the cluster factor for correct facet order
+
+wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster <- factor(wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster %>% mixedsort, levels = wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster %>% unique %>% mixedsort)
+
+### convert the som table to a long form interprable by ggplot
+
+# reshaping into long table
+
+long_table_combinedexpr_logCPM_PSI_scaled_clustered <- reshape2::melt(wide_table_combinedexpr_logCPM_PSI_scaled_clustered, id.vars = c("Gene", "AS_event_ID", "splicemode", "isoform_ID", "gene_isoform_ID", "cluster", "isoform_number"), variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
+
+# ggplot of consensus som PSI profiles
+
+ggplot(long_table_combinedexpr_logCPM_PSI_scaled_clustered, aes(x = timepoint, y = scaled_PSI_value)) +
+  geom_line(aes(group = gene_isoform_ID)) +
+  scale_colour_manual(values = c("black")) +
+  facet_wrap(~cluster) +
+  ggtitle(paste("Time series profiles of ", nrow(PSI_levels_timeseries_OB_wide), " isoforms, ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " (any ", p_or_q_value, qpvalue_cutoff, " dPSI greaterthan ", dPSI_cutoff, "), 
+                sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
+  scale_x_discrete(limits = c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  xlab("Time-point") +
+  ylab("Scaled PSI or logCPM Level") +
+  # guides(colour = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype ="solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+
+write.table(x = wide_table_combinedexpr_logCPM_PSI_scaled_clustered, file = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+
+
 
 # Quality checks
 
@@ -1962,3 +2291,4 @@ ggplot(PCA_loadings) +
   ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_absolute_PSI_RUVs.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm")
 
 ```
+

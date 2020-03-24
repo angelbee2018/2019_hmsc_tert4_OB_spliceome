@@ -30,7 +30,7 @@ Wide table of absolute PSI (complete timepoints) - (separate/sum) -----> SOM
 ```{r}
 
 library(tidyverse)
-# library(gtools)
+library(gtools)
 windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 library(data.table)
@@ -55,7 +55,8 @@ library(genefilter)
 # library(scales)
 
 library(biomaRt)
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+# , version = 98
 
 library(systemPipeR)
 # library(GOstats)
@@ -1609,7 +1610,9 @@ FLASHseq_dir <- "Y:/2019_FLASHseq/results/R_processing_results/"
 # prepare enrichment categories for each upstream candidate RBP
 
 list_of_RBP_target_gene_categories_raw <- list(
-  # "SRSF1 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF1.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.01FDR.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+                                               
+  "SRSF1 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF1.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   "SRSF2 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR5-SRSF2.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   "SRSF3 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR8-SRSF3.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   # "SRSF4 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR9-SRSF4.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
@@ -1880,73 +1883,104 @@ list_matchtest_combinedexpr_som_sweep_byisoform <- purrr::map(.x = list_of_wide_
   
   df_of_membership <- .x
   
-  list_of_clusters <- purrr::map(.x = df_of_membership %>% array_tree, .f = ~unlist(.x)) 
+  list_of_clusters <- purrr::map(.x = df_of_membership %>% array_tree, .f = ~base::unlist(.x)) 
   
-  list_of_correlation_2 <- future_map(.x = list_of_clusters, .f = ~apply(X = df_of_membership, MARGIN = 1, FUN = function(X){.x == X}), .progress = TRUE, .options = future_options(globals = c("list_of_clusters", "df_of_membership")))
+  list_of_correlation_2 <- furrr::future_map(.x = list_of_clusters, .f = ~base::apply(X = df_of_membership, MARGIN = 1, FUN = function(X){.x == X}), .progress = TRUE, .options = future_options(globals = c("list_of_clusters", "df_of_membership")))
+  
+  return(list_of_correlation_2)
   
 })
 
-list_percentage_consensus_byisoform_combinedexpr <- purrr::map(list_matchtest_combinedexpr_som_sweep_byisoform, ~apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble)
+list_percentage_consensus_byisoform_combinedexpr <- purrr::map(.x = list_matchtest_combinedexpr_som_sweep_byisoform, .f = function(.x) {
+  
+  list_logical_coclustering_test <- .x
+  
+  list_percentage_consensus <- furrr::future_map(.x = list_logical_coclustering_test, .f = ~base::apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("list_logical_coclustering_test", "as_tibble")))
+  
+  return(list_percentage_consensus)
+  
+})
 
-# tibble_consensus_matrix_combinedexpr <- purrr::reduce(list_percentage_consensus_byisoform_combinedexpr, bind_rows)
+list_of_tables_consensus_matrix_combinedexpr <- purrr::map(.x = list_percentage_consensus_byisoform_combinedexpr, .f = ~.x %>% rbindlist)
 
-tibble_consensus_matrix_combinedexpr <- list_percentage_consensus_byisoform_combinedexpr %>% rbindlist
+list_of_consensus_matrices_combinedexpr <- purrr::map2(.x = list_of_tables_consensus_matrix_combinedexpr, .y = list_percentage_consensus_byisoform_combinedexpr, .f = function(.x, .y) {
+  
+  matrix <- .x %>% as.matrix
+  
+  rownames(matrix) <- names(.y)
+  
+  return(matrix)
+  
+})
 
-matrix_consensus_matrix_combinedexpr <- tibble_consensus_matrix_combinedexpr %>% as.matrix
-
-rownames(matrix_consensus_matrix_combinedexpr) <- names(list_percentage_consensus_byisoform_combinedexpr)
-
-## HOOOOOOOLY SHIT RBINDLIST IS SO QUICK ##########
-# WE DONT EVEN NEED THIS
-# write.table(tibble_consensus_matrix_combinedexpr, paste(results_directory_figures, "tibble_consensus_matrix_combinedexpr.txt", sep = ""), sep = "\t", row.names = TRUE, quote = FALSE, col.names = TRUE)
-
-
-
-# reorder rows of consensus matrix
-
-matrix_consensus_matrix_combinedexpr_dist_result <- matrix_consensus_matrix_combinedexpr %>% Rfast::Dist(method = "euclidean") %>% as.dist
-matrix_consensus_matrix_combinedexpr_hclust_result <- fastcluster::hclust(matrix_consensus_matrix_combinedexpr_dist_result, method = "ward.D2")
-matrix_consensus_matrix_combinedexpr_consensus_dendrogram <- as.dendrogram(matrix_consensus_matrix_combinedexpr_hclust_result)
+# 2D clustering of consensus matrix
+## create hclust dist matrix
+list_of_consensus_matrices_combinedexpr_dist_result <- furrr::future_map(.x = list_of_consensus_matrices_combinedexpr, .f = ~.x %>% Rfast::Dist(method = "euclidean") %>% as.dist, .progress = TRUE, .options = future_options(globals = c("Rfast", "list_of_consensus_matrices_combinedexpr")))
+## cluster based on distance matrix per row
+list_of_consensus_matrices_combinedexpr_hclust_result <- purrr::map(.x = list_of_consensus_matrices_combinedexpr_dist_result, .f = ~fastcluster::hclust(.x, method = "ward.D2"))
+## create dendrogram
+list_of_consensus_matrices_combinedexpr_consensus_dendrogram <- purrr::map(.x = list_of_consensus_matrices_combinedexpr_hclust_result, .f = ~as.dendrogram(.x))
+## reorder rows
 # cols/rows should get darker as you move right/down
-matrix_consensus_matrix_combinedexpr_rowmeans <- rowMeans(matrix_consensus_matrix_combinedexpr, na.rm = T)
+list_consensus_matrices_combinedexpr_rowmeans <- purrr::map(.x = list_of_consensus_matrices_combinedexpr, .f = ~rowMeans(.x, na.rm = T))
 # matrix_consensus_matrix_combinedexpr_PCA_loadings_byrow <- prcomp(matrix_consensus_matrix_combinedexpr) %>% .[["rotation"]] %>% .[, 1]
 # matrix_consensus_matrix_combinedexpr_singular_vectors_byrow <- apply(matrix_consensus_matrix_combinedexpr, 1 , FUN = function(X) {svd(X) %>% .$d})
 
-matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered <- reorder(matrix_consensus_matrix_combinedexpr_consensus_dendrogram, matrix_consensus_matrix_combinedexpr_rowmeans)
+list_consensus_matrices_combinedexpr_consensus_dendrogram_reordered <- purrr::map2(.x = list_of_consensus_matrices_combinedexpr_consensus_dendrogram, .y = list_consensus_matrices_combinedexpr_rowmeans, .f = ~reorder(.x, .y))
 
-ggdendrogram(matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered) +
+purrr::pmap(.l = list(list_consensus_matrices_combinedexpr_consensus_dendrogram_reordered, 
+                      names(list_consensus_matrices_combinedexpr_consensus_dendrogram_reordered), 
+                      list(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate, wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)), 
+            .f = ~ggdendrogram(..1) +
   xlab("Gene/isoform") +
   theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "dendrogram_som_consensus_matrix_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
+  ggsave(filename = paste(R_processing_results_dir, "dendrogram_consensus_matrix_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE))
 
-matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered_order <- matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered %>% unlist
- 
-matrix_consensus_matrix_combinedexpr_reordered <- matrix_consensus_matrix_combinedexpr[matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered_order, matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered_order] %>% as_tibble(rownames = "gene_isoform_ID")
- 
-tibble_consensus_matrix_combinedexpr_long <- reshape2::melt(matrix_consensus_matrix_combinedexpr_reordered, id = c("gene_isoform_ID"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_if(is.factor, as.character)
+# extract the order of dendrogram
+list_consensus_matrices_combinedexpr_consensus_dendrogram_reordered_order <- list_consensus_matrices_combinedexpr_consensus_dendrogram_reordered %>% purrr::map(~unlist(.x))
+# reorder both the rows and columns of the consensus matrix according to the dendrogram order
+list_consensus_matrices_combinedexpr_reordered <- purrr::map2(.x = list_of_consensus_matrices_combinedexpr, .y = list_consensus_matrices_combinedexpr_consensus_dendrogram_reordered_order, .f = ~.x[.y, .y] %>% as_tibble(rownames = "gene_isoform_ID"))
+# melt the reordered consensus matrix into a long tibble
+list_tibble_consensus_matrix_combinedexpr_long <- list_consensus_matrices_combinedexpr_reordered %>% purrr::map(~reshape2::melt(.x, id = c("gene_isoform_ID"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_if(is.factor, as.character))
 
-write.table(x = matrix_consensus_matrix_combinedexpr_reordered, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# write the tibbles
+purrr::pmap(.l = list(list_consensus_matrices_combinedexpr_reordered, 
+                      names(list_consensus_matrices_combinedexpr_reordered), 
+                      list(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate, wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)), .f = ~write.table(x = ..1, file = paste(R_processing_results_dir, "heatmap_consensus_matrix_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
-ggplot(tibble_consensus_matrix_combinedexpr_long, aes(fill = cocluster_percentage)) +
+# plot the heatmaps
+purrr::pmap(.l = list(list_tibble_consensus_matrix_combinedexpr_long, 
+                      names(list_consensus_matrices_combinedexpr_reordered), 
+                      list(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate, wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)), .f = ~ggplot(..1, aes(fill = cocluster_percentage)) +
   geom_tile(aes(x = gene_isoform_ID, y = variable)) +
-  ggtitle(paste("OBseries consensus matrix for som of ", nrow(PSI_levels_timeseries_OB_wide), " isoforms, 
+  ggtitle(paste("OBseries consensus matrix for som of ", nrow(..3), " exons, 
                 ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " 
-                (any ", p_or_q_value, qpvalue_cutoff, " dPSI greaterthan ", dPSI_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
-  scale_x_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
-  scale_y_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
+                (any ", pvalue_or_FDR, pvalue_cutoff, " dPSI greaterthan ", dpsi_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
+  scale_x_discrete(breaks = ..1$gene_isoform_ID %>% unique, labels = ..1$gene_isoform_ID %>% unique, limits = ..1$gene_isoform_ID %>% unique) +
+  scale_y_discrete(breaks = ..1$gene_isoform_ID %>% unique, labels = ..1$gene_isoform_ID %>% unique, limits = ..1$gene_isoform_ID %>% unique) +
   scale_fill_gradientn(colours = c("blue", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.25, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".tiff", sep = ""), device = "tiff", dpi = 1200, width = 40, height = 25, units = "cm", limitsize = FALSE)
+  theme(axis.text.x = element_blank(), legend.title.align = 0.5, axis.text.y = element_blank(), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica"), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank()) +
+  ggsave(filename = paste(R_processing_results_dir, "heatmap_consensus_matrix_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, ".png", sep = ""), device = "png", dpi = 300, width = 20, height = 15, units = "cm", limitsize = FALSE))
 
-write.table(x = tibble_consensus_matrix_combinedexpr_long, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# plot heatmap data
+purrr::pmap(.l = list(list_tibble_consensus_matrix_combinedexpr_long, 
+                      names(list_consensus_matrices_combinedexpr_reordered), 
+                      list(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate, wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)), .f = ~write.table(x = ..1, file = paste(R_processing_results_dir, "heatmap_consensus_matrix_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
-ggplot(tibble_consensus_matrix_combinedexpr_long[1, ], aes(fill = cocluster_percentage)) +
+# plot the heatmap axes text
+purrr::pmap(.l = list(list_tibble_consensus_matrix_combinedexpr_long, 
+                      names(list_consensus_matrices_combinedexpr_reordered), 
+                      list(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate, wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)), .f = ~ggplot(..1 %>% dplyr::distinct(., gene_isoform_ID, .keep_all = TRUE), aes(fill = cocluster_percentage)) +
   geom_tile(aes(x = gene_isoform_ID, y = variable)) +
-  ggtitle(paste("OBseries consensus matrix for som of ", nrow(PSI_levels_timeseries_OB_wide), " isoforms, ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexs", " (any ", p_or_q_value, qpvalue_cutoff, " dPSI greaterthan ", dPSI_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
-  scale_x_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
-  scale_fill_gradientn(colours = c("white", "yellow", "red", "black"), values = c(0, 0.33, 0.67, 1)) + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 1, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 1, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "xlabs_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 400, width = 200, height = 10, units = "cm", limitsize = FALSE)
+  ggtitle(paste("OBseries consensus matrix for som of ", nrow(..3), " exons, 
+                ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " 
+                (any ", pvalue_or_FDR, pvalue_cutoff, " dPSI greaterthan ", dpsi_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
+  scale_x_discrete(breaks = ..1$gene_isoform_ID %>% unique, labels = ..1$gene_isoform_ID %>% unique, limits = ..1$gene_isoform_ID %>% unique) +
+  scale_y_discrete(breaks = ..1$gene_isoform_ID %>% unique, labels = ..1$gene_isoform_ID %>% unique, limits = ..1$gene_isoform_ID %>% unique) +
+  scale_fill_gradientn(colours = c("blue", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "heatmap_consensus_matrix_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, ".pdf", sep = ""), device = "pdf", dpi = 1200, width = 40, height = 25, units = "cm", limitsize = FALSE))
 
 ```
 
@@ -1954,50 +1988,98 @@ cluster determination from consensus matrix
 
 ```{r message=FALSE, warning=FALSE}
 
-tibble_consensus_matrix_combinedexpr_long <- read_delim(paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), delim = "\t")
+# tibble_consensus_matrix_combinedexpr_long <- read_delim(paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), delim = "\t")
 
-list_genes_or_isoforms_from_combinedexpr <- tibble_consensus_matrix_combinedexpr_long$variable %>% unique %>% array_tree
+list_genes_or_exons_from_combinedexpr <- list_tibble_consensus_matrix_combinedexpr_long %>% purrr::map(~.x$variable %>% unique %>% array_tree)
 
-# testing purposes only 
-
-# list_genes_or_isoforms_from_combinedexpr <- list_genes_or_isoforms_from_combinedexpr[c(1:50, 1000:1050)]
-
-list_genes_or_isoforms_from_combinedexpr_cooccuring <- purrr::map(.x = list_genes_or_isoforms_from_combinedexpr, .f = ~tibble_consensus_matrix_combinedexpr_long[tibble_consensus_matrix_combinedexpr_long$variable == .x & tibble_consensus_matrix_combinedexpr_long$cocluster_percentage >= 0.5, "gene_isoform_ID"])
-
-names(list_genes_or_isoforms_from_combinedexpr_cooccuring) <- list_genes_or_isoforms_from_combinedexpr
+# for each genes_identifier ID, group up those which have a cocluster percentage of more than 0.5
+list_genes_or_exons_from_combinedexpr_cooccuring <- purrr::map2(.x = list_genes_or_exons_from_combinedexpr, .y = list_tibble_consensus_matrix_combinedexpr_long, .f = function(.x, .y) {
+  
+  gene_identifier_IDs <- .x
+  consensus_scores <- .y
+  
+  list_of_coclustered_IDs <- future_map(.x = gene_identifier_IDs, .f = ~consensus_scores[consensus_scores$variable == .x & consensus_scores$cocluster_percentage >= 0.5, "gene_isoform_ID"], .progress = TRUE, .options = future_options(globals = c("gene_identifier_IDs", "consensus_scores")))
+  
+  names(list_of_coclustered_IDs) <- gene_identifier_IDs
+  
+  return(list_of_coclustered_IDs)
+  
+})
 
 # take pairwise intersections
+list_pairwise_comparisons_genes_or_exons_from_combinedexpr <- future_map(.x = list_genes_or_exons_from_combinedexpr, .f = function(.x) {
+  
+  tibble_comparisons <- combn(.x %>% unlist, m = 2) %>% t %>% as_tibble %>% setNames(c("comparison_1", "comparison_2"))
+  
+  list_comparisons <- list("list_comparison_1" = tibble_comparisons[, "comparison_1"] %>% array_tree, "list_comparison_2" = tibble_comparisons[, "comparison_2"] %>% array_tree)
+  
+  return(list_comparisons)
+  
+}, .progress = TRUE, .options = future_options(globals = c("as_tibble", "list_genes_or_exons_from_combinedexpr")))
 
-comparisons_genes_or_isoforms_from_combinedexpr <- combn(list_genes_or_isoforms_from_combinedexpr %>% unlist, m = 2) %>% t %>% as_tibble
+# NOTE: EACH L1 ELEMENT OF THE FOLLOWING LIST MUST BE A TIBBLE. IF IT ISN'T THE WHOLE THING IS STUFFED.
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection <- purrr::map2(.x = list_pairwise_comparisons_genes_or_exons_from_combinedexpr, .y = list_genes_or_exons_from_combinedexpr_cooccuring, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  
+  # gene_identifier_ID <- list_pairwise_comparisons_genes_or_exons_from_combinedexpr[[1]]
+  
+  ###########
+  
+  gene_identifier_ID <- .x
+  genes_or_exons_from_combinedexpr_cooccuring <- .y
+  
+  list_intersection <- future_map2(.x = gene_identifier_ID[["list_comparison_1"]] %>% set_names(NULL), .y = gene_identifier_ID[["list_comparison_2"]] %>% set_names(NULL), .f = ~dplyr::intersect(genes_or_exons_from_combinedexpr_cooccuring[[.x]], genes_or_exons_from_combinedexpr_cooccuring[[.y]]) %>% length, .progress = TRUE) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_intersection")
+  
+  return(list_intersection)
+  
+})
 
-colnames(comparisons_genes_or_isoforms_from_combinedexpr) <- c("comparison_1", "comparison_2")
+# .options = future_options(globals = c("dplyr", "genes_or_exons_from_combinedexpr_cooccuring"))
 
-# each level 1 element is a comparison of each pairwise intersection
+list_genes_or_isoforms_from_combinedexpr_itemwise_setdiff <- purrr::map2(.x = list_pairwise_comparisons_genes_or_exons_from_combinedexpr, .y = list_genes_or_exons_from_combinedexpr_cooccuring, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  
+  # gene_identifier_ID <- list_pairwise_comparisons_genes_or_exons_from_combinedexpr[[1]]
+  
+  ###########
+  
+  gene_identifier_ID <- .x
+  genes_or_exons_from_combinedexpr_cooccuring <- .y
+  
+  list_setdiff <- future_map2(.x = gene_identifier_ID[["list_comparison_1"]] %>% set_names(NULL), .y = gene_identifier_ID[["list_comparison_2"]] %>% set_names(NULL), .f = ~dplyr::setdiff(genes_or_exons_from_combinedexpr_cooccuring[[.x]], genes_or_exons_from_combinedexpr_cooccuring[[.y]]) %>% length, .progress = TRUE) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_setdiff")
+  
+  return(list_setdiff)
+  
+})
 
-list_comparison_1 <- comparisons_genes_or_isoforms_from_combinedexpr %>% .[, 1] %>% array_tree %>% flatten
+# append the intersection and setdiff as new columns onto the pairwise comparison
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- purrr::pmap(.l = list(list_pairwise_comparisons_genes_or_exons_from_combinedexpr,
+                                                                                          list_genes_or_isoforms_from_combinedexpr_itemwise_intersection,
+                                                                                          list_genes_or_isoforms_from_combinedexpr_itemwise_setdiff), .f = ~bind_cols(..1 %>% as_tibble, ..2[, 1], ..3[, 1]) %>% add_column("jaccard" = .$coclustering_intersection/(.$coclustering_setdiff + .$coclustering_intersection)) %>% purrr::map(~unlist(.x)) %>% as_tibble)
 
-list_comparison_2 <- comparisons_genes_or_isoforms_from_combinedexpr %>% .[, 2] %>% array_tree %>% flatten
+# write the tables  - all intersection values
+purrr::map2(.x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, .y = names(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "itemwise_anyintersection_consensus0.5_", .y, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
-# NOTE: EACH L1 ELEMENT OF THE LIST MUST BE A TIBBLE. IF IT ISN'T THE WHOLE THING IS STUFFED.
+# read the table back
+# list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- purrr::map2(.x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, .y = names(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2), .f = ~read_delim(paste(R_processing_results_dir, "itemwise_anyintersection_consensus0.5_", .y, ".txt", sep = ""), delim = "\t"))
 
-list_genes_or_isoforms_from_combinedexpr_itemwise_intersection <- purrr::map2(.x = list_comparison_1, .y = list_comparison_2, .f = ~dplyr::intersect(list_genes_or_isoforms_from_combinedexpr_cooccuring[[.x]], list_genes_or_isoforms_from_combinedexpr_cooccuring[[.y]]) %>% nrow) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_intersection")
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3 <- purrr::map(.x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, .f = ~.x[.x$coclustering_intersection > 0, ])
 
-list_genes_or_isoforms_from_combinedexpr_itemwise_setdiff <- purrr::map2(.x = list_comparison_1, .y = list_comparison_2, .f = ~dplyr::setdiff(list_genes_or_isoforms_from_combinedexpr_cooccuring[[.x]], list_genes_or_isoforms_from_combinedexpr_cooccuring[[.y]]) %>% nrow)  %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_setdiff")
+# plot intersection distribution
+purrr::map2(.x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3, .y = names(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3), .f = function(.x, .y) {
+  
+  pdf(paste(R_processing_results_dir, "itemwise_intersection1_consensus0.5_", .y, "_consensus.distribution.pdf", sep = ""))
+  
+  plot(density(.x$coclustering_intersection %>% as.numeric), main = paste("intersection score distribution for", .y))
+  
+  dev.off()
+  
+})
 
-list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- bind_cols(comparisons_genes_or_isoforms_from_combinedexpr %>% as_tibble, list_genes_or_isoforms_from_combinedexpr_itemwise_intersection[, 1], list_genes_or_isoforms_from_combinedexpr_itemwise_setdiff[, 1])
-
-list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- add_column(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, "jaccard" = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection/(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_setdiff + list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection))
-
-write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, file = paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- read_delim(paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
-
-
-list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3 <- list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2[list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection > 0, ]
-
-plot(density(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3$coclustering_intersection %>% as.numeric))
-
-write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3, file = paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_intersection1_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# write the tables - nonzero intersection values only
+purrr::map2(.x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3, .y = names(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "itemwise_intersection1_consensus0.5_", .y, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -2005,40 +2087,63 @@ write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3
 
 ```{r}
 
-########### GO TO CYTOSCAPE HERE ###################
+########### RETURN FROM CYTOSCAPE HERE ###################
 
-tibble_combinedexpr_logCPM_PSI_scaled_2 <- bind_cols(tibble_combinedexpr_logCPM_PSI_scaled, gene_isoform_ID = paste(tibble_combinedexpr_logCPM_PSI_scaled$Gene, "_", tibble_combinedexpr_logCPM_PSI_scaled$isoform_ID, sep = ""))
+# import the cluster membership info
+list_cytoscape_result <- purrr::map(.x = list("consensus_separate.PSI_combinedexpr_intersection1_min25_penalty2_haircut0.1_multi_match_overlap0.8_seedeverynode.tab",
+                                              "consensus_sum.PSI_combinedexpr_intersection1_min25_penalty2_haircut0.1_multi_match_overlap0.8_seedeverynode.tab"), .f = function(.x) {
+                                                
+                                                tibble_result <- read_delim(paste(R_processing_results_dir, .x, sep = ""), delim = "\t", col_names = c("cluster", "gene_identifier_ID"))
+                                                tibble_result[, "cluster"] <- gsub(x = tibble_result$cluster, pattern = "Cluster ", replacement = "") %>% as.numeric
+                                                
+                                                return(tibble_result)
+                                                
+                                              } )
 
-cytoscape_result <- read_delim(paste(results_directory_figures, "consensus_combinedexpr_intersection1_min25_penalty2_haircut0.1_multi_match_overlap0.8_seedeverynode.tab", sep = ""), delim = "\t", col_names = c("cluster", "gene_isoform_ID"))
-
-cytoscape_result[, "cluster"] <- gsub(x = cytoscape_result$cluster, pattern = "Cluster ", replacement = "") %>% as.numeric
+# append the gene_identifier_ID onto the tibble of combined scaled PSI and expr
+list_of_tibbles_combinedexpr_logCPM_PSI_scaled_2 <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled, .f = ~bind_cols(.x, gene_identifier_ID = paste(.x$matched_gene_names, "_", .x$identifier, sep = "")))
 
 # split the cytoscape cluster result into a list, clusterwise
-list_cytoscape_cluster_results <- purrr::map(.x = cytoscape_result$cluster %>% unique, .f = ~cytoscape_result[cytoscape_result$cluster == .x, ])
+list_cytoscape_results_by_cluster <- purrr::map(.x = list_cytoscape_result, .f = function(.x) {
+  
+  tibble_result <- .x
+  
+  purrr::map(.x = tibble_result$cluster %>% unique, .f = ~tibble_result[tibble_result$cluster == .x, ])
+  
+} ) 
 
 # bind the standardised PSI information to the cluster information
-list_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map(.x = list_cytoscape_cluster_results, .f = ~dplyr::left_join(.x, tibble_combinedexpr_logCPM_PSI_scaled_2, by = "gene_isoform_ID"))
-
-wide_table_combinedexpr_logCPM_PSI_scaled_clustered <- list_combinedexpr_logCPM_PSI_scaled_clustered %>% purrr::reduce(dplyr::bind_rows)
-
-# reorder columns
-wide_table_combinedexpr_logCPM_PSI_scaled_clustered <- wide_table_combinedexpr_logCPM_PSI_scaled_clustered[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", "gene_isoform_ID", "MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d", "cluster")]
+list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map2(.x = list_cytoscape_results_by_cluster, .y = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_2, .f = function(.x, .y) {
+  
+  cytoscape_results_by_cluster <- .x
+  tibbles_combinedexpr_logCPM_PSI_scaled_2 <- .y
+  
+  list_of_tibbles_with_cluster_info_by_cluster <- purrr::map(.x = cytoscape_results_by_cluster, .f = ~dplyr::left_join(.x, tibbles_combinedexpr_logCPM_PSI_scaled_2, by = "gene_identifier_ID"))
+  
+  tibble_with_cluster_info <- list_of_tibbles_with_cluster_info_by_cluster %>% purrr::reduce(dplyr::bind_rows)
+  
+  # reorder columns
+  tibble_with_cluster_info <- tibble_with_cluster_info[, c(2:ncol(tibble_with_cluster_info), 1)]
+  
+  # reorder the cluster factor for correct facet order
+  tibble_with_cluster_info$cluster <- factor(tibble_with_cluster_info$cluster %>% mixedsort, levels = tibble_with_cluster_info$cluster %>% unique %>% mixedsort)
+  
+  return(tibble_with_cluster_info)
+  
+} )
 
 ```
 
 ### generate expression profile map
 
-the goal of this is to get extract timepoint PSI tables according to each consensus cluster
+the goal of this is to get extract timepoint PSI/expr tables according to each consensus cluster
 
 ```{r}
-
-# reorder the cluster factor for correct facet order
-
-wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster <- factor(wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster %>% mixedsort, levels = wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster %>% unique %>% mixedsort)
 
 ### convert the som table to a long form interprable by ggplot
 
 # reshaping into long table
+list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, .f = ~reshape2::melt(.x, variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble)
 
 long_table_combinedexpr_logCPM_PSI_scaled_clustered <- reshape2::melt(wide_table_combinedexpr_logCPM_PSI_scaled_clustered, id.vars = c("Gene", "AS_event_ID", "splicemode", "isoform_ID", "gene_isoform_ID", "cluster", "isoform_number"), variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
 

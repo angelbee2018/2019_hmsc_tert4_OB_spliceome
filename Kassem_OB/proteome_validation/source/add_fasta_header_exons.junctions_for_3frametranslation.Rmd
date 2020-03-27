@@ -20,7 +20,7 @@ library(rtracklayer)
 
 library(furrr)
 future::plan(multiprocess)
-options(future.globals.maxSize = 30000000000)
+options(future.globals.maxSize = 30000000000, mc.cores = 4)
 
 ```
 
@@ -28,7 +28,7 @@ options(future.globals.maxSize = 30000000000)
 
 ```{r}
 
-output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/angel_3FT_junctions/"
+output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/"
 output_file_name_JUM <- "junction_table_OBseries_SOM_1663_junctions_any_qvalue0.01_any_deltaPSI_greaterthan_0.2"
 
 
@@ -326,14 +326,14 @@ alltimepoints_reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysi
 tibble_alltimepoints_reconstructed_gtf <- rtracklayer::import(alltimepoints_reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
 # get junction-flanking exon matches for IR events
-list_ref_matching_junction_entries <- future_imap(.x = tibble_junction_table_array.tree, .f = ~list(
+list_ref_matching_junction_entries <-future_imap(.x = tibble_junction_table_array.tree, .f = ~list(
   "chr" = .x$chr,
   "start" = .x$start,
   "end" = .x$end,
   "strand" = .x$strand,
-  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y), 
-  "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y)), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble")))
+  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y) %>% bind_rows, 
+  "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y) %>% bind_rows), 
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble", "bind_rows")))
 
 # turn those GTF matches into gene/transcript names
 list_annotated_junction_entries <- future_map(.x = list_ref_matching_junction_entries, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_matched_entries")))
@@ -363,7 +363,7 @@ cat("Percentage untranslatable:", length(row.indices_rows_with_non_translatable)
 tibble_ref_matching_junction_entries_all_translatable <- tibble_annotated_junction_entries[-row.indices_rows_with_non_translatable, ]
 
 # add identifier column
-tibble_ref_matching_junction_entries_all_translatable <- tibble_ref_matching_junction_entries_all_translatable %>% add_column("identifier" = paste(tibble_ref_matching_junction_entries_all_translatable$chr, ":", tibble_ref_matching_junction_entries_all_translatable$start, "-", tibble_ref_matching_junction_entries_all_translatable$end, ":", as.numeric(paste(tibble_ref_matching_junction_entries_all_translatable$strand, "1", sep = "")), sep = ""))
+tibble_ref_matching_junction_entries_all_translatable <- tibble_ref_matching_junction_entries_all_translatable %>% add_column("identifier" = paste("junction_", tibble_ref_matching_junction_entries_all_translatable$chr, ":", tibble_ref_matching_junction_entries_all_translatable$start, "-", tibble_ref_matching_junction_entries_all_translatable$end, ":", tibble_ref_matching_junction_entries_all_translatable$strand, sep = ""))
 
 ```
 
@@ -374,7 +374,7 @@ tibble_ref_matching_junction_entries_all_translatable <- tibble_ref_matching_jun
 tibble_junction_table_matched <- dplyr::left_join(tibble_ref_matching_junction_entries_all_translatable, tibble_junction_table)
 
 tibble_junction_table_matched_with_fasta_header <- tibble_junction_table_matched %>% add_column("fasta_header" = convert_annotation_to_fasta_header(
-                                                                                            diff.splice.tool_name = "psi.sigma", 
+                                                                                            diff.splice.tool_name = "JUM", 
                                                                                             transcript.reconstruction.tool_name = "strawberry", 
                                                                                             identifier = tibble_junction_table_matched$identifier, 
                                                                                             transcript_ids = tibble_junction_table_matched$matched_recon_transcript_names, 
@@ -471,18 +471,27 @@ annotate_matched_entries <- function(list_matched_ref_recon_gtf) {
   # gene name
   matched_gene_names <- NA
   
-  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+  if (length(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
     
     matched_gene_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$gene_name %>% unique, collapse = ",")
+    
+    }
     
   }
   
   # transcript name (recon)
   matched_recon_transcript_names <- NA
   
-  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+  
+  if (length(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
     
     matched_recon_transcript_names <- paste(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$transcript_id %>% unique, collapse = ",")
+    
+    }
     
   }
   
@@ -628,9 +637,9 @@ list_ref_matching_exon_entries_IR <- future_imap(.x = tibble_exon_coords_array.t
   "start" = .x$start,
   "end" = .x$end,
   "strand" = .x$strand,
-  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y), 
-  "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y)), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble")))
+  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y) %>% bind_rows, 
+  "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y) %>% bind_rows), 
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble", "bind_rows")))
 
 list_ref_matching_exon_entries_IR <- future_map(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE)
 
@@ -648,9 +657,9 @@ list_ref_matching_exon_entries_not_IR <- future_imap(.x = tibble_exon_coords_arr
   "start" = .x$start,
   "end" = .x$end,
   "strand" = .x$strand,
-  "reference_gtf_match" = extract_overlapping.exons(.x, tibble_ref_gtf, .y), 
-  "reconstructed_gtf_match" = extract_overlapping.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y)), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble")))
+  "reference_gtf_match" = extract_overlapping.exons(.x, tibble_ref_gtf, .y) %>% bind_rows, 
+  "reconstructed_gtf_match" = extract_overlapping.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y) %>% bind_rows), 
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_overlapping.exons", "data.table", "tibble", "bind_rows")))
 
 list_ref_matching_exon_entries_not_IR <- future_map(.x = list_ref_matching_exon_entries_not_IR, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE)
 
@@ -688,7 +697,7 @@ cat("Percentage untranslatable:", length(row.indices_rows_with_non_translatable)
 tibble_ref_matching_exon_entries_all_translatable <- tibble_ref_matching_exon_entries_all[-row.indices_rows_with_non_translatable, ]
 
 # add identifier column
-tibble_ref_matching_exon_entries_all_translatable <- tibble_ref_matching_exon_entries_all_translatable %>% add_column("identifier" = paste(tibble_ref_matching_exon_entries_all_translatable$chr, ":", tibble_ref_matching_exon_entries_all_translatable$start, "-", tibble_ref_matching_exon_entries_all_translatable$end, ":", as.numeric(paste(tibble_ref_matching_exon_entries_all_translatable$strand, "1", sep = "")), sep = ""))
+tibble_ref_matching_exon_entries_all_translatable <- tibble_ref_matching_exon_entries_all_translatable %>% add_column("identifier" = paste("exon_", tibble_ref_matching_exon_entries_all_translatable$chr, ":", tibble_ref_matching_exon_entries_all_translatable$start, "-", tibble_ref_matching_exon_entries_all_translatable$end, ":", as.numeric(paste(tibble_ref_matching_exon_entries_all_translatable$strand, "1", sep = "")), sep = ""))
 
 # for translatable exons with no match to reference/recon. GTF, use "nomatch" as transcript name
 ## get row indices where both gene name and transcript name is NA

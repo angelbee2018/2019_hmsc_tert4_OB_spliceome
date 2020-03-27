@@ -1231,7 +1231,7 @@ list_of_SOM_clusters <- 1:number_of_som_clusters %>% array_tree
 list_of_tibble_SOM.separate.PSI_subset_by_cluster <- list(purrr::map(.x = list_of_SOM_clusters, .f = ~wide_table_of_final_SOM_summary_5_by_5_OBseries_separate[wide_table_of_final_SOM_summary_5_by_5_OBseries_separate$cluster == .x, ]) %>% set_names(list_of_SOM_clusters), purrr::map(.x = list_of_SOM_clusters, .f = ~wide_table_of_final_SOM_summary_5_by_5_OBseries_sum[wide_table_of_final_SOM_summary_5_by_5_OBseries_sum$cluster == .x, ]) %>% set_names(list_of_SOM_clusters)) %>% set_names(c(paste("separate.PSI_", wide_table_of_final_SOM_summary_5_by_5_OBseries_separate$matched_gene_names %>% unique %>% length, sep = ""), paste("sum.PSI_", wide_table_of_final_SOM_summary_5_by_5_OBseries_sum$matched_gene_names %>% unique %>% length, sep = "")))
 
 # take gene set for each cluster
-list_of_vectors_genesets_per_SOM_cluster <- purrr::map_depth(.x = list_of_tibble_SOM.separate.PSI_subset_by_cluster, .depth = 2, .ragged = FALSE, .f = ~.x$matched_gene_names)
+list_of_vectors_genesets_per_SOM_cluster <- purrr::map_depth(.x = list_of_tibble_SOM.separate.PSI_subset_by_cluster, .depth = 2, .ragged = FALSE, .f = ~.x$matched_gene_names %>% unique)
 
 ```
 
@@ -1530,7 +1530,6 @@ list_of_tibbles_family.enrichment_timepointwise_topten <- purrr::map(.x = list_o
 
 ```
 
-
 #### GGPLOT
 
 ```{r}
@@ -1827,6 +1826,8 @@ list_of_tibbles_combinedexpr_logCPM_PSI_unscaled <- list("combinedexpr_logCPM_PS
 
 ## consensus re-clustering of combined expression and PSI data
 
+### execute ensemble SOM and create consensus matrix
+
 ```{r}
 
 # SET THESE TWO. script will sweep using the "dot product" of the two ranges.
@@ -1984,7 +1985,7 @@ purrr::pmap(.l = list(list_tibble_consensus_matrix_combinedexpr_long,
 
 ```
 
-cluster determination from consensus matrix
+### cluster determination from consensus matrix
 
 ```{r message=FALSE, warning=FALSE}
 
@@ -2110,7 +2111,7 @@ list_cytoscape_results_by_cluster <- purrr::map(.x = list_cytoscape_result, .f =
   
   purrr::map(.x = tibble_result$cluster %>% unique, .f = ~tibble_result[tibble_result$cluster == .x, ])
   
-} ) 
+} ) %>% set_names(names(list_of_tibbles_combinedexpr_logCPM_PSI_scaled_2))
 
 # bind the standardised PSI information to the cluster information
 list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map2(.x = list_cytoscape_results_by_cluster, .y = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_2, .f = function(.x, .y) {
@@ -2143,33 +2144,177 @@ the goal of this is to get extract timepoint PSI/expr tables according to each c
 ### convert the som table to a long form interprable by ggplot
 
 # reshaping into long table
-list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, .f = ~reshape2::melt(.x, variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble)
+list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, .f = function(.x) {
+  
+  id.colnames <- setdiff(colnames(.x), c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d"))
+  
+  long_tibble <- reshape2::melt(.x, id.vars = id.colnames, variable.name = "timepoint", value.name = "scaled_PSI.expr_value") %>% as_tibble
+  
+  return(long_tibble)
+  
+} )
 
-long_table_combinedexpr_logCPM_PSI_scaled_clustered <- reshape2::melt(wide_table_combinedexpr_logCPM_PSI_scaled_clustered, id.vars = c("Gene", "AS_event_ID", "splicemode", "isoform_ID", "gene_isoform_ID", "cluster", "isoform_number"), variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
-
-# ggplot of consensus som PSI profiles
-
-ggplot(long_table_combinedexpr_logCPM_PSI_scaled_clustered, aes(x = timepoint, y = scaled_PSI_value)) +
-  geom_line(aes(group = gene_isoform_ID)) +
+# GGPLOT
+purrr::pmap(.l = list(list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, 
+                      names(list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_clustered),
+                      list(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate, wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)), .f = ~ggplot(..1, aes(x = timepoint, y = scaled_PSI.expr_value)) +
+  geom_line(aes(group = gene_identifier_ID)) +
   scale_colour_manual(values = c("black")) +
   facet_wrap(~cluster) +
-  ggtitle(paste("Time series profiles of ", nrow(PSI_levels_timeseries_OB_wide), " isoforms, ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " (any ", p_or_q_value, qpvalue_cutoff, " dPSI greaterthan ", dPSI_cutoff, "), 
-                sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
-  scale_x_discrete(limits = c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  ggtitle(paste("OBseries consensus SOM of ", nrow(..3), " exons, 
+                ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " 
+                (any ", pvalue_or_FDR, pvalue_cutoff, " dPSI greaterthan ", dpsi_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
+  scale_x_discrete(limits = vector_OBseries_timepoints, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   xlab("Time-point") +
-  ylab("Scaled PSI or logCPM Level") +
+  ylab("Normalised PSI or expr. Level") +
   # guides(colour = FALSE) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype ="solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm", limitsize = FALSE) +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm", limitsize = FALSE))
 
-write.table(x = wide_table_combinedexpr_logCPM_PSI_scaled_clustered, file = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+purrr::pmap(.l = list(list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, 
+                      names(list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_clustered),
+                      list(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate, wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)), .f = ~write.table(x = ..1, file = paste(R_processing_results_dir, "consensus_som_", nrow(..3), "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", ..2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
+### Gene ontology of each SOM cluster, separate and summed PSI
 
+#### preparation of separate data frames containing gene sets of each cluster
 
+```{r}
+
+# create list of SOM clusters
+list_of_SOM_clusters <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, .f = ~.x$cluster %>% paste %>% unique %>% array_tree)
+
+list_of_tibble_consensus.SOM_separate.PSI_subset_by_cluster <- purrr::map2(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, .y = list_of_SOM_clusters, .f = function(.x, .y) {
+  
+  wide_tibble_summary <- .x %>% mutate_if(is.factor, as.character)
+  SOM_clusters <- .y
+  
+  list_of_subset_tibbles_by_cluster <- purrr::map(.x = SOM_clusters, .f = ~wide_tibble_summary[wide_tibble_summary$cluster == .x, ]) %>% set_names(SOM_clusters)
+  
+} ) %>% set_names(c(paste("separate.PSI_expr_", wide_table_of_final_SOM_summary_5_by_5_OBseries_separate$matched_gene_names %>% unique %>% length, sep = ""), 
+                    paste("sum.PSI_expr_", wide_table_of_final_SOM_summary_5_by_5_OBseries_sum$matched_gene_names %>% unique %>% length, sep = "")))
+
+# take gene set for each cluster - all expr and PSI genes
+list_of_vectors_genesets_per_consensus.SOM_cluster_all <- purrr::map_depth(.x = list_of_tibble_consensus.SOM_separate.PSI_subset_by_cluster, .depth = 2, .ragged = FALSE, .f = ~.x$matched_gene_names %>% unique)
+
+# take gene set for each cluster - all PSI genes only
+list_of_vectors_genesets_per_consensus.SOM_cluster_diffsplicedonly <- purrr::map_depth(.x = list_of_tibble_consensus.SOM_separate.PSI_subset_by_cluster, .depth = 2, .ragged = FALSE, .f = ~.x[.x$splicemode != "RNASeq", "matched_gene_names"] %>% unlist %>% unique)
+
+```
+
+#### GO enrichment
+
+```{r}
+
+# let's try to do all enrichment at once using purrr
+# generate combinations of gene sets and GO categories
+list_of_combinations_of_consensus.SOM_genes_and_GOterms <- cross2(.x = list_of_vectors_genesets_per_consensus.SOM_cluster_diffsplicedonly, .y = list("MF", "BP", "CC"))
+# generate corresponding names and table nrows
+list_of_combinations_of_consensus.SOM_genes_and_GOterms_names <- cross2(.x = list_of_vectors_genesets_per_consensus.SOM_cluster_diffsplicedonly %>% names, .y = list("MF", "BP", "CC"))
+
+# note: elements will look like: sep.PSI/MF, sum.PSI/MF, sep.PSI/BP, sum.PSI/BP etc...
+# gene ontology for each combination
+list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise <- future_map(.x = list_of_combinations_of_consensus.SOM_genes_and_GOterms, .f = ~purrr::map2(.x = .x[[1]], .y = .x[[2]], .f = ~GOHyperGAll(catdb = catdb, gocat = .y, Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction %>% type_convert %>% as_tibble), .progress = TRUE)
+
+# filter gene ontology tables for top hits
+list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise, .f = ~purrr::map(.x = .x, .f = ~dplyr::arrange(.x, Phyper) %>% head(n = 10)))
+
+# add cluster number into each tibble and combine into single tibble
+list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .f = ~purrr::map2(.x = .x, .y = names(.x), .f = ~cbind(.x, "cluster" = .y)) %>% rbindlist %>% as_tibble)
+
+# ggplot, separate PSI
+# get list indices of the GO result tibbles that house the separate PSI info.
+purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~ggplot(.x, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented ", .y[[2]], " GO terms for each consensus cluster in OB series (", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], ")", sep = "")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+   
+purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+
+```
+
+### Family enrichment of each SOM cluster
+
+Separate and sum PSI
+
+```{r}
+
+# note: elements will look like: sep.PSI/MF, sum.PSI/MF, sep.PSI/BP, sum.PSI/BP etc...
+# gene ontology for each combination
+
+list_of_tibbles_consensus.SOM_family.enrichment_clusterwise <- purrr::map(.x = list_of_vectors_genesets_per_consensus.SOM_cluster_diffsplicedonly, .f = ~future_map(.x = .x, .f = ~bc3net::enrichment(genes = .x, reference = reference_geneset_universe, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble, .progress = TRUE))
+
+# filter gene ontology tables for top hits
+list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits <- purrr::map_depth(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise, .depth = 2, .ragged = FALSE, .f = ~dplyr::arrange(.x, pval) %>% head(n = 10))
+
+# add cluster number into each tibble and combine into single tibble
+list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits, .f = ~purrr::map2(.x = .x, .y = names(.x), .f = ~cbind(.x, "cluster" = .y)) %>% rbindlist %>% as_tibble)
+
+# plot family enrichment per cluster
+purrr::map2(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits), .f = ~ggplot(.x, aes(x = reorder(TermID, -genes), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented PFAM families for each consensus cluster in OB series (", .y %>% strsplit(split = "_") %>% unlist %>% .[1], ")", sep = "")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("Protein Family (PFAM)") +
+  ylab("Number of genes in protein family") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+
+purrr::map2(.x = list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_PFAM_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+
+```
+
+### enrichment of upstream RBPs - clusterwise, per gene
+
+```{r}
+
+# note: elements will look like: sep.PSI/MF, sum.PSI/MF, sep.PSI/BP, sum.PSI/BP etc...
+# gene ontology for each combination
+
+list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise <- purrr::map(.x = list_of_vectors_genesets_per_consensus.SOM_cluster_diffsplicedonly, .f = ~future_map(.x = .x, .f = ~bc3net::enrichment(genes = .x, reference = reference_geneset_universe, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble, .progress = TRUE))
+
+# filter gene ontology tables for top hits
+list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits <- purrr::map_depth(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise, .depth = 2, .ragged = FALSE, .f = ~dplyr::arrange(.x, pval) %>% head(n = 10))
+
+# add cluster number into each tibble and combine into single tibble
+list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, .f = ~purrr::map2(.x = .x, .y = names(.x), .f = ~cbind(.x, "cluster" = .y)) %>% rbindlist %>% as_tibble)
+
+# plot family enrichment per cluster
+purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits), .f = ~ggplot(.x, aes(x = reorder(TermID, -genes), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for each consensus cluster in OB series (", .y %>% strsplit(split = "_") %>% unlist %>% .[1], ")", sep = "")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("Upstream RBP") +
+  ylab("Number of genes targeted by RBP") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+
+purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+
+```
 
 # Quality checks
 

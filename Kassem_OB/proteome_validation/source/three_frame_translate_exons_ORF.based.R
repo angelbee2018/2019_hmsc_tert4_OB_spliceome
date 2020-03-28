@@ -15,7 +15,7 @@ cat("number of arguments specified:", length(args))
 # SET ENVIRONMENT ##########
 #if (!requireNamespace("BiocManager", quietly = TRUE))
     #install.packages("BiocManager")
-#BiocManager::install(c("seqinr", "tidyverse", "purrr", "dplyr", "rtracklayer", "data.table", "furrr", "RhpcBLASctl", "optparse"))
+#BiocManager::install(c("seqinr", "tidyverse", "purrr", "dplyr", "rtracklayer", "data.table", "furrr", "RhpcBLASctl", "optparse", "tictoc"))
 
 library(seqinr)
 library(tidyverse)

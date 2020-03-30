@@ -24,17 +24,86 @@ options(future.globals.maxSize = 30000000000, mc.cores = 4)
 
 ```
 
-## Global directories
+## Functions
 
 ```{r}
 
-output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/"
-output_file_name_JUM <- "junction_table_OBseries_SOM_1663_junctions_any_qvalue0.01_any_deltaPSI_greaterthan_0.2"
+# FUNCTION TO MAKE A FASTA HEADER FROM RESULTS OF MATCHING
+convert_annotation_to_fasta_header <- function(diff.splice.tool_name, transcript.reconstruction.tool_name, identifier, transcript_ids, species_name, gene_id) {
+  
+  # format is like UniProt: >diff.splice.tool_transcript.reconstruction.tool|identifier|ENST.id OS=organism GN=external_gene_name
+# example: >JUM_strawberry|12:1000232-1000250|ENST00000536720.1 OS=Homo sapiens GN=ALKBH2
 
+fasta_header <- paste(">", 
+                      diff.splice.tool_name, 
+                      "_", 
+                      transcript.reconstruction.tool_name, 
+                      "|", 
+                      identifier, 
+                      "|", 
+                      transcript_ids, 
+                      " OS=",
+                      species_name, 
+                      " GN=",
+                      gene_id, sep = "")
+
+return(fasta_header)
+  
+}
 
 ```
 
-## Functions
+```{r}
+
+# FUNCTION to extract the information from matched GTF entries.
+# input: a list containing ref + recon GTF entries, a single element of a list of all the matches for each exon.
+# things to annotate: gene name, strand, all exons are NMD in the reference GTF, first/last/only exon in reference or recon. GTF
+
+annotate_matched_entries <- function(list_matched_ref_recon_gtf) {
+  
+  # DEBUG ######
+  
+  # list_matched_ref_recon_gtf <- list_ref_matching_exon_entries[[2]]
+  
+  ##############
+  
+  # gene name
+  matched_gene_names <- NA
+  
+  if (length(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    matched_gene_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$gene_name %>% unique, collapse = ",")
+    
+    }
+    
+  }
+  
+  # transcript name (recon)
+  matched_recon_transcript_names <- NA
+  
+  
+  if (length(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    matched_recon_transcript_names <- paste(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$transcript_id %>% unique, collapse = ",")
+    
+    }
+    
+  }
+  
+  return(list("chr" = list_matched_ref_recon_gtf$chr,
+              "start" = list_matched_ref_recon_gtf$start,
+              "end" = list_matched_ref_recon_gtf$end,
+              "strand" = list_matched_ref_recon_gtf$strand,
+              "matched_gene_names" = matched_gene_names,
+              "matched_recon_transcript_names" = matched_recon_transcript_names))
+  
+}
+
+```
 
 ```{r}
 
@@ -44,7 +113,7 @@ output_file_name_JUM <- "junction_table_OBseries_SOM_1663_junctions_any_qvalue0.
 # tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
 # index: loop progress marker to be used with imap
 
-extract_junction.flanking.exons <- function(spliceregion_list, tibble_gtf_table, index) {
+extract_junction.flanking.exons_JUM <- function(spliceregion_list, tibble_gtf_table, index) {
   
   # DEBUG ###################
 
@@ -123,9 +192,9 @@ if (spliceregion_list$strand == ".") {
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
-# FUNCTION TO RETURN FASTA HEADER FROM MATCHED REF/RECONSTRUCTED GTF ROWS.
+# FUNCTION TO RETURN FASTA HEADER FROM MATCHED REF/RECONSTRUCTED GTF ROWS - !!!!!!!!DEPRECATED!!!!!!!!
 # NOTE: to be used with purrr
 # input: a list containing ref/reconstructed GTF matches for ONE junction, totalling 4 elements: 1. subsets of reference GTF (by transcript) each containing EXACTLY 2 entries of the reference GTF tibble - these describe the exons flanking the junction. 2. subsets of reconstructed GTF giving similar information. 3. amount of transcripts matched to ref. GTF 4. amount of transcripts matched to reconstructed GTF.
 
@@ -219,11 +288,13 @@ accepts:
 
 JUM_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
 
-differential_junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/5x5_SOM_1663_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt"
+differential_junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/5x5_SOM_2552_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt"
+# 5x5_SOM_1663_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt
 
 UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
-output_file_name <- "junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.2"
+output_dir_JUM <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/"
+output_file_name_JUM <- "junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15"
 
 ```
 
@@ -331,9 +402,9 @@ list_ref_matching_junction_entries <-future_imap(.x = tibble_junction_table_arra
   "start" = .x$start,
   "end" = .x$end,
   "strand" = .x$strand,
-  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y) %>% bind_rows, 
-  "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y) %>% bind_rows), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble", "bind_rows")))
+  "reference_gtf_match" = extract_junction.flanking.exons_JUM(.x, tibble_ref_gtf, .y) %>% bind_rows, 
+  "reconstructed_gtf_match" = extract_junction.flanking.exons_JUM(.x, tibble_alltimepoints_reconstructed_gtf, .y) %>% bind_rows), 
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons_JUM", "data.table", "tibble", "bind_rows")))
 
 # turn those GTF matches into gene/transcript names
 list_annotated_junction_entries <- future_map(.x = list_ref_matching_junction_entries, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_matched_entries")))
@@ -388,13 +459,13 @@ tibble_junction_table_matched_with_fasta_header <- tibble_junction_table_matched
 ```{r}
 
 # write the final fasta info table
-write.table(tibble_junction_table_matched_with_fasta_header, file = paste(output_dir, output_file_name_JUM, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+write.table(tibble_junction_table_matched_with_fasta_header, file = paste(output_dir_JUM, output_file_name_JUM, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 # write a test version consisting of 20 rows selected at random
-write.table(tibble_junction_table_matched_with_fasta_header[sample(1:nrow(tibble_junction_table_matched_with_fasta_header), 20), ], file = paste(output_dir, output_file_name_JUM, ".txt_test", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+write.table(tibble_junction_table_matched_with_fasta_header[sample(1:nrow(tibble_junction_table_matched_with_fasta_header), 20), ], file = paste(output_dir_JUM, output_file_name_JUM, ".txt_test", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 # output the discarded entries
-write.table(dplyr::anti_join(tibble_junction_table, tibble_junction_table_matched_with_fasta_header), file = paste(output_dir, output_file_name_JUM, "_discarded.entries.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+write.table(dplyr::anti_join(tibble_junction_table, tibble_junction_table_matched_with_fasta_header), file = paste(output_dir_JUM, output_file_name_JUM, "_discarded.entries.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -404,7 +475,7 @@ write.table(dplyr::anti_join(tibble_junction_table, tibble_junction_table_matche
 
 junc_bed_table <- tibble_junction_table_matched_with_fasta_header[, c("chr", "start", "end", "identifier", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name")
 
-write.table(junc_bed_table, file = paste(output_dir, output_file_name_JUM, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
+write.table(junc_bed_table, file = paste(output_dir_JUM, output_file_name_JUM, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
 
 ```
 
@@ -433,10 +504,10 @@ options(future.globals.maxSize = 30000000000, mc.cores = 4)
 
 ```{r}
 
-output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/"
+output_dir_psisigma <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/"
 
-if(! dir.exists(output_dir) ) {
-     dir.create(output_dir, recursive = TRUE)}
+if(! dir.exists(output_dir_psisigma) ) {
+     dir.create(output_dir_psisigma, recursive = TRUE)}
 
 output_file_name_PSI.Sigma <- "exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na"
 
@@ -456,65 +527,13 @@ IR_regex_string <- "IR"
 
 ```{r}
 
-# FUNCTION to extract the information from matched GTF entries.
-# input: a list containing ref + recon GTF entries, a single element of a list of all the matches for each exon.
-# things to annotate: gene name, strand, all exons are NMD in the reference GTF, first/last/only exon in reference or recon. GTF
-
-annotate_matched_entries <- function(list_matched_ref_recon_gtf) {
-  
-  # DEBUG ######
-  
-  # list_matched_ref_recon_gtf <- list_ref_matching_exon_entries[[2]]
-  
-  ##############
-  
-  # gene name
-  matched_gene_names <- NA
-  
-  if (length(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
-    
-    if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
-    
-    matched_gene_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$gene_name %>% unique, collapse = ",")
-    
-    }
-    
-  }
-  
-  # transcript name (recon)
-  matched_recon_transcript_names <- NA
-  
-  
-  if (length(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
-    
-    if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
-    
-    matched_recon_transcript_names <- paste(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$transcript_id %>% unique, collapse = ",")
-    
-    }
-    
-  }
-  
-  return(list("chr" = list_matched_ref_recon_gtf$chr,
-              "start" = list_matched_ref_recon_gtf$start,
-              "end" = list_matched_ref_recon_gtf$end,
-              "strand" = list_matched_ref_recon_gtf$strand,
-              "matched_gene_names" = matched_gene_names,
-              "matched_recon_transcript_names" = matched_recon_transcript_names))
-  
-}
-
-```
-
-```{r}
-
 # FUNCTION TO EXTRACT TRANSCRIPTS WITH JUNCTION-FLANKING EXONS.
 # NOTE: to be used with purrr
 # input: spliceregion_list: a list containing details of ONE junction: $diff_exon_chr, $diff_exon_start, $diff_exon_end
 # tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
 # index: loop progress marker to be used with imap
 
-extract_junction.flanking.exons <- function(spliceregion_list, tibble_gtf_table, index) {
+extract_junction.flanking.exons_psisigma <- function(spliceregion_list, tibble_gtf_table, index) {
   
   # DEBUG ###################
 
@@ -580,33 +599,6 @@ extract_overlapping.exons <- function(spliceregion_list, tibble_gtf_table, index
 
 ```
 
-```{r}
-
-# FUNCTION TO MAKE A FASTA HEADER FROM RESULTS OF MATCHING
-convert_annotation_to_fasta_header <- function(diff.splice.tool_name, transcript.reconstruction.tool_name, identifier, transcript_ids, species_name, gene_id) {
-  
-  # format is like UniProt: >diff.splice.tool_transcript.reconstruction.tool|identifier|ENST.id OS=organism GN=external_gene_name
-# example: >JUM_strawberry|12:1000232-1000250|ENST00000536720.1 OS=Homo sapiens GN=ALKBH2
-
-fasta_header <- paste(">", 
-                      diff.splice.tool_name, 
-                      "_", 
-                      transcript.reconstruction.tool_name, 
-                      "|", 
-                      identifier, 
-                      "|", 
-                      transcript_ids, 
-                      " OS=",
-                      species_name, 
-                      " GN=",
-                      gene_id, sep = "")
-
-return(fasta_header)
-  
-}
-
-```
-
 ## Import reference and reconstructed GTF
 
 ```{r}
@@ -637,9 +629,9 @@ list_ref_matching_exon_entries_IR <- future_imap(.x = tibble_exon_coords_array.t
   "start" = .x$start,
   "end" = .x$end,
   "strand" = .x$strand,
-  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y) %>% bind_rows, 
-  "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_alltimepoints_reconstructed_gtf, .y) %>% bind_rows), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons", "data.table", "tibble", "bind_rows")))
+  "reference_gtf_match" = extract_junction.flanking.exons_psisigma(.x, tibble_ref_gtf, .y) %>% bind_rows, 
+  "reconstructed_gtf_match" = extract_junction.flanking.exons_psisigma(.x, tibble_alltimepoints_reconstructed_gtf, .y) %>% bind_rows), 
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_alltimepoints_reconstructed_gtf", "extract_junction.flanking.exons_psisigma", "data.table", "tibble", "bind_rows")))
 
 list_ref_matching_exon_entries_IR <- future_map(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_matched_entries(.x) %>% as_tibble, .progress = TRUE)
 
@@ -697,7 +689,7 @@ cat("Percentage untranslatable:", length(row.indices_rows_with_non_translatable)
 tibble_ref_matching_exon_entries_all_translatable <- tibble_ref_matching_exon_entries_all[-row.indices_rows_with_non_translatable, ]
 
 # add identifier column
-tibble_ref_matching_exon_entries_all_translatable <- tibble_ref_matching_exon_entries_all_translatable %>% add_column("identifier" = paste("exon_", tibble_ref_matching_exon_entries_all_translatable$chr, ":", tibble_ref_matching_exon_entries_all_translatable$start, "-", tibble_ref_matching_exon_entries_all_translatable$end, ":", as.numeric(paste(tibble_ref_matching_exon_entries_all_translatable$strand, "1", sep = "")), sep = ""))
+tibble_ref_matching_exon_entries_all_translatable <- tibble_ref_matching_exon_entries_all_translatable %>% add_column("identifier" = paste("exon_", tibble_ref_matching_exon_entries_all_translatable$chr, ":", tibble_ref_matching_exon_entries_all_translatable$start, "-", tibble_ref_matching_exon_entries_all_translatable$end, ":", tibble_ref_matching_exon_entries_all_translatable$strand, sep = ""))
 
 # for translatable exons with no match to reference/recon. GTF, use "nomatch" as transcript name
 ## get row indices where both gene name and transcript name is NA
@@ -728,13 +720,13 @@ tibble_exon_coords_matched_with_fasta_header <- tibble_exon_coords_matched %>% a
 ```{r}
 
 # write the final fasta info table
-write.table(tibble_exon_coords_matched_with_fasta_header, file = paste(output_dir, output_file_name_PSI.Sigma, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+write.table(tibble_exon_coords_matched_with_fasta_header, file = paste(output_dir_psisigma, output_file_name_PSI.Sigma, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 # write a test version consisting of 20 rows selected at random
-write.table(tibble_exon_coords_matched_with_fasta_header[sample(1:nrow(tibble_exon_coords_matched_with_fasta_header), 20), ], file = paste(output_dir, output_file_name_PSI.Sigma, ".txt_test", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+write.table(tibble_exon_coords_matched_with_fasta_header[sample(1:nrow(tibble_exon_coords_matched_with_fasta_header), 20), ], file = paste(output_dir_psisigma, output_file_name_PSI.Sigma, ".txt_test", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 # output the discarded entries
-write.table(dplyr::anti_join(tibble_exon_coords, tibble_exon_coords_matched_with_fasta_header), file = paste(output_dir, output_file_name_PSI.Sigma, "_discarded.entries.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+write.table(dplyr::anti_join(tibble_exon_coords, tibble_exon_coords_matched_with_fasta_header), file = paste(output_dir_psisigma, output_file_name_PSI.Sigma, "_discarded.entries.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -744,7 +736,7 @@ write.table(dplyr::anti_join(tibble_exon_coords, tibble_exon_coords_matched_with
 
 exon_bed_table <- tibble_exon_coords_matched_with_fasta_header[, c("chr", "start", "end", "identifier", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name")
 
-# cat(paste("track name=\"Alternative exons\" description=\"", output_file_name_PSI.Sigma, "\" graphType=junctions\n", sep = ""), file = paste(output_dir, output_file_name, ".bed", sep = ""))
-write.table(exon_bed_table, file = paste(output_dir, output_file_name_PSI.Sigma, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
+# cat(paste("track name=\"Alternative exons\" description=\"", output_file_name_PSI.Sigma, "\" graphType=junctions\n", sep = ""), file = paste(output_dir_psisigma, output_file_name, ".bed", sep = ""))
+write.table(exon_bed_table, file = paste(output_dir_psisigma, output_file_name_PSI.Sigma, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
 
 ```

@@ -3,7 +3,7 @@ Accepts an input of a reconstructed/assembled transcriptome annotation (e.g. str
 
 Behaviour: loads reconstructed transcriptome, then subsets each transcript. For each transcript, look-up the reference FASTA sequence and 3FT to find ALL start codons that occur more than 54nt upstream of the last exon-exon junction. Then look for any in-frame stop codons downstream. Transcript is an NMD candidate when the FIRST nucleotide of the stop codon is within 51 - 50nt of the last exon junction (the stop codon is fully encapsulated in the 51nt window).
 
-Recommended system requirements: 32 threads/64GB memory"
+Recommended system requirements: 6 threads/64GB memory"
 
 # print the arguments received by the R script
 cat("Arguments input:", commandArgs(), sep = "\n")
@@ -53,23 +53,12 @@ input_arg_info <- OptionParser(option_list = list_input_arg_info, description = 
 input_args <- input_arg_info %>% parse_args
 
 # check if the input arguments are O.K
-if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_fasta_dir, input_args$output_dir) %>% lapply(is.null) %>% unlist %>% any == TRUE) | 
+if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_fasta_dir, input_args$output_path) %>% lapply(is.null) %>% unlist %>% any == TRUE) | 
     (input_args$chrmode == 2 & is.null(input_args$nonchrname) == TRUE)) {
   
   print_help(input_arg_info)
   
   stop("Make sure you entered the arguments correctly", call. = FALSE)
-  
-}
-
-file_information_path <- input_args$file_information_path
-file_information_table <- read_delim(file_information_path, delim = "\t")
-# CHECK IF THE FILE INFO TABLE PROVIDED CONTAINS ALL THE COLUMNS WE WANT. STOP IF WE DONT SEE ANY OF THE COLNAMES WE WANT TO FIND.
-if (
-  any(str_detect(string = colnames(file_information_table), pattern = c("exon_table_path", "reconstructed_GTF_path", "output_database_name", "splicemode_column_name", "IR_regex_string")) == FALSE)
-) {
-  
-  stop("Error. Please check that the file information table is formatted properly. Use --help command for more info.", call. = FALSE)
   
 }
 
@@ -99,11 +88,9 @@ if(!dir.exists(output_path) ) {
 
 if (input_args$ncores != 0) {
   number_of_workers <- input_args$ncores
-} else {
-  number_of_workers <- future::availableCores()
 } 
 
-cat(future::availableCores(), "cores will be used\n")
+cat(number_of_workers, "cores will be used\n")
 future::plan(multiprocess)
 options(future.globals.maxSize = 30000000000, mc.cores = number_of_workers)
 
@@ -322,7 +309,7 @@ tibble_annotated_recon_gtf <- dplyr::left_join(x = reconstructed_gtf, y = tibble
 tibble_annotated_recon_gtf[which(is.na(tibble_annotated_recon_gtf$NMD_candidate)), "NMD_candidate"] <- FALSE
 
 # write GTF
-rtracklayer::export(object = tibble_annotated_recon_gtf, con = output_path, format = "gtf")
+rtracklayer::export(object = tibble_annotated_recon_gtf, con = file(output_path, raw = TRUE), format = "gtf")
   
 # print stats summary
 

@@ -1,0 +1,81 @@
+---
+title: "Process 2020 phosphoproteomic dataset"
+author: "Angel Liang"
+date: "29/03/2020"
+output: html_document
+---
+
+# Set the running environment
+
+## Packages and directories
+
+```{r}
+
+library(tidyverse)
+# library(gtools)
+# library(extrafont)
+# loadfonts(device="win")
+windowsFonts("Helvetica" = windowsFont("Helvetica"))
+library(RColorBrewer)
+
+library(ggplot2)
+# library(kohonen)
+# library(genefilter)
+# library(gplots)
+# library(lattice)
+# library(svglite)
+# library(scales)
+
+# # library(biomaRt)
+# library(systemPipeR)
+# library(GOstats)
+# library(PFAM.db)
+# library(bc3net)
+# 
+# library(ggdendro)
+library(data.table)
+library(seqinr)
+# library(Rfast)
+
+con_sp.hsa.canonical.isoforms_junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_alltimepoints_con_sp.canonical.isoforms_PC/"
+
+# con_sp.hsa.canonical.isoforms_junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/"
+# sp.hsa.canonical.isoforms_junc.exons
+# junc.exons
+
+# maxquant_junctions.3FT_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_maxquant/run_1_PGNEXUS_OBseries_allsamples_angel.junctions.3FT/txt/"
+
+R_processing_results <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep="")
+
+if(! dir.exists(R_processing_results) ) {
+     dir.create(R_processing_results, recursive = TRUE)}
+
+```
+
+# read the tables into environment
+
+```{r}
+
+list_maxquant_run_dirs <- list("con_sp.hsa.canonical.isoforms_junc.exons_results_dir" = maxquant_sp.canon_sp.isoform_junctions.3FT_results_dir)
+list_output.table_categories <- list("evidence.txt", "msms.txt", "proteinGroups.txt")
+
+list_for_maxquant_table_import <- purrr::cross2(list_maxquant_run_dirs, list_output.table_categories)
+
+list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble)
+
+```
+
+# global processing of tables
+
+```{r}
+
+# at this stage, evidence.txt is in every 1, 2, 3, ... etc... indices
+# msms.txt is 4, 5, 6, ...
+
+vector_evidence.txt_list.indices <- c(1:length(list_maxquant_run_dirs))
+vector_msms.txt_list.indices <- c((length(list_maxquant_run_dirs) + 1):(length(list_maxquant_run_dirs) * 2))
+vector_proteingroups.txt_list.indices <- c((length(list_maxquant_run_dirs) * 2 + 1):(length(list_maxquant_run_dirs) * 3))
+list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles %>% modify_at(.at = vector_evidence.txt_list.indices, 
+                                                                                       .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP))
+
+```

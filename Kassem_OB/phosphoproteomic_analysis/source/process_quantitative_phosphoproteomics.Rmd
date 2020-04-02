@@ -37,18 +37,21 @@ library(data.table)
 library(seqinr)
 # library(Rfast)
 
-con_sp.hsa.canonical.isoforms_junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_alltimepoints_con_sp.canonical.isoforms_PC/"
 
-# con_sp.hsa.canonical.isoforms_junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/"
-# sp.hsa.canonical.isoforms_junc.exons
-# junc.exons
+junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons_katana_differential/txt/"
 
 # maxquant_junctions.3FT_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_maxquant/run_1_PGNEXUS_OBseries_allsamples_angel.junctions.3FT/txt/"
 
-R_processing_results <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep="")
+R_processing_results <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
 
 if(! dir.exists(R_processing_results) ) {
      dir.create(R_processing_results, recursive = TRUE)}
+
+vector_replicate_names <- c("IB", "IB2", "KR")
+
+vector_encoding_names <- c("_1_24", "_30_6")
+
+vector_sample_names <- purrr::cross2(vector_encoding_names, vector_replicate_names) %>% purrr::map(~paste(.x[[2]], .x[[1]], sep = "")) %>% unlist
 
 ```
 
@@ -56,8 +59,8 @@ if(! dir.exists(R_processing_results) ) {
 
 ```{r}
 
-list_maxquant_run_dirs <- list("con_sp.hsa.canonical.isoforms_junc.exons_results_dir" = maxquant_sp.canon_sp.isoform_junctions.3FT_results_dir)
-list_output.table_categories <- list("evidence.txt", "msms.txt", "proteinGroups.txt")
+list_maxquant_run_dirs <- list("junc.exons" = junc.exons_results_dir)
+list_output.table_categories <- list("evidence.txt", "msms.txt", "peptides.txt", "proteinGroups.txt", "Phospho (STY)Sites.txt")
 
 list_for_maxquant_table_import <- purrr::cross2(list_maxquant_run_dirs, list_output.table_categories)
 
@@ -67,15 +70,467 @@ list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import
 
 # global processing of tables
 
+## set the list indices of the .txt file type for each experiment
+
 ```{r}
 
 # at this stage, evidence.txt is in every 1, 2, 3, ... etc... indices
 # msms.txt is 4, 5, 6, ...
 
 vector_evidence.txt_list.indices <- c(1:length(list_maxquant_run_dirs))
+
 vector_msms.txt_list.indices <- c((length(list_maxquant_run_dirs) + 1):(length(list_maxquant_run_dirs) * 2))
-vector_proteingroups.txt_list.indices <- c((length(list_maxquant_run_dirs) * 2 + 1):(length(list_maxquant_run_dirs) * 3))
-list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles %>% modify_at(.at = vector_evidence.txt_list.indices, 
+
+vector_peptides.txt_list.indices <- c((length(list_maxquant_run_dirs) * 2 + 1):(length(list_maxquant_run_dirs) * 3))
+
+vector_proteingroups.txt_list.indices <- c((length(list_maxquant_run_dirs) * 3 + 1):(length(list_maxquant_run_dirs) * 4))
+
+vector_phosphosites.txt_list.indices <- c((length(list_maxquant_run_dirs) * 4 + 1):(length(list_maxquant_run_dirs) * 5))
+
+```
+
+## shuffle tables
+
+```{r}
+
+# remove all peptides which have no MS/MS count from the evidence tables
+list_imported_maxquant_tibbles_processed_temp <- list_imported_maxquant_tibbles %>% modify_at(.at = vector_evidence.txt_list.indices, 
                                                                                        .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP))
+
+# remove all the columns with unnecessary ratio info
+list_imported_maxquant_tibbles_processed_temp <- list_imported_maxquant_tibbles_processed_temp %>% modify_at(.at = c(vector_peptides.txt_list.indices, vector_proteingroups.txt_list.indices, vector_phosphosites.txt_list.indices), .f = function(.x) {
+  
+  .x <- list_imported_maxquant_tibbles_processed_temp[[5]]
+  
+  # remove H/M
+  filtered_table <- .x[, -grep(x = colnames(.x), pattern = "H.M")]
+  
+  filtered_table2 <- filtered_table[, -setdiff(grep(x = colnames(filtered_table), pattern = "Ratio"), grep(x = colnames(filtered_table), pattern = "KR_|IB_|IB2_"))]
+  
+  filtered_table3 <- filtered_table2[, -grep(x = colnames(filtered_table2), pattern = "Ratio.(H.L|M.L).(KR_|IB_|IB2_)")]
+  
+  filtered_table4 <- filtered_table3[, -grep(x = colnames(filtered_table3), pattern = "Occupancy")]
+  
+  return(filtered_table4)
+  
+} )
+
+```
+
+# Data triaging
+
+## boxplots to show the range/distribution of all the intensities for each replicate
+
+```{r}
+
+df <- list_imported_maxquant_tibbles_processed_temp[vector_peptides.txt_list.indices][[1]]
+
+df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_intensity", value.name = "intensity", na.rm = TRUE)
+
+ggplot(df2) +
+  geom_boxplot(aes(x = channel_name_intensity, 
+                y = intensity, 
+                fill = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1"), 
+                colour = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6).*", replacement = "0_\\1"),
+                size = channel_name_intensity)) +
+  geom_text(data = df2 %>% dplyr::filter(., intensity > 0), stat = "count", aes(x = channel_name_intensity, label = ..count..), angle = 90, hjust = 0, position = position_nudge(x = 0, y = 8.3)) +
+  scale_fill_manual(values = alpha(c("gold", "chocolate2", "red4"), 0.5), limits = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, labels = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, name = "Technical Replicate") +
+  scale_colour_manual(values = c("red", "steelblue3"), limits = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6).*", replacement = "0_\\1") %>% unique, labels = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6).*", replacement = "0_\\1") %>% unique, name = "SILAC timepoint encoding") +
+  scale_size_manual(values = rep(1.2, times = length(df2$channel_name_intensity %>% unique))) + 
+  guides(size = FALSE) + 
+  xlab("Channel name") + 
+  ylab("Channel intensity distribution") +
+  ggtitle("Distribution of intensities for each mass channel") +
+  scale_x_discrete(limits = df2$channel_name_intensity %>% unique, breaks = df2$channel_name_intensity %>% unique, labels = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = "(L|M|H).(.*)", replacement = "\\2_\\1") %>% unique) + 
+  scale_y_log10(limits = c(min(df2 %>% dplyr::filter(., intensity > 0) %>% .$intensity), max(df2$intensity) * 1e1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"))
+
+```
+
+## boxplots to show the range/distribution of ratios for each replicate
+
+```{r}
+
+df <- list_imported_maxquant_tibbles_processed_temp[vector_peptides.txt_list.indices][[1]]
+
+df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_ratio", value.name = "ratio", na.rm = TRUE)
+
+ggplot(df2) +
+  geom_boxplot(aes(x = channel_name_ratio, 
+                y = ratio, 
+                 # %>% gsub(x = ., pattern = "___[1-3]", replacement = "")
+                fill = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1"), 
+                colour = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1"),
+                size = channel_name_ratio)) +
+  geom_text(data = df2, stat = "count", aes(x = channel_name_ratio, label = ..count..), angle = 90, hjust = 0, position = position_nudge(x = 0, y = 1)) +
+  scale_fill_manual(values = alpha(c("gold", "chocolate2", "red4"), 0.5), limits = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, name = "Biological Replicate") +
+  scale_colour_manual(values = c(brewer.pal(9, "YlOrRd") %>% rev %>% head(4), brewer.pal(9, "Blues") %>% rev%>% head(4)), limits = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1") %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1") %>% unique, name = "SILAC timepoint encoding
+                      + phosphostate") +
+  scale_size_manual(values = rep(0.5, times = length(df2$channel_name_ratio %>% unique))) + 
+  guides(size = FALSE) + 
+  xlab("Channel name") + 
+  ylab("Channel ratio distribution") +
+  ggtitle("Distribution of ratios for each replicate + phosphostate") +
+  scale_x_discrete(limits = df2$channel_name_ratio %>% unique, breaks = df2$channel_name_ratio %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.(.*).normalized.(.*)", replacement = "\\2_\\1") %>% unique) + 
+  scale_y_continuous(trans = "log10") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"))
+
+
+```
+
+## plot the correlation of mass channels between BIOLOGICAL replicates of the same timepoint
+
+```{r warning=FALSE}
+
+df <- list_imported_maxquant_tibbles_processed_temp[vector_peptides.txt_list.indices][[1]]
+
+df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])]
+
+
+combs <- combn(x = colnames(df2)[grep(x = colnames(df2), pattern = "Intensity")], m = 2) %>% t
+
+combs2 <- combs %>% as_tibble %>% add_column("rep_1_LMH" = gsub(x = combs[, 1] %>% unlist, pattern = "Intensity.(L|M|H).*", replacement = "\\1"), 
+                                             "rep_2_LMH" = gsub(x = combs[, 2] %>% unlist, pattern = "Intensity.(L|M|H).*", replacement = "\\1"), 
+                                             "rep_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = "Intensity.(L|M|H).(IB|IB2|KR)_(.*)", replacement = "\\3"), 
+                                             "rep_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = "Intensity.(L|M|H).(IB|IB2|KR)_(.*)", replacement = "\\3"))
+
+combs2 <- combs2[combs2$rep_1_LMH == combs2$rep_2_LMH &
+                   combs2$rep_1_timepoint == combs2$rep_2_timepoint, ]
+
+list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+  
+  colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Intensity")]
+  
+  pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+  
+  return(pairwise_subset_table)
+  
+})
+
+tibble_pairwise_comparisons_intensity_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
+
+#  %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0)
+ggplot(tibble_pairwise_comparisons_intensity_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") +
+  xlab("Comparison 1 channel intensity") + 
+  ylab("Comparison 2 channel intensity") + 
+  ggtitle("Correlation of mass channel intensities between biological replicates of the same time point") +
+  facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free")
+
+
+# test2 <- reshape2::melt(test, id.vars = colnames(test)[-grep(x = colnames(test), pattern = "Ratio(.*)normalized")], variable.name = "replicate_name_ratio_normalized", value.name = "ratio_normalized", na.rm = TRUE) 
+# 
+# test3 <- reshape2::melt(test2, id.vars = colnames(test2)[-grep(x = colnames(test2), pattern = "Ratio(.*)unmod")], variable.name = "replicate_name_ratio_unmod_peptide", value.name = "ratio_unmod_peptide", na.rm = TRUE)
+# 
+# test2 <- reshape2::melt(test3, id.vars = colnames(test3)[-grep(x = colnames(test3), pattern = "Ratio(.*)localized")], variable.name = "replicate_name_localized", value.name = "localized", na.rm = TRUE)
+# 
+# test3 <- reshape2::melt(test2, id.vars = colnames(test2)[-grep(x = colnames(test2), pattern = "Ratio(.*)variability")], variable.name = "replicate_name_variability", value.name = "variability", na.rm = TRUE)
+# 
+# test2 <- reshape2::melt(test3, id.vars = colnames(test3)[-grep(x = colnames(test3), pattern = "Ratio(.*)[^(iso)].count")], variable.name = "replicate_name_count", value.name = "count", na.rm = TRUE)
+# 
+# test3 <- reshape2::melt(test2, id.vars = colnames(test2)[-grep(x = colnames(test2), pattern = "Ratio(.*)iso.count")], variable.name = "replicate_name_iso.count", value.name = "iso.count", na.rm = TRUE)
+
+```
+
+## plot the correlation of non-normalised ratios for each biological replicate of the same timepoint
+
+```{r warning=FALSE}
+
+df <- list_imported_maxquant_tibbles[vector_peptides.txt_list.indices][[1]]
+
+df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")])]
+
+combs <- combn(x = colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")], m = 2) %>% t
+
+combs2 <- combs %>% as_tibble %>% add_column("comparison_1_ratiotype" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                             "comparison_2_ratiotype" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                             "comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                             "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                             "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"), 
+                                             "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"))
+
+combs2 <- combs2[combs2$comparison_1_ratiotype == combs2$comparison_2_ratiotype &
+                   combs2$comparison_1_replicate != combs2$comparison_2_replicate &
+                   combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
+
+list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+  
+  # DEBUG #####
+  # .x <- combs2[1, 1]
+  # .y <- combs2[1, 2]
+  #############
+    
+  colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio")]
+  
+  pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+  
+  return(pairwise_subset_table)
+  
+})
+
+tibble_pairwise_comparisons_ratio_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
+
+# normal plot
+ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") +
+  # scale_x_continuous(trans = "log2") +
+  # scale_y_continuous(trans = "log2") +
+  xlab("Comparison 1 ratio") + 
+  ylab("Comparison 2 ratio") + 
+  ggtitle("Correlation of ratios (un-normalised) between replicates of the same time point") +
+  facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free")
+
+# log-log plot
+ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") +
+  # scale_x_continuous(trans = "log2") +
+  # scale_y_continuous(trans = "log2") +
+  xlab("Comparison 1 ratio (log2)") + 
+  ylab("Comparison 2 ratio (log2)") + 
+  ggtitle("Correlation of ratios (un-normalised) between replicates of the same time point") +
+  facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free")
+
+```
+
+## plot the correlation of normalised ratios for each biological replicate of the same timepoint
+
+```{r warning=FALSE}
+
+df <- list_imported_maxquant_tibbles_processed_temp[vector_peptides.txt_list.indices][[1]]
+
+df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*_(6|24)$")])]
+
+combs <- combn(x = colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*_(6|24)$")], m = 2) %>% t
+
+combs2 <- combs %>% as_tibble %>% add_column("comparison_1_ratiotype" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                             "comparison_2_ratiotype" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                             "comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                             "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                             "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"), 
+                                             "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"))
+
+combs2 <- combs2[combs2$comparison_1_ratiotype == combs2$comparison_2_ratiotype &
+                   combs2$comparison_1_replicate != combs2$comparison_2_replicate &
+                   combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
+
+list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+  
+  # DEBUG #####
+  # .x <- combs2[1, 1]
+  # .y <- combs2[1, 2]
+  #############
+    
+  colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio")]
+  
+  pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+  
+  return(pairwise_subset_table)
+  
+})
+
+tibble_pairwise_comparisons_ratio_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
+
+ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") +
+  # scale_x_continuous(trans = "log2") +
+  # scale_y_continuous(trans = "log2") +
+  xlab("Comparison 1 ratio (log2)") + 
+  ylab("Comparison 2 ratio (log2)") + 
+  ggtitle("Correlation of mass channel ratios between replicates of the same time point") +
+  facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free")
+
+
+# test2 <- reshape2::melt(test, id.vars = colnames(test)[-grep(x = colnames(test), pattern = "Ratio(.*)normalized")], variable.name = "replicate_name_ratio_normalized", value.name = "ratio_normalized", na.rm = TRUE) 
+# 
+# test3 <- reshape2::melt(test2, id.vars = colnames(test2)[-grep(x = colnames(test2), pattern = "Ratio(.*)unmod")], variable.name = "replicate_name_ratio_unmod_peptide", value.name = "ratio_unmod_peptide", na.rm = TRUE)
+# 
+# test2 <- reshape2::melt(test3, id.vars = colnames(test3)[-grep(x = colnames(test3), pattern = "Ratio(.*)localized")], variable.name = "replicate_name_localized", value.name = "localized", na.rm = TRUE)
+# 
+# test3 <- reshape2::melt(test2, id.vars = colnames(test2)[-grep(x = colnames(test2), pattern = "Ratio(.*)variability")], variable.name = "replicate_name_variability", value.name = "variability", na.rm = TRUE)
+# 
+# test2 <- reshape2::melt(test3, id.vars = colnames(test3)[-grep(x = colnames(test3), pattern = "Ratio(.*)[^(iso)].count")], variable.name = "replicate_name_count", value.name = "count", na.rm = TRUE)
+# 
+# test3 <- reshape2::melt(test2, id.vars = colnames(test2)[-grep(x = colnames(test2), pattern = "Ratio(.*)iso.count")], variable.name = "replicate_name_iso.count", value.name = "iso.count", na.rm = TRUE)
+
+```
+
+## MA plot (log2 ratio/avg intensity) - MQ non-normalised ratios
+
+```{r}
+
+df <- list_imported_maxquant_tibbles[vector_peptides.txt_list.indices][[1]]
+
+# create new columns of average intensities in one step
+list_avg_columns <- purrr::map(.x = vector_sample_names, .f = ~list(
+  "average.Intensity.H.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.H.", .x, sep = "")),
+                                             which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean),
+  "average.Intensity.M.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.M.", .x, sep = "")),
+                                             which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean)
+  ) %>% set_names(c(paste("average.Intensity.H.L.", .x, sep = ""),
+                    paste("average.Intensity.M.L.", .x, sep = ""))))
+
+tibble_avg_columns <- list_avg_columns %>% flatten %>% as_tibble
+
+df2 <- dplyr::bind_cols(df %>% as_tibble, tibble_avg_columns)
+
+# melt the peptide table for a comparison of ratio vs. avg for each ratio taken for each sample.
+## NOTE: the ratios considered here are aggregate phospho ratios, not separated by phospho state.
+df2_norm.ratio.names <- colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")]
+tibble_ratio_and_sample_to_plot <- tibble("ratio_type" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).*", replacement = "\\1"),
+                                          "sample_name" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).(.*)", replacement = "\\2"))
+
+# create list of tables, each pertaining to a single comparison
+list_tibbles_subset_for_MA_comparisons <- purrr::map2(.x = tibble_ratio_and_sample_to_plot$ratio_type, .y = tibble_ratio_and_sample_to_plot$sample_name, 
+                                                      .f = ~df2[, c(colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio|Intensity")], 
+                                                                    paste("average.Intensity.", .x, ".", .y, sep = ""),
+                                                                    paste("Ratio.", .x, ".normalized.", .y, sep = ""))] %>%
+                                                        add_column("comparison_name_ratio" = .x, 
+                                                                   "comparison_name_sample" = .y))
+
+# rename the columns so that we can rbind
+list_tibbles_subset_for_MA_comparisons_renamed <- purrr::map(.x = list_tibbles_subset_for_MA_comparisons, .f = function(.x) {
+  
+  tibble <- .x
+  column_names <- colnames(tibble)
+  
+  # 4th-last name is the avg. intensity.
+  colnames(tibble)[length(column_names) - 3] <- "avg_intensity"
+  # -last name is the normalised ratio
+  colnames(tibble)[length(column_names) - 2] <- "MQ_normalized_ratio"
+  
+  return(tibble)
+  
+} )
+
+# rbind
+long_tibble_MA.plot <- list_tibbles_subset_for_MA_comparisons_renamed %>% rbindlist %>% as_tibble
+
+# ggplot
+ggplot(long_tibble_MA.plot, aes(x = avg_intensity, y = log2(MQ_normalized_ratio))) +
+  geom_point() +
+  geom_smooth(formula = y~x, colour = "red") +
+  xlab("average of log2 intensities") +
+  facet_grid(comparison_name_ratio ~ comparison_name_sample, scales = "free") +
+  ggtitle("MA plot of log non-normalised MQ ratios vs. avg. intensities for phosphopeptide")
+
+
+```
+
+## MA plot (log2 ratio/avg intensity) - MQ normalised ratios
+
+```{r}
+
+df <- list_imported_maxquant_tibbles_processed_temp[vector_peptides.txt_list.indices][[1]]
+
+# create new columns of average intensities in one step
+list_avg_columns <- purrr::map(.x = vector_sample_names, .f = ~list(
+  "average.Intensity.H.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.H.", .x, sep = "")),
+                                             which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean),
+  "average.Intensity.M.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.M.", .x, sep = "")),
+                                             which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean)
+  ) %>% set_names(c(paste("average.Intensity.H.L.", .x, sep = ""),
+                    paste("average.Intensity.M.L.", .x, sep = ""))))
+
+tibble_avg_columns <- list_avg_columns %>% flatten %>% as_tibble
+
+df2 <- dplyr::bind_cols(df %>% as_tibble, tibble_avg_columns)
+
+# melt the peptide table for a comparison of ratio vs. avg for each ratio taken for each sample.
+## NOTE: the ratios considered here are aggregate phospho ratios, not separated by phospho state.
+df2_norm.ratio.names <- colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*(6|24)$")]
+tibble_ratio_and_sample_to_plot <- tibble("ratio_type" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).*", replacement = "\\1"),
+                                          "sample_name" = gsub(x = df2_norm.ratio.names, pattern = ".*normalized.(.*)", replacement = "\\1"))
+
+# create list of tables, each pertaining to a single comparison
+list_tibbles_subset_for_MA_comparisons <- purrr::map2(.x = tibble_ratio_and_sample_to_plot$ratio_type, .y = tibble_ratio_and_sample_to_plot$sample_name, 
+                                                      .f = ~df2[, c(colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio|Intensity")], 
+                                                                    paste("average.Intensity.", .x, ".", .y, sep = ""),
+                                                                    paste("Ratio.", .x, ".normalized.", .y, sep = ""))] %>%
+                                                        add_column("comparison_name_ratio" = .x, 
+                                                                   "comparison_name_sample" = .y))
+
+# rename the columns so that we can rbind
+list_tibbles_subset_for_MA_comparisons_renamed <- purrr::map(.x = list_tibbles_subset_for_MA_comparisons, .f = function(.x) {
+  
+  tibble <- .x
+  column_names <- colnames(tibble)
+  
+  # 4th-last name is the avg. intensity.
+  colnames(tibble)[length(column_names) - 3] <- "avg_intensity"
+  # -last name is the normalised ratio
+  colnames(tibble)[length(column_names) - 2] <- "MQ_normalized_ratio"
+  
+  return(tibble)
+  
+} )
+
+# rbind
+long_tibble_MA.plot <- list_tibbles_subset_for_MA_comparisons_renamed %>% rbindlist %>% as_tibble
+
+# ggplot
+ggplot(long_tibble_MA.plot, aes(x = avg_intensity, y = log2(MQ_normalized_ratio))) +
+  geom_point() +
+  geom_smooth(formula = y~x, colour = "red") +
+  xlab("average of log2 intensities") +
+  facet_grid(comparison_name_ratio ~ comparison_name_sample, scales = "free") +
+  ggtitle("MA plot of log normalised MQ ratios vs. avg. intensities for phosphopeptide")
+
+
+```
+
+## compare the phospho and non-phosphopeptide frequency distributions
+
+```{r}
+
+df <- list_imported_maxquant_tibbles_processed_temp[vector_peptides.txt_list.indices][[1]]
+
+
+```
+
+
+## plot the PEP and score distributions of CON, SP and 3FT identified peptides
+
+### rearrange the msms.txt tables for ggplot
+
+```{r}
+
+# subset msms tables
+list_msms_tibbles <- list_imported_maxquant_tibbles_processed[vector_msms.txt_list.indices]
+
+# append database run columns then peptide class
+list_dbrun.info <- names(list_maxquant_run_dirs)
+
+# function to create peptide class column
+peptide_class_column <- function(msms_tibble) {
+  
+  col <- rep(NA, times = nrow(msms_tibble))
+  
+  # record the columns of contaminants, reverse sequences, swissprot matches, junction and exon matches.
+  cons <- grep(x = msms_tibble$Proteins, pattern = "(^CON_|;CON_)", ignore.case = FALSE)
+  revs <- which(msms_tibble$Reverse == "+")
+  sps <- grep(x = msms_tibble$Proteins, pattern = "(^[A-Z][0-9].*|;[A-Z][0-9].*)", ignore.case = FALSE)
+  junctions <- grep(x = msms_tibble$Proteins, pattern = "junction_.*", ignore.case = FALSE)
+  exons <- grep(x = msms_tibble$Proteins, pattern = "exon_.*", ignore.case = FALSE)
+  
+  col[cons] <- "contaminants"
+  col[revs] <- "reversed_sequences"
+  col[sps] <- "swissprot_hits"
+  col[junctions] <- "junction_3FT_hits"
+  col[exons] <- "exon_3FT_hits"
+  
+  return(col)
+  
+}
+
+list_msms_tibbles <- purrr::map2(.x = list_msms_tibbles, .y = list_dbrun.info, .f = ~add_column(.x, "dbrun" = .y) %>% add_column("peptide_class" = peptide_class_column(.x)))
+
+# melt into long tables for ggplot faceting by peptide class and database run
+long_tibble_evidence_tibbles_facet.peptideclass.dbrun <- list_msms_tibbles %>% rbindlist(fill = TRUE) %>% as_tibble
 
 ```

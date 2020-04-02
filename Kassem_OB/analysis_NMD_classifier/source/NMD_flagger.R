@@ -37,8 +37,8 @@ list_input_arg_info = list(
   "2" = make_option(c("-F", "--reference_genome_fasta_dir"), type = "character", default = NULL, 
                     help = "Compulsory. path to the directory containing the genome FASTA files. Ideally from Ensembl... you need separate files by chromosomes, NOT the primary assembly. 
               FORMATTING IMPORTANT!!!! MAKE SURE THE REF. GENOME FASTA FILES ARE IN THE FORMAT: <_anything_><chr>.fa e.g. \"Homo_sapiens.GRCh38.dna.chromosome.MT.fa\" OR \"chr16.fa\" OR \"Y.fa\". What will not work: anything which does not have .fa extension e.g. \"chr16.fasta\", anything between the chromosome number and the .fa extension e.g. \"chromosome1.ensembl.fa\"", metavar = "character"),
-  "3" = make_option(c("-O", "--output_path"), type = "character", default = NULL, 
-                    help = "Compulsory. output file path. what do you want to save the newly annotated reconstructed GTF as? IMPORTANT: MUST BE A FULL FILE PATH AND NOT A DIRECTORY. e.g. correct: ~/outputdir/annotated_sample.gtf incorrect: ~/outputdir/", metavar = "character"),
+  "3" = make_option(c("-O", "--output_name"), type = "character", default = NULL, 
+                    help = "Compulsory. output file path. what do you want to save the newly annotated reconstructed GTF as? IMPORTANT: MUST BE A FULL FILE PATH WITHOUT THE EXTENSION AND NOT A DIRECTORY. THE .GTF EXTENSION WILL AUTOMATICALLY BE ADDED FOR THE OUTPUT FILE. e.g. correct: ~/outputdir/annotated_sample incorrect: ~/outputdir/ incorrect: /outputdir/annotated_sample.gtf", metavar = "character"),
   "4" = make_option(c("-C", "--ncores"), type = "integer", default = 0, 
                     help = "Optional. Number of cores to use. possible inputs: numbers 1 to any integer. By default, uses all cores (ncores = 0).", metavar = "integer"),
   "5" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
@@ -53,7 +53,7 @@ input_arg_info <- OptionParser(option_list = list_input_arg_info, description = 
 input_args <- input_arg_info %>% parse_args
 
 # check if the input arguments are O.K
-if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_fasta_dir, input_args$output_path) %>% lapply(is.null) %>% unlist %>% any == TRUE) | 
+if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_fasta_dir, input_args$output_name) %>% lapply(is.null) %>% unlist %>% any == TRUE) | 
     (input_args$chrmode == 2 & is.null(input_args$nonchrname) == TRUE)) {
   
   print_help(input_arg_info)
@@ -66,23 +66,23 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
 
 # reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
 # reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-# output_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMDflagged.gtf"
+# output_name <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMDflagged"
 # window_size <- 51
 
 ###############
 
 reconstructed_gtf_path <- input_args$reconstructed_transcript_gtf
 reference_genome_fasta_dir <- input_args$reference_genome_fasta_dir
-output_path <- input_args$output_path
+output_name <- input_args$output_name
 window_size <- input_args$checking_window_size
 
 cat("reconstructed_gtf_path:", reconstructed_gtf_path, "\n")
 cat("reference_genome_fasta_dir:", reference_genome_fasta_dir, "\n")
-cat("output_path:", output_path, "\n")
+cat("output_name:", output_name, "\n")
 cat("window_size:", window_size, "\n")
 
-if(!dir.exists(output_path) ) {
-  dir.create(output_path, recursive = TRUE)}
+if(!dir.exists(output_name) ) {
+  dir.create(output_name, recursive = TRUE)}
 
 # manage parrallellisation rrlllRll
 
@@ -134,7 +134,7 @@ test_for_any_valid_ORF <- function(vector_AA_sequence) {
 
 # BEGIN EXECUTION ###########################
 
-cat("import reconstructed transcriptome GTF")
+cat("import reconstructed transcriptome GTF\n")
 reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
 vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(reference_genome_fasta_dir)[list.files(reference_genome_fasta_dir) %>% grep(., pattern = ".*.fa$")], sep = "")
@@ -157,7 +157,7 @@ if (input_args$chrmode == 1) {
 }
 
 # begin looping thru each chromosome #####
-for (chr in chr_to_run) {
+for (chr in 1) {
   
   # start counting
   tictoc::tic(paste("Chromosome", chr))
@@ -308,9 +308,15 @@ tibble_annotated_recon_gtf <- dplyr::left_join(x = reconstructed_gtf, y = tibble
 # turn NA in the NMD column to FALSE
 tibble_annotated_recon_gtf[which(is.na(tibble_annotated_recon_gtf$NMD_candidate)), "NMD_candidate"] <- FALSE
 
+# output_dir <- gsub(x = output_name, pattern = "(.*/)(.*)$", replacement = "\\1")
+# output_name <- gsub(x = output_name, pattern = "(.*/)(.*)$", replacement = "\\2")
+# 
+# # set working directory to prevent screw-up
+# setwd(output_dir)
+
 # write GTF
-rtracklayer::export(object = tibble_annotated_recon_gtf, con = file(output_path, raw = TRUE), format = "gtf")
-  
+rtracklayer::export(tibble_annotated_recon_gtf, con = paste(output_name, ".gtf", sep = ""), format = "gtf")
+
 # print stats summary
 
 cat("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique), "\n")

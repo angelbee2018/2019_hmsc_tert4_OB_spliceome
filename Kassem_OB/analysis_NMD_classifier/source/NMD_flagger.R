@@ -6,11 +6,11 @@ Behaviour: loads reconstructed transcriptome, then subsets each transcript. For 
 Recommended system requirements: 6 threads/64GB memory"
 
 # print the arguments received by the R script
-cat("Arguments input:", commandArgs(), sep = "\n")
+message("Arguments input:", commandArgs(), sep = "")
 args = 
   commandArgs(trailingOnly = TRUE)
-cat(args)
-cat("number of arguments specified:", length(args))
+message(args)
+message("number of arguments specified:", length(args))
 
 # SET ENVIRONMENT ##########
 #if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -76,10 +76,10 @@ reference_genome_fasta_dir <- input_args$reference_genome_fasta_dir
 output_name <- input_args$output_name
 window_size <- input_args$checking_window_size
 
-cat("reconstructed_gtf_path:", reconstructed_gtf_path, "\n")
-cat("reference_genome_fasta_dir:", reference_genome_fasta_dir, "\n")
-cat("output_name:", output_name, "\n")
-cat("window_size:", window_size, "\n")
+message("reconstructed_gtf_path:", reconstructed_gtf_path)
+message("reference_genome_fasta_dir:", reference_genome_fasta_dir)
+message("output_name:", output_name)
+message("window_size:", window_size)
 
 if(!dir.exists(output_name) ) {
   dir.create(output_name, recursive = TRUE)}
@@ -90,7 +90,7 @@ if (input_args$ncores != 0) {
   number_of_workers <- input_args$ncores
 } 
 
-cat(number_of_workers, "cores will be used\n")
+message(number_of_workers, "cores will be used")
 future::plan(multiprocess)
 options(future.globals.maxSize = 30000000000, mc.cores = number_of_workers)
 
@@ -134,7 +134,7 @@ test_for_any_valid_ORF <- function(vector_AA_sequence) {
 
 # BEGIN EXECUTION ###########################
 
-cat("import reconstructed transcriptome GTF\n")
+message("import reconstructed transcriptome GTF")
 reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
 vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(reference_genome_fasta_dir)[list.files(reference_genome_fasta_dir) %>% grep(., pattern = ".*.fa$")], sep = "")
@@ -162,9 +162,9 @@ for (chr in 1) {
   # start counting
   tictoc::tic(paste("Chromosome", chr))
   
-  cat("now running chromosome ...", chr, "\n")
+  message("now running chromosome ...", chr)
   
-  cat("get positions of the vector where the path of the ref. genome fasta\n")
+  message("get positions of the vector where the path of the ref. genome fasta")
   vector_ref_genome_paths_by_chr_position <- grep(x = vector_ref_genome_paths_by_chr, pattern = paste("(\\D|^)", chr, ".fa$", sep = ""))
   
   if (length(vector_ref_genome_paths_by_chr_position) != 1) {
@@ -173,12 +173,12 @@ for (chr in 1) {
     
   }
   
-  cat("temporary allocation to ref genome fasta list\n")
+  message("temporary allocation to ref genome fasta list")
   reference_genome_fasta_chr_temp <- seqinr::read.fasta(file = paste(vector_ref_genome_paths_by_chr[vector_ref_genome_paths_by_chr_position]), forceDNAtolower = FALSE)
   
   reconstructed_gtf_tempchr <- reconstructed_gtf[reconstructed_gtf$seqnames == chr, ]
   
-  cat("subset reconstructed transcriptome GTF by filtering for exon entries only.\n")
+  message("subset reconstructed transcriptome GTF by filtering for exon entries only.")
   row_indices_recon.gtf_exon.entries.only <- which(reconstructed_gtf_tempchr$type == "exon")
   reconstructed_gtf_exon.entries.only <- reconstructed_gtf_tempchr[row_indices_recon.gtf_exon.entries.only, ]
   
@@ -188,15 +188,15 @@ for (chr in 1) {
   # generate list of all 'transcript_id's to loop thru
   list_transcript_ids <- reconstructed_gtf_tempchr$transcript_id %>% unique %>% array_tree
   
-  cat("load the exon entries of the recon. GTF table into the list\n")
+  message("load the exon entries of the recon. GTF table into the list")
   list_reconstructed_gtf_exon.entries.only_by_transcript_id <- future_map(.x = list_transcript_ids, .f = ~reconstructed_gtf_exon.entries.only[reconstructed_gtf_exon.entries.only$transcript_id == .x, ], .progress = TRUE, .options = future_options(globals = c("reconstructed_gtf_exon.entries.only"))) %>% set_names(reconstructed_gtf_tempchr$transcript_id %>% unique)
   
   # filter out transcript entries which only have one exon
   list_reconstructed_gtf_exon.entries.only_by_transcript_id <- purrr::discard(.x = list_reconstructed_gtf_exon.entries.only_by_transcript_id, .p = ~length(.x$exon_number) < 2)
   
-  cat("generate attributes of each transcript:
+  message("generate attributes of each transcript:
       1. all genome-relative forward coords of each nucleotide,
-      2. coords of the nucleotides flanking last exon-exon junction\n")
+      2. coords of the nucleotides flanking last exon-exon junction")
   list_transcript_attributes <- future_map(.x = list_reconstructed_gtf_exon.entries.only_by_transcript_id, 
                                            .f = ~list(
                                              "recon_entries" = .x,
@@ -218,11 +218,11 @@ for (chr in 1) {
                                            
   )
   
-  cat("generate all the forward nucleotides of each transcript\n")
+  message("generate all the forward nucleotides of each transcript")
   # also get the TRANSCRIPT RELATIVE position of the junction  (transcript-relative coord will be a half-integer value)
   list_transcript_fwd_nts <- future_imap(.x = list_transcript_attributes, .f = function(.x, .y) {
     
-    # cat("now looking up nucleotides of transcript number", which(names(list_transcript_attributes) == .y), "/", length(list_transcript_attributes), "\n")
+    # message("now looking up nucleotides of transcript number", which(names(list_transcript_attributes) == .y), "/", length(list_transcript_attributes))
     
     updated_list <- purrr::splice(.x,
                                   
@@ -237,10 +237,10 @@ for (chr in 1) {
     
   }, .progress = TRUE)
   
-  cat("do 3FT based on the forward nucleotides of each transcript and test for whether there is any valid ORF.\n")
+  message("do 3FT based on the forward nucleotides of each transcript and test for whether there is any valid ORF.")
   list_transcript_3FT <- future_imap(.x = list_transcript_fwd_nts, .f = function(.x, .y) {
     
-    cat("now checking 3FT of transcript number", which(names(list_transcript_fwd_nts) == .y), "/", length(list_transcript_fwd_nts), "\n")
+    message("now checking 3FT of transcript number", which(names(list_transcript_fwd_nts) == .y), "/", length(list_transcript_fwd_nts))
     
     # for simplicity, we exclude the last exon + 51 nt window from the nt sequence
     # hence get the effective fwd. nucleotide sequence:
@@ -319,9 +319,9 @@ rtracklayer::export(tibble_annotated_recon_gtf, con = paste(output_name, ".gtf",
 
 # print stats summary
 
-cat("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique), "\n")
-cat("number of transcripts which were in the GTF:", length(reconstructed_gtf$transcript_id %>% unique), "\n")
-cat("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(reconstructed_gtf$transcript_id %>% unique))) * 100, "%\n")
+message("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique))
+message("number of transcripts which were in the GTF:", length(reconstructed_gtf$transcript_id %>% unique))
+message("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(reconstructed_gtf$transcript_id %>% unique))) * 100, "%")
 
 # finish counting
 tictoc::toc()

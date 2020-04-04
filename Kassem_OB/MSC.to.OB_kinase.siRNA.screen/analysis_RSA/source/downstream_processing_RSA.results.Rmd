@@ -1,0 +1,319 @@
+---
+title: "Downstream processing of RSA results"
+author: "Angel Liang"
+date: "12/02/2020"
+output: html_document
+---
+
+Summary: We first to data triaging of the agreement of RSA between screens, as well as between RSA and 
+
+# Set Environment
+
+## directories
+
+```{r}
+
+RSA_results_dir <- "Y:/MSC.to.OB_kinase.siRNA.screen/analysis_RSA/results/"
+
+processing_results_dir <- "Y:/MSC.to.OB_kinase.siRNA.screen/analysis_RSA/results/R_processing/"
+
+CRISPR_gene_essentiality_table_path <- "Y:/MSC.to.OB_kinase.siRNA.screen/gene_essentiality/2017_hart_17crispr_essentiality_QN.txt"
+
+```
+
+## packages
+
+```{r}
+
+library(data.table)
+library(tidyverse)
+library(reshape2)
+
+library(ggplot2)
+library(RColorBrewer)
+library(plotly)
+
+library(biomaRt)
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 99)
+
+library(extrafont)
+loadfonts(device="win")
+windowsFonts("Helvetica" = windowsFont("Helvetica"))
+
+```
+
+# Import RSA result tables
+
+```{r}
+
+# create combinations of screen 1/2/both and pos/neg regs
+list_screen_posneg <- purrr::cross2(list("screen.1", "screen.2", "both.screens"), list("posregs", "negregs"))
+
+list_RSA_result_tibbles <- purrr::map(.x = list_screen_posneg, .f = ~read.delim(paste(RSA_results_dir, "RSA.result_", .x[[1]], "_", .x[[2]], ".csv", sep = ""), sep = ",", stringsAsFactors = FALSE, row.names = NULL) %>% as_tibble)
+
+```
+
+# Import gene essentiality table
+
+```{r}
+
+tibble_gene_essentiality <- read.delim(CRISPR_gene_essentiality_table_path, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+# remove unnecessary rows
+tibble_gene_essentiality_simplified <- tibble_gene_essentiality[, c("ENSG_id", "avg_importance")] %>% setNames(c("ensembl_gene_id", "CRISPR_essentiality"))
+
+```
+
+# Data triaging
+
+## append gene essentiality info
+
+```{r}
+
+list_RSA_result_tibbles_2 <- purrr::map(.x = list_RSA_result_tibbles, .f = ~dplyr::left_join(.x, tibble_gene_essentiality_simplified, by = "ensembl_gene_id"))
+
+```
+
+## change the OPI_Hit columns to -1 for neg regs.
+
+```{r}
+
+list_RSA_result_tibbles_2[1:3] <- purrr::map(.x = list_RSA_result_tibbles_2[1:3], .f = ~add_column(.x, "pos_or_neg_hit" = .x$OPI_Hit))
+
+list_RSA_result_tibbles_2[4:6] <- purrr::map(.x = list_RSA_result_tibbles_2[4:6], .f = ~add_column(.x, "pos_or_neg_hit" = -.x$OPI_Hit))
+
+```
+
+## add columns for screens and pos/neg regs, add rank
+
+```{r}
+
+list_RSA_result_tibbles_3 <- purrr::map2(.x = list_RSA_result_tibbles_2, .y = list_screen_posneg, .f = ~add_column(.x, "screen" = .y[[1]], "pos_or_neg" = .y[[2]], "well_rank" = nrow(.x) - rank(.x$normalised_ALP_score %>% as.numeric, ties.method = "first") + 1))
+
+```
+
+## create a long summary tibble of all the RSA result tables
+
+```{r}
+
+long_tibble_all_RSA_results <- list_RSA_result_tibbles_3 %>% rbindlist %>% as_tibble %>% arrange(desc(LogP))
+
+```
+
+## plot the normalised ALP score against the rank per well
+
+```{r}
+
+ggplot(data = long_tibble_all_RSA_results) +
+  facet_grid(pos_or_neg ~ screen, scales = "free") +
+  geom_point(mapping = aes(y = normalised_ALP_score, x = well_rank, colour = LogP), shape = 1, size = 4) +
+  scale_colour_gradientn(colors = c("red", "red", "black", "black"),
+                 values = c(0, 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))) - 0.001, 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), 1), na.value = "green") +
+  # scale_alpha_continuous(breaks = c(-1.301, -1.3, 0),
+  #                values = c(1, 0.5, 0.5)) +
+  ggtitle("Quality plot of p-value against normalised ALP score per gene/well") +
+  ylab("Fold change in ALP activity 
+       (higher score indicates more differentiation caused by knockdown)") +
+  xlab("Ranking of well ALP score
+       (higher ALP scores have lower ranks)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_normalised.ALP.score_vs_rank.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_normalised.ALP.score_vs_rank.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm") 
+
+```
+
+
+## graph the p value vs. normalised ALP score
+
+```{r}
+
+ggplot(data = long_tibble_all_RSA_results) +
+  facet_grid(pos_or_neg ~ screen, scales = "free") +
+  geom_point(mapping = aes(y = LogP, x = normalised_ALP_score, colour = CRISPR_essentiality), shape = 20, size = 4, alpha = 0.5) +
+  scale_colour_gradientn(colors = c(brewer.pal(20, "RdYlBu") %>% rev),
+                 values = c(seq(0, 1, length.out = 20)), na.value = "grey50") +
+  geom_abline(intercept = -1.301, slope = 0, colour = "black", linetype = "dashed") +
+  ggtitle("Quality plot of p-value against normalised ALP score per gene/well") +
+  ylab(expression(log["10"](P))) +
+  xlab("Fold change in ALP activity 
+       (higher score indicates more differentiation caused by knockdown)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_pvalue_vs_normalised.ALP.score.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_pvalue_vs_normalised.ALP.score.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm") 
+
+```
+
+## graph the p-value against the activity ranks
+
+```{r}
+
+# screen 1 ranks
+
+quality.plot_pvalue_vs_ALP.score.rank_screen.1 <- ggplot(data = long_tibble_all_RSA_results) +
+  facet_grid(pos_or_neg ~ screen, scales = "free") +
+  geom_point(mapping = aes(y = LogP, x = screen_1_rank, colour = LogP), shape = 20, size = 4, alpha = 0.5) +
+  scale_colour_gradientn(colors = c(heat.colors(20), "grey", "grey"),
+                 values = c(seq(0, 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), length.out = 20), 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), 1), na.value = "green") +
+  scale_alpha_continuous(breaks = c(-10, 0, 20), range = c(1, 0)) +
+  scale_size_continuous(breaks = c(-10, 0, 20), range = c(5, 0.1)) +
+  ggtitle("Quality plot of p-value against rank of ALP score (screen 1) per gene") +
+  ylab(expression(log["10"](P))) +
+  xlab("ALP activity rank
+       (lower rank indicates more differentiation caused by knockdown)") +
+  theme_bw()
+
+quality.plot_pvalue_vs_ALP.score.rank_screen.1 +
+  theme(axis.text.x = element_text(hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_pvalue_vs_ALP.score.rank_screen.1.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_pvalue_vs_ALP.score.rank_screen.1.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+
+ggplotly_quality.plot_pvalue_vs_ALP.score.rank_screen.1 <- ggplotly(quality.plot_pvalue_vs_ALP.score.rank_screen.1)
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_quality.plot_pvalue_vs_ALP.score.rank_screen.1, paste(processing_results_dir, "quality.plot_pvalue_vs_ALP.score.rank_screen.1.html", sep = ""))
+
+```
+
+```{r}
+
+# screen 2 ranks
+
+quality.plot_pvalue_vs_ALP.score.rank_screen.2 <- ggplot(data = long_tibble_all_RSA_results) +
+  facet_grid(pos_or_neg ~ screen, scales = "free") +
+  geom_point(mapping = aes(y = LogP, x = screen_2_rank, colour = LogP), shape = 20, size = 4, alpha = 0.5) +
+  scale_colour_gradientn(colors = c(heat.colors(20), "grey", "grey"),
+                 values = c(seq(0, 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), length.out = 20), 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), 1), na.value = "green") +
+  scale_alpha_continuous(breaks = c(-10, 0, 20), range = c(1, 0)) +
+  scale_size_continuous(breaks = c(-10, 0, 20), range = c(5, 0.1)) +
+  ggtitle("Quality plot of p-value against rank of ALP score (screen 2) per gene") +
+  ylab(expression(log["10"](P))) +
+  xlab("ALP activity rank
+       (lower rank indicates more differentiation caused by knockdown)") +
+  theme_bw()
+
+quality.plot_pvalue_vs_ALP.score.rank_screen.2 +
+  theme(axis.text.x = element_text(hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_pvalue_vs_ALP.score.rank_screen.2.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_pvalue_vs_ALP.score.rank_screen.2.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+
+ggplotly_quality.plot_pvalue_vs_ALP.score.rank_screen.2 <- ggplotly(quality.plot_pvalue_vs_ALP.score.rank_screen.2)
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_quality.plot_pvalue_vs_ALP.score.rank_screen.2, paste(processing_results_dir, "quality.plot_pvalue_vs_ALP.score.rank_screen.2.html", sep = ""))
+
+```
+
+## graph the normalised ALP score against the gene essentiality ranks
+
+```{r}
+
+####### screen 1 normalised ALP scores
+
+quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality <- ggplot(data = long_tibble_all_RSA_results) +
+  facet_grid(pos_or_neg ~ screen, scales = "free") +
+  geom_point(mapping = aes(y = avg_screen_1, x = CRISPR_essentiality, colour = LogP), shape = 20, size = 4, alpha = 0.5) +
+  scale_colour_gradientn(colors = c(heat.colors(20), "grey", "grey"),
+                 values = c(seq(0, 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), length.out = 20), 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), 1), na.value = "green") +
+  ggtitle("Quality plot of ALP score (screen 1) per gene against gene essentiality") +
+  ylab("Fold change in ALP activity (screen 1)
+       (higher score indicates more differentiation caused by knockdown)") +
+  xlab("CRISPR gene essentiality (Hart et. al., 2017)
+       (higher score indicates higher essentiality)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family="Helvetica"))
+
+quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+
+ggplotly_quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality <- ggplotly(quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality)
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality, paste(processing_results_dir, "quality.plot_screen.1_normalised.ALP.score_vs_CRISPR.gene.essentiality.html", sep = ""))
+
+```
+
+```{r}
+
+###### screen 2 normalised ALP scores
+
+quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality <- ggplot(data = long_tibble_all_RSA_results) +
+  facet_grid(pos_or_neg ~ screen, scales = "free") +
+  geom_point(mapping = aes(y = avg_screen_2, x = CRISPR_essentiality, colour = LogP), shape = 20, size = 4, alpha = 0.5) +
+  scale_colour_gradientn(colors = c(heat.colors(20), "grey", "grey"),
+                 values = c(seq(0, 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), length.out = 20), 1-(1.3/diff(range(long_tibble_all_RSA_results$LogP))), 1), na.value = "green") +
+  ggtitle("Quality plot of ALP score (screen 2) per gene against gene essentiality") +
+  ylab("Fold change in ALP activity (screen 2)
+       (higher score indicates more differentiation caused by knockdown)") +
+  xlab("CRISPR gene essentiality (Hart et. al., 2017)
+       (higher score indicates higher essentiality)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family="Helvetica"))
+
+quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(processing_results_dir, "quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+
+ggplotly_quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality <- ggplotly(quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality)
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality, paste(processing_results_dir, "quality.plot_screen.2_normalised.ALP.score_vs_CRISPR.gene.essentiality.html", sep = ""))
+
+```
+
+## henceforth, create a subsetted results summary per gene
+
+```{r}
+
+list_RSA_result_tibbles_subset.by.gene <- purrr::map(.x = list_RSA_result_tibbles_3, .f = ~.x %>% dplyr::select("Gene", "ensembl_gene_id", "avg_screen_1", "stdev_screen_1", "avg_screen_2", "stdev_screen_2", "screen_1_rank", "screen_2_rank", "LogP", "CRISPR_essentiality", "screen", "pos_or_neg") %>% unique)
+
+list_RSA_result_wide_tibbles_summary <- purrr::map(.x = list_RSA_result_tibbles_subset.by.gene, .f = ~reshape2::dcast(.x, formula = Gene + ensembl_gene_id + avg_screen_1 + stdev_screen_1 + avg_screen_2 + stdev_screen_2 + screen_1_rank + screen_2_rank + CRISPR_essentiality ~ "logP" + pos_or_neg + screen, value.var = "LogP") %>% as_tibble)
+wide_tibble_RSA.results.summary <- list_RSA_result_wide_tibbles_summary %>% purrr::reduce(full_join)
+write.table(wide_tibble_RSA.results.summary, paste(processing_results_dir, "RSA_results_summary.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+```
+
+## plot the p-value of screen 1 vs. screen 2
+
+### preprocessing, create tables of pairwise comparison
+
+```{r}
+
+list_RSA_result_tibbles_screen.comparison_1 <- list_RSA_result_tibbles_subset.by.gene[-c(3, 6)]
+
+list_RSA_result_tibbles_screen.comparison_2 <- purrr::map(.x = list_RSA_result_tibbles_screen.comparison_1, .f = ~reshape2::dcast(.x, formula = Gene + ensembl_gene_id + avg_screen_1 + stdev_screen_1 + avg_screen_2 + stdev_screen_2 + screen_1_rank + screen_2_rank + CRISPR_essentiality + pos_or_neg ~ "logP" + screen, value.var = "LogP") %>% as_tibble)
+
+list_RSA_result_tibbles_screen.comparison_3 <- list(dplyr::full_join(list_RSA_result_tibbles_screen.comparison_2[[1]], list_RSA_result_tibbles_screen.comparison_2[[2]]),
+                                                    dplyr::full_join(list_RSA_result_tibbles_screen.comparison_2[[3]], list_RSA_result_tibbles_screen.comparison_2[[4]]))
+
+long_tibble_RSA_result_tibbles_screen.comparison <- list_RSA_result_tibbles_screen.comparison_3 %>% rbindlist %>% as_tibble
+
+```
+
+### GGPLOT
+
+```{r}
+
+ggplot(data = long_tibble_RSA_result_tibbles_screen.comparison) +
+  facet_grid(~pos_or_neg, scales = "free") +
+  geom_point(aes(y = logP_screen.2, x = logP_screen.1, colour = CRISPR_essentiality), shape = 20, size = 3) +
+  geom_abline(intercept = 0, slope = 1, colour = "black", linetype = "dashed") +
+  geom_smooth(aes(y = logP_screen.2, x = logP_screen.1), method = "lm", formula = y~x, colour = "blue") +
+  scale_colour_gradientn(colors = heat.colors(20),
+                 values = seq(0, 1, length.out = 20), na.value = "green") +
+  ggtitle("Correlation plot of P-values: screen 2 vs. screen 1") +
+  ylab(expression(log["10"](P)~"(Screen 2)")) +
+  xlab(expression(log["10"](P)~"(Screen 1)")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(processing_results_dir, "correlation.plot_pvalues_screen.2_vs_screen.1.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
+ ggsave(filename = paste(processing_results_dir, "correlation.plot_pvalues_screen.2_vs_screen.1.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm") 
+
+```
+

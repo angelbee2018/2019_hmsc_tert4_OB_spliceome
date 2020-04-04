@@ -1,0 +1,26 @@
+RSA_dir="/media/Ubuntu/sharedfolder/konig_RSA_1.9/"
+input_files_dir="/media/sbi/4tb_ironwolf/MSC.to.OB_kinase.siRNA.screen/analysis_RSA/input_files/"
+results_dir="/media/sbi/4tb_ironwolf/MSC.to.OB_kinase.siRNA.screen/analysis_RSA/results/"
+
+# run RSA for each screen separately
+
+## screen 1
+
+# -r: reverse hit picking, the higher the score the better (significant enhancement of OB diff, putative negative regulators)
+# if -r flag is off, the lower the score the better (significant inhibition of OB diff, putative positive regulators)
+
+perl $RSA_dir"RSA.pl" -g Gene -w well_ID -s normalised_ALP_score -l 0 -u 4 -f PC -o $results_dir"RSA.result_screen.1_posregs.csv" $input_files_dir"normalised_mainscreen.matrix_for_RSA_screen.1.csv"
+
+perl $RSA_dir"RSA.pl" -r -g Gene -w well_ID -s normalised_ALP_score -l 0 -u 4 -f PC -o $results_dir"RSA.result_screen.1_negregs.csv" $input_files_dir"normalised_mainscreen.matrix_for_RSA_screen.1.csv"
+
+## screen 2
+
+perl $RSA_dir"RSA.pl" -g Gene -w well_ID -s normalised_ALP_score -l 0 -u 4 -f PC -o $results_dir"RSA.result_screen.2_posregs.csv" $input_files_dir"normalised_mainscreen.matrix_for_RSA_screen.2.csv"
+
+perl $RSA_dir"RSA.pl" -r -g Gene -w well_ID -s normalised_ALP_score -l 0 -u 4 -f PC -o $results_dir"RSA.result_screen.2_negregs.csv" $input_files_dir"normalised_mainscreen.matrix_for_RSA_screen.2.csv"
+
+## combined both screens
+
+perl $RSA_dir"RSA.pl" -g Gene -w well_ID -s normalised_ALP_score -l 0 -u 4 -f PC -o $results_dir"RSA.result_both.screens_posregs.csv" $input_files_dir"normalised_mainscreen.matrix_for_RSA_both.screens.csv"
+
+perl $RSA_dir"RSA.pl" -r -g Gene -w well_ID -s normalised_ALP_score -l 0 -u 4 -f PC -o $results_dir"RSA.result_both.screens_negregs.csv" $input_files_dir"normalised_mainscreen.matrix_for_RSA_both.screens.csv"

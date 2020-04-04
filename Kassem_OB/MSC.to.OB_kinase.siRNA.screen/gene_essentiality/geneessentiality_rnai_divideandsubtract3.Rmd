@@ -1,0 +1,649 @@
+---
+title: "Gene Importance (RNAi)"
+author: "CL"
+date: "July 5, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## The Plan
+
+I am going to separate the RNAi values into two dimensions by plotting ALP activity against gene importance.
+
+Gene importance is going to come from two sources:
+
+0. Get the final pre-processed table of the RNAi knockdown.
+  - CONVERT TO ENSG ID
+
+1. Truncation experiment
+  - Steps:
+  a) Convert gene symbols to ENSG id
+  b) inner join
+  
+2. The 17 CRISPR knockout experiments from Hart et. al. (2017)
+  - Steps:
+  a) Quantile normalisation (hopefully retains ranks)
+  b) Average the scores (ignoring NA)
+  c) Convert gene symbols to ENSG id
+  d) inner join
+
+## Global params
+  
+```{r}
+
+data.dir <- "Y:/MSC.to.OB_kinase.siRNA.screen/gene_essentiality/"
+
+results.dir <- "Y:/MSC.to.OB_kinase.siRNA.screen/gene_essentiality/"
+
+if(!dir.exists(results.dir)) {
+	dir.create(results.dir, recursive = TRUE)
+}
+
+```
+  
+## Import files
+
+```{r}
+
+### The fully pre-processed RNAi screen table
+
+RNAi.final_table_raw <- read.delim(paste(data.dir, "mainscreen.samples.matrix_normalised_divide.txt", sep = ""), stringsAsFactors = FALSE)
+
+head(RNAi.final_table_raw)
+
+### Truncation table from 2017 Cassa
+
+truncation.importance_table_raw <- read.delim(paste(data.dir, "2017_cassa_truncation_gene_importance.txt", sep = ""), stringsAsFactors = FALSE)
+
+head(truncation.importance_table_raw)
+
+### CRISPR table from 2017 Hart
+
+CRISPR.importance_table_raw <- read.delim(paste(data.dir, "2017_hart_17crispr_table.txt", sep = ""), stringsAsFactors = FALSE)
+
+head(CRISPR.importance_table_raw)
+
+```
+
+## Convert the gene names in all files to ENSG
+
+### BIOMART
+
+```{r}
+
+library(biomaRt)
+
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 99)
+
+### The fully pre-processed RNAi screen table
+
+#### Regex to get rid of the multiple comma separated refseq accessions. (((angry react only)))
+
+RNAi.final_table_raw2 <- RNAi.final_table_raw
+
+RNAi.final_table_raw2$Refseq_Accession <- gsub("(NM|XM)(\\_)([0-9]{1,6})(.*)", "\\1\\2\\3", RNAi.final_table_raw2$Refseq_Accession, ignore.case = TRUE)
+
+head(RNAi.final_table_raw2)
+
+#### Finally going to Biomart
+
+RNAi.final_table_ENSG.list <- getBM(filters = "refseq_mrna",
+attributes = c("refseq_mrna", "ensembl_gene_id"),
+values = RNAi.final_table_raw2$Refseq_Accession,
+mart = mart)
+
+colnames(RNAi.final_table_ENSG.list) <- c("Refseq_Accession", "ENSG_id")
+
+head(RNAi.final_table_ENSG.list)
+
+### Truncation table from 2017 Cassa
+
+truncation.importance_table_ENSG.list <- getBM(filters = "external_gene_name",
+attributes = c("external_gene_name", "ensembl_gene_id"),
+values = truncation.importance_table_raw$gene_symbol,
+mart = mart)
+
+colnames(truncation.importance_table_ENSG.list) <- c("gene_symbol", "ENSG_id")
+
+head(truncation.importance_table_ENSG.list)
+
+### CRISPR table from 2017 Hart
+
+CRISPR.importance_table_ENSG.list <- getBM(filters = "external_gene_name",
+attributes = c("external_gene_name", "ensembl_gene_id"),
+values = CRISPR.importance_table_raw$GENE,
+mart = ensembl_mart)
+
+colnames(CRISPR.importance_table_ENSG.list) <- c("GENE", "ENSG_id")
+
+head(CRISPR.importance_table_ENSG.list)
+
+```
+
+### DPLYR join
+
+```{r}
+
+### The fully pre-processed RNAi screen table
+
+RNAi.final_table_ENSG <- RNAi.final_table_raw2
+
+RNAi.final_table_ENSG <- dplyr::inner_join(RNAi.final_table_ENSG, RNAi.final_table_ENSG.list, by = "Refseq_Accession")
+
+RNAi.final_table_ENSG <- RNAi.final_table_ENSG[, c(1, ncol(RNAi.final_table_ENSG), 2:(ncol(RNAi.final_table_ENSG) - 1))]
+
+RNAi.final_table_ENSG <- RNAi.final_table_ENSG[, 2:ncol(RNAi.final_table_ENSG)]
+
+head(RNAi.final_table_ENSG)
+
+### Truncation table from 2017 Cassa
+
+truncation.importance_table_ENSG <- truncation.importance_table_raw
+
+truncation.importance_table_ENSG <- dplyr::inner_join(truncation.importance_table_ENSG, truncation.importance_table_ENSG.list, by = "gene_symbol")
+
+truncation.importance_table_ENSG <- truncation.importance_table_ENSG[, c(1, ncol(truncation.importance_table_ENSG), 2:(ncol(truncation.importance_table_ENSG) - 1))]
+
+truncation.importance_table_ENSG <- truncation.importance_table_ENSG[, 2:ncol(truncation.importance_table_ENSG)]
+
+head(truncation.importance_table_ENSG)
+
+### CRISPR table from 2017 Hart
+
+CRISPR.importance_table_ENSG <- CRISPR.importance_table_raw
+
+CRISPR.importance_table_ENSG <- dplyr::inner_join(CRISPR.importance_table_ENSG, CRISPR.importance_table_ENSG.list, by = "GENE")
+
+CRISPR.importance_table_ENSG <- CRISPR.importance_table_ENSG[, c(1, ncol(CRISPR.importance_table_ENSG), 2:(ncol(CRISPR.importance_table_ENSG) - 1))]
+
+CRISPR.importance_table_ENSG <- CRISPR.importance_table_ENSG[, 2:ncol(CRISPR.importance_table_ENSG)]
+
+head(CRISPR.importance_table_ENSG)
+
+```
+
+## TRUNCATION GENE IMPORTANCCE
+
+```{r}
+
+### Simplification of the truncation gene importance table
+
+truncation.importance_simplified <- truncation.importance_table_ENSG[, 1:2]
+
+head(truncation.importance_simplified)
+
+RNAi_ENSG_simplified <- RNAi.final_table_ENSG[, c(1, 12, 14, 16, 17)]
+
+head(RNAi_ENSG_simplified)
+
+# screen 1 z-score min/max avg
+
+print(paste("screen 1 min. avg: ", min(RNAi_ENSG_simplified$avg_screen_1), sep = ""))
+
+print(paste("screen 1 max. avg: ", max(RNAi_ENSG_simplified$avg_screen_1), sep = ""))
+
+# screen 2 z-score min/max avg
+
+print(paste("screen 2 min. avg: ", min(RNAi_ENSG_simplified$avg_screen_2), sep = ""))
+
+print(paste("screen 2 max. avg: ", max(RNAi_ENSG_simplified$avg_screen_2), sep = ""))
+
+```
+
+### DPLYR JOIN
+
+```{r}
+
+truncation.and.RNAi <- dplyr::inner_join(RNAi_ENSG_simplified, truncation.importance_simplified, by = "ENSG_id")
+
+head(truncation.and.RNAi)
+
+print(dim(truncation.and.RNAi))
+
+### Go back to Biomart to get gene symbols that we can understand
+
+truncation.and.RNAi.genesymbols <- getBM(filters = "ensembl_gene_id",
+attributes = c("ensembl_gene_id", "external_gene_name"),
+values = truncation.and.RNAi$ENSG_id,
+mart = mart)
+
+colnames(truncation.and.RNAi.genesymbols) <- c("ENSG_id", "Gene_symbol")
+
+head(truncation.and.RNAi.genesymbols)
+
+### DPLYR join back the gene symbols onto the already joined table and re-arrange the columns
+
+truncation.and.RNAi <- dplyr::inner_join(truncation.and.RNAi, truncation.and.RNAi.genesymbols, by = "ENSG_id")
+
+truncation.and.RNAi <- truncation.and.RNAi[, c(1, ncol(truncation.and.RNAi), 2:(ncol(truncation.and.RNAi) - 1))]
+
+head(truncation.and.RNAi)
+
+print(dim(truncation.and.RNAi))
+
+write.table(truncation.and.RNAi, paste(results.dir, "truncation.and.RNAi.txt", sep = ""), sep = "\t", row.names = FALSE)
+
+
+```
+
+### plotting in plotly
+
+I will draw a scatterplot of z-score against gene importance in plotly.
+
+The higher the value of s_het, the higher the apparent importance of the gene.
+
+```{r}
+
+library(plotly)
+library(ggplot2)
+
+# screen 1, everything
+
+ggplot_trunc_vs_rnai_screen_1 <- ggplot(data = truncation.and.RNAi, aes(x = s_het, y = avg_screen_1, colour = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Scatterplot of ALP activity (screen 1) against Gene Importance (truncation)") +
+  xlab("Heterozygosity Selection Coefficient") +
+  ylab("RNAi ALP activity, screen 1") +
+  guides(color = "none") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica"))
+
+ggplotly_trunc_vs_rnai_screen_1 <- ggplotly(ggplot_trunc_vs_rnai_screen_1)
+
+ggplotly_trunc_vs_rnai_screen_1
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_trunc_vs_rnai_screen_1, paste(results.dir, "ggplotly_trunc_vs_rnai_screen_1.html", sep = ""))
+
+# screen 1, just the important ones
+
+ggplot_trunc_vs_rnai_screen_1_important <- ggplot(data = truncation.and.RNAi[truncation.and.RNAi$s_het < 0.05 & ((truncation.and.RNAi$avg_screen_1 > 5e-6) | (truncation.and.RNAi$avg_screen_1 < -2.5e-6)), ], aes(x = s_het, y = avg_screen_1, colour = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Gene Importance plot (screen 1), important genes only (truncation)") +
+  xlab("Heterozygosity Selection Coefficient") +
+  ylab("RNAi ALP activity, screen 1") +
+  guides(color = "none") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"))
+
+ggplotly_trunc_vs_rnai_screen_1_important <- ggplotly(ggplot_trunc_vs_rnai_screen_1_important)
+
+ggplotly_trunc_vs_rnai_screen_1_important
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_trunc_vs_rnai_screen_1_important, paste(results.dir, "ggplotly_trunc_vs_rnai_screen_1_important.html", sep = ""))
+
+# screen 2
+
+ggplot_trunc_vs_rnai_screen_2 <- ggplot(data = truncation.and.RNAi, aes(x = s_het, y = avg_screen_2, colour = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Scatterplot of ALP activity (screen 2) against Gene Importance (truncation)") +
+  xlab("Heterozygosity Selection Coefficient") +
+  ylab("RNAi ALP activity, screen 2") +
+  guides(color = "none") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"))
+
+ggplotly_trunc_vs_rnai_screen_2 <- ggplotly(ggplot_trunc_vs_rnai_screen_2)
+
+ggplotly_trunc_vs_rnai_screen_2
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_trunc_vs_rnai_screen_2, paste(results.dir, "ggplotly_trunc_vs_rnai_screen_2.html", sep = ""))
+
+# screen 2, just the important ones
+
+ggplot_trunc_vs_rnai_screen_2_important <- ggplot(data = truncation.and.RNAi[truncation.and.RNAi$s_het < 0.05 & ((truncation.and.RNAi$avg_screen_2 > 1.2e-5) | (truncation.and.RNAi$avg_screen_2 < -0.5e-5)), ], aes(x = s_het, y = avg_screen_2, colour = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Gene Importance plot (screen 2), important genes only (truncation)") +
+  xlab("Heterozygosity Selection Coefficient") +
+  ylab("RNAi ALP activity, screen 2") +
+  guides(color = "none") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"))
+
+ggplotly_trunc_vs_rnai_screen_2_important <- ggplotly(ggplot_trunc_vs_rnai_screen_2_important)
+
+ggplotly_trunc_vs_rnai_screen_2_important
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_trunc_vs_rnai_screen_2_important, paste(results.dir, "ggplotly_trunc_vs_rnai_screen_2_important.html", sep = ""))
+
+```
+
+visualising the density heterozygosity selection coefficient within our gene set
+
+```{r}
+
+density_truncation.and.RNAi <- data.frame(x = density(truncation.and.RNAi$s_het)$x, y = density(truncation.and.RNAi$s_het)$y)
+
+head(density_truncation.and.RNAi)
+
+ggplot(density_truncation.and.RNAi, aes(x = x, y = y)) +
+  geom_line() +
+  labs(title = "Frequency distribution of heterozygosity selection coefficient", x = "Heterozygosity Selection Coefficient", y = "Frequency") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "density_s.het_RNAi.pdf", sep = ""), device = "pdf", dpi = 600, width = 15, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "density_s.het_RNAi.svg", sep = ""), device = "svg", dpi = 600, width = 15, height = 9, units = "cm")
+
+```
+
+## CRISPR KNOCKDOWNS
+
+a) Quantile normalisation (hopefully retains ranks)
+
+```{r}
+
+library(preprocessCore)
+
+head(CRISPR.importance_table_ENSG)
+
+CRISPR.importance_table_qn <- CRISPR.importance_table_ENSG
+
+CRISPR.importance_table_qn[, 2:18] <- normalize.quantiles(as.matrix(CRISPR.importance_table_qn[, 2:18]), copy = FALSE)
+
+head(CRISPR.importance_table_qn)
+
+#### visualise quantiles before and after normalisation
+
+##### melt matrix tables into long form for ggplot
+
+library(reshape2)
+
+CRISPR.importance_table_ENSG_long <- reshape2::melt(CRISPR.importance_table_ENSG, id.vars = "ENSG_id", variable.name = "experiment", value.name = "gene.importance.raw")
+
+head(CRISPR.importance_table_ENSG_long)
+
+CRISPR.importance_table_qn_long <- reshape2::melt(CRISPR.importance_table_qn, id.vars = "ENSG_id", variable.name = "experiment", value.name = "gene.importance.qn")
+
+head(CRISPR.importance_table_qn_long)
+
+CRISPR.importance_table_joined <- dplyr::inner_join(CRISPR.importance_table_ENSG_long, CRISPR.importance_table_qn_long, by = c("ENSG_id", "experiment"))
+
+head(CRISPR.importance_table_joined)
+
+CRISPR.importance_table_joined_long <- reshape2::melt(CRISPR.importance_table_joined, id.vars = c("ENSG_id", "experiment"), variable.name = "processing.state", value.name = "gene.importance")
+
+head(CRISPR.importance_table_joined_long)
+
+##### THE GGPLOT
+
+library(ggplot2)
+
+ggplot(CRISPR.importance_table_joined, aes(x = gene.importance.raw, y = gene.importance.qn)) +
+  geom_point() +
+  scale_x_continuous(limits = c(-250, 150)) +
+  scale_y_continuous(limits = c(-100, 75)) +
+  geom_abline(gradient = 1, intercept = 0, colour = "red") +
+  facet_grid(.~experiment) +
+  theme_bw()
+
+
+ggplot(CRISPR.importance_table_joined_long, aes(x = experiment, y = gene.importance)) +
+  stat_boxplot(aes(experiment), geom = "errorbar") +
+  geom_boxplot(aes(experiment)) +
+  scale_y_continuous(limits = c(-250, 150)) +
+  facet_grid(.~processing.state) +
+  theme_bw()
+
+  ##### close enough.jpg
+
+
+##### Averaging
+  
+```
+
+b) Average the scores (ignoring NA)
+
+```{r}
+
+CRISPR.importance_table_avg <- CRISPR.importance_table_qn
+  
+for (rownumber in 1:nrow(CRISPR.importance_table_avg)) {
+  
+  CRISPR.importance_table_avg[rownumber, "avg_importance"] <- mean(t(CRISPR.importance_table_avg[rownumber, 2:18]), na.rm = TRUE)
+  
+}
+
+head(CRISPR.importance_table_avg)
+
+write.table(CRISPR.importance_table_avg, paste(results.dir, "2017_hart_17crispr_essentiality_QN.txt"), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+```
+
+c) inner join to RNAi table and add the gene symbols onto the table
+  
+```{r}
+
+CRISPR.importance_table_simplified <- CRISPR.importance_table_avg[, c(1, 19)]
+
+head(CRISPR.importance_table_simplified)
+
+CRISPR_and_RNAi <- dplyr::inner_join(RNAi_ENSG_simplified, CRISPR.importance_table_simplified, by = "ENSG_id")
+
+head(CRISPR_and_RNAi)
+
+### Go back to Biomart to get gene symbols that we can understand
+
+CRISPR_and_RNAi.genesymbols <- getBM(filters = "ensembl_gene_id",
+attributes = c("ensembl_gene_id", "external_gene_name"),
+values = CRISPR_and_RNAi$ENSG_id,
+mart = mart)
+
+colnames(CRISPR_and_RNAi.genesymbols) <- c("ENSG_id", "Gene_symbol")
+
+head(CRISPR_and_RNAi.genesymbols)
+
+### DPLYR join back the gene symbols onto the already joined table and re-arrange the columns
+
+CRISPR_and_RNAi <- dplyr::inner_join(CRISPR_and_RNAi, CRISPR_and_RNAi.genesymbols, by = "ENSG_id")
+
+CRISPR_and_RNAi <- CRISPR_and_RNAi[, c(1, ncol(CRISPR_and_RNAi), 2:(ncol(CRISPR_and_RNAi) - 1))]
+
+head(CRISPR_and_RNAi)
+
+print(dim(CRISPR_and_RNAi))
+
+write.table(CRISPR_and_RNAi, paste(results.dir, "CRISPR_and_RNAi.txt", sep = ""), sep = "\t", row.names = FALSE)
+
+```
+
+### plotting in plotly
+
+I will draw a scatterplot of z-score against gene importance in plotly.
+
+The higher the value of s_het, the higher the apparent importance of the gene.
+
+```{r}
+
+library(plotly)
+library(ggplot2)
+
+# screen 1, everything
+
+ggplot_CRISPR_vs_rnai_screen_1 <- ggplot(data = CRISPR_and_RNAi, aes(x = avg_importance, y = avg_screen_1, colour = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Scatterplot of ALP fold change (screen 1) against Gene Essentiality (CRISPR)") +
+  xlab("CRISPR Gene Essentiality (Hart et al., 2017)") +
+  ylab("Fold Change (RNAi Screen 1)") +
+  scale_colour_grey(start = 0, end = 0) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica"))
+
+ggplotly_CRISPR_vs_rnai_screen_1 <- ggplotly(ggplot_CRISPR_vs_rnai_screen_1)
+
+ggplotly_CRISPR_vs_rnai_screen_1
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_CRISPR_vs_rnai_screen_1, paste(results.dir, "ggplotly_CRISPR_vs_rnai_screen_1.html", sep = ""))
+
+# run the actual ggplot and save as static pdf
+
+ggplot(data = CRISPR_and_RNAi, aes(x = avg_importance, y = avg_screen_1, group = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Scatterplot of ALP fold change (screen 1) against Gene Essentiality (CRISPR)") +
+  xlab("CRISPR Gene Essentiality (Hart et al., 2017)") +
+  ylab("Fold Change (RNAi Screen 1)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen1.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen1.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 9, units = "cm")
+
+# # screen 1, just the important ones
+# 
+# ggplot_trunc_vs_rnai_screen_1_important <- ggplot(data = truncation.and.RNAi!!!!!!![truncation.and.RNAi$s_het < 0.05 & ((truncation.and.RNAi$avg_screen_1 > 5e-6) | (truncation.and.RNAi$avg_screen_1 < -2.5e-6)), ], aes(x = s_het, y = avg_screen_1, colour = Gene_symbol)) +
+#   geom_point() +
+#   ggtitle("Gene Importance plot (screen 1), important genes only (CRISPR)") +
+#   xlab("CRISPR Importance Score") +
+#   ylab("RNAi ALP activity, screen 1") +
+#   guides(color = "none") +
+#   theme_bw() +
+#   theme(text = element_text(family="Helvetica"))
+# 
+# ggplotly_trunc_vs_rnai_screen_1_important <- ggplotly(ggplot_trunc_vs_rnai_screen_1_important)
+# 
+# ggplotly_trunc_vs_rnai_screen_1_important
+# 
+# # EXPORT
+# 
+# htmlwidgets::saveWidget(ggplotly_trunc_vs_rnai_screen_1_important, paste(results.dir, "ggplotly_trunc_vs_rnai_screen_1_important.html", sep = ""))
+
+# screen 2, everything
+
+ggplot_CRISPR_vs_rnai_screen_2 <- ggplot(data = CRISPR_and_RNAi, aes(x = avg_importance, y = avg_screen_2, colour = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Scatterplot of ALP fold change (screen 2) against Gene Essentiality (CRISPR)") +
+  xlab("CRISPR Gene Essentiality (Hart et al., 2017)") +
+  ylab("Fold Change (RNAi Screen 2)") +
+  scale_colour_grey(start = 0, end = 0) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica"))
+
+ggplotly_CRISPR_vs_rnai_screen_2 <- ggplotly(ggplot_CRISPR_vs_rnai_screen_2)
+
+ggplotly_CRISPR_vs_rnai_screen_2
+
+# EXPORT
+
+htmlwidgets::saveWidget(ggplotly_CRISPR_vs_rnai_screen_2, paste(results.dir, "ggplotly_CRISPR_vs_rnai_screen_2.html", sep = ""))
+
+# run the actual ggplot and save as static pdf
+
+ggplot(data = CRISPR_and_RNAi, aes(x = avg_importance, y = avg_screen_2, group = Gene_symbol)) +
+  geom_point() +
+  ggtitle("Scatterplot of ALP fold change (screen 2) against Gene Essentiality (CRISPR)") +
+  xlab("CRISPR Gene Essentiality (Hart et al., 2017)") +
+  scale_y_continuous(breaks = c(0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8)) +
+  ylab("Fold Change (RNAi Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen2.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen2.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 9, units = "cm")
+
+# # screen 2, just the important ones
+# 
+# ggplot_trunc_vs_rnai_screen_2_important <- ggplot(data = truncation.and.RNAi[truncation.and.RNAi$s_het < 0.05 & ((truncation.and.RNAi$avg_screen_2 > 1.2e-5) | (truncation.and.RNAi$avg_screen_2 < -0.5e-5)), ], aes(x = s_het, y = avg_screen_2, colour = Gene_symbol)) +
+#   geom_point() +
+#   geom_label(label = ) +
+#   ggtitle("Gene Importance plot (screen 2), important genes only (CRISPR)") +
+#   xlab("CRISPR Importance Score") +
+#   ylab("RNAi ALP activity, screen 2") +
+#   guides(color = "none") +
+#   theme_bw() +
+#   theme(text = element_text(family="Helvetica"))
+# 
+# ggplotly_trunc_vs_rnai_screen_2_important <- ggplotly(ggplot_trunc_vs_rnai_screen_2_important)
+# 
+# ggplotly_trunc_vs_rnai_screen_2_important
+# 
+# # EXPORT
+# 
+# htmlwidgets::saveWidget(ggplotly_trunc_vs_rnai_screen_2_important, paste(results.dir, "ggplotly_trunc_vs_rnai_screen_2_important.html", sep = ""))
+
+```
+
+MAKING THE FAKE SCATTERPLOTS
+
+```{r}
+
+CRISPR_and_RNAi_fake <- CRISPR_and_RNAi[, c(2,1,3:7)]
+
+fakecolourtable <- read.delim("C:/Users/CL/OneDrive/Documents/honours/theactualproject/rna_i/gene_essentiality/Results/enrichment_results/Data/CRISPR_and_RNAi_divide_common_faketablecolours.txt", stringsAsFactors = FALSE)
+
+CRISPR_and_RNAi_fake <- dplyr::left_join(CRISPR_and_RNAi_fake, fakecolourtable, by = "Gene_symbol")
+
+CRISPR_and_RNAi_fake[is.na(CRISPR_and_RNAi_fake$reg), "reg"] <- "other"
+
+# run the actual ggplot and save as static pdf, screen 1
+
+ggplot(data = CRISPR_and_RNAi_fake, aes(x = avg_importance, y = avg_screen_1, colour = reg)) +
+  geom_point() +
+  scale_colour_manual(values = c("red", "blue", "gray85"), limits = c("neg", "pos", "other")) +
+  guides(color = "none") +
+  ggtitle("FAKE Scatterplot of ALP fold change (screen 1) against Gene Essentiality (CRISPR)") +
+  xlab("CRISPR Gene Essentiality (Hart et al., 2017)") +
+  ylab("Fold Change (RNAi Screen 1)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen1_fake.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen1_fake.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 9, units = "cm")
+
+# run the actual ggplot and save as static pdf, screen 2
+
+ggplot(data = CRISPR_and_RNAi_fake, aes(x = avg_importance, y = avg_screen_2, colour = reg)) +
+  geom_point() +
+  scale_colour_manual(values = c("red", "blue", "gray85"), limits = c("neg", "pos", "other")) +
+  guides(color = "none") +
+  ggtitle("FAKE Scatterplot of ALP fold change (screen 2) against Gene Essentiality (CRISPR)") +
+  xlab("CRISPR Gene Essentiality (Hart et al., 2017)") +
+  scale_y_continuous(breaks = c(0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8)) +
+  ylab("Fold Change (RNAi Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen2_fake.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "ggplot_crispr_and_rnai_screen2_fake.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 9, units = "cm")
+
+#for reference
+# 
+# ggplot(soms_5x5_posnegs, aes(x = x, y = y, colour = reg, alpha = reg)) +
+#   geom_line(aes(group = gene_stable_id)) +
+#   scale_colour_manual(name = "Legend", values = c("red", "blue", "black"), limits = c("neg", "pos", "neither"), labels = c("Negative Regulator", "Positive Regulator", "Non-hit")) +
+#   scale_alpha_manual(name = "Legend", values = c(1, 1, 0.1), limits = c("neg", "pos", "neither"), labels = c("Negative Regulator", "Positive Regulator", "Non-hit"))
+
+
+```
+
+
+gene ontology test
+
+```{r}
+
+
+
+library(GOstats)
+
+annotationDB <- "org.Hs.eg.db"
+hgCutoff <- 0.05
+
+params <- new("GOHyperGParams",
+geneIds = screen1_important_ensembl$ensembl_gene_id,
+universeGeneIds = abbas_background_ensembl$ensembl_gene_id,
+annotation = annotationDB,
+ontology = "CC",
+pvalueCutoff = hgCutoff,
+testDirection = "over")
+
+hg <- hyperGTest(params)
+
+hg
+
+```

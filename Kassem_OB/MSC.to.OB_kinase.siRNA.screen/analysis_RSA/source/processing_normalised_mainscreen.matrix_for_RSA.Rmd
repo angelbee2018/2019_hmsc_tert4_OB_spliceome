@@ -1,0 +1,133 @@
+---
+title: "Processing_normalised_mainscreen.matrix_for_RSA"
+author: "Angel Liang"
+date: "12/02/2020"
+output: html_document
+---
+
+Summary of purpose: format the normalised mainscreen.matrix into a layout suitable for RSA. The goal is to output a separate table for each screen, followed by a combined one should RSA prove to be fruitful for that purpose.
+
+# Set Environment
+
+## directories
+
+```{r}
+
+normalised_mainscreen.matrix_path <- "Y:/MSC.to.OB_kinase.siRNA.screen/analysis_RSA/input_files/mainscreen.samples.matrix_normalised_divide.txt"
+
+results_dir <- "Y:/MSC.to.OB_kinase.siRNA.screen/analysis_RSA/input_files/"
+
+```
+
+## packages
+
+```{r}
+
+library(tidyverse)
+library(reshape2)
+library(biomaRt)
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 99)
+
+```
+
+# Wrangle normalised mainscreen matrix
+
+## read normalised mainscreen matrix into environment
+
+```{r}
+
+tibble_normalised.mainscreen.matrix <- read.delim(normalised_mainscreen.matrix_path, sep = "\t", stringsAsFactors = FALSE, header = TRUE) %>% as_tibble
+
+head(tibble_normalised.mainscreen.matrix)
+
+```
+
+## combine intra/interplate IDs into a single well identifier
+
+```{r}
+
+tibble_normalised.mainscreen.matrix_2 <- tibble_normalised.mainscreen.matrix
+
+# combine intra/interplate IDs into a single well identifier
+# format: <interplate.x>_<intraplate.y><intraplate.x>
+tibble_normalised.mainscreen.matrix_2 <- add_column(tibble_normalised.mainscreen.matrix_2, "well_ID" = paste(tibble_normalised.mainscreen.matrix_2$interplate.x, "_", tibble_normalised.mainscreen.matrix_2$intraplate.y, tibble_normalised.mainscreen.matrix_2$intraplate.x, sep = ""))
+
+tibble_normalised.mainscreen.matrix_3 <- tibble_normalised.mainscreen.matrix_2 %>% dplyr::select(-c("intraplate.y", "intraplate.x", "interplate.x"))
+
+```
+
+## append gene stable IDs
+
+```{r}
+
+# append according to refseq mRNA identifier
+gene_stable_ids <- purrr::map(.x = tibble_normalised.mainscreen.matrix_3$Refseq_Accession %>% strsplit(split = ","), .f = ~getBM(filters = "refseq_mrna", values = .x, attributes = c("ensembl_gene_id"), mart = ensembl_mart))
+
+gene_stable_ids_2 <- purrr::map(.x = gene_stable_ids, .f = ~.x[1, ]) %>% unlist
+
+tibble_normalised.mainscreen.matrix_3 <- add_column(tibble_normalised.mainscreen.matrix_3, "ensembl_gene_id" = gene_stable_ids_2)
+
+## WE DECIDE NOT TO DO THE REST BECAUSE THE REST WAS MOSTLY REMOVED FROM THE REFSEQ DATABASE 
+
+# # append the rest according to gene symbol
+# remaining_rows <- which(is.na(tibble_normalised.mainscreen.matrix_3$ensembl_gene_id))
+# 
+# remaining_gene_stable_ids <- purrr::map(.x = tibble_normalised.mainscreen.matrix_3[remaining_rows, ] %>% .$Gene, .f = ~getBM(filters = "external_gene_name", values = .x, attributes = c("ensembl_gene_id"), mart = ensembl_mart))
+# 
+# # test <- getBM(filters = "external_gene_name", values = tibble_normalised.mainscreen.matrix_3[remaining_rows, ] %>% .$Gene, attributes = c("ensembl_transcript_id"), mart = ensembl_mart)
+# 
+# tibble_normalised.mainscreen.matrix_3[remaining_rows, "ensembl_gene_id"]
+
+```
+
+## melt into a LONG table and export as combined screen table
+
+```{r}
+
+long_tibble_normalised.mainscreen.matrix_3 <- reshape2::melt(tibble_normalised.mainscreen.matrix_3, value.name = "normalised_ALP_score", variable.name = "replicate.name", id.vars = c("Gene", "ensembl_gene_id", "Refseq_Accession", "well_ID", "avg_screen_1", "stdev_screen_1", "avg_screen_2", "stdev_screen_2", "screen_1_rank", "screen_2_rank")) %>% as_tibble
+
+# long_tibble_normalised.mainscreen.matrix_3[, "Refseq_Accession"] <- long_tibble_normalised.mainscreen.matrix_3$Refseq_Accession %>% gsub(pattern = ",", replacement = ";")
+
+long_tibble_normalised.mainscreen.matrix_3[, "Refseq_Accession"] <- long_tibble_normalised.mainscreen.matrix_3$Refseq_Accession %>% strsplit(split = ",") %>% purrr::map(., ~.x[1]) %>% unlist
+
+write.table(x = long_tibble_normalised.mainscreen.matrix_3, file = paste(results_dir, "normalised_mainscreen.matrix_for_RSA_both.screens.csv", sep = ""), sep = ",", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+```
+
+## create 3 tables
+1 table for each screen
+
+```{r}
+
+# get the row numbers which correspond to screen 1 or screen 2 data
+screen.1_rows <- grep(long_tibble_normalised.mainscreen.matrix_3$replicate.name, pattern = "Screen_1")
+screen.2_rows <- grep(long_tibble_normalised.mainscreen.matrix_3$replicate.name, pattern = "Screen_2")
+
+# export screen 1
+write.table(x = long_tibble_normalised.mainscreen.matrix_3[screen.1_rows, ], file = paste(results_dir, "normalised_mainscreen.matrix_for_RSA_screen.1.csv", sep = ""), sep = ",", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+# export screen 2
+write.table(x = long_tibble_normalised.mainscreen.matrix_3[screen.2_rows, ], file = paste(results_dir, "normalised_mainscreen.matrix_for_RSA_screen.2.csv", sep = ""), sep = ",", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+```
+
+# Create info file for runnning parameters.
+
+```{r}
+
+cat(paste("Column names definitions:\n
+                      -g Gene_ID: Gene\n
+                      -w Well_ID: well_ID\n
+                      -s Score: normalised_ALP_score\n", sep = " "), file = paste(results_dir, "RSA_parameters.txt", sep = ""))
+
+cat(paste("Combined upper bound:", max(long_tibble_normalised.mainscreen.matrix_3$normalised_ALP_score), "\n", sep = " "), file = paste(results_dir, "RSA_parameters.txt", sep = ""), append = TRUE)
+cat(paste("Combined lower bound:", min(long_tibble_normalised.mainscreen.matrix_3$normalised_ALP_score), "\n", sep = " "), file = paste(results_dir, "RSA_parameters.txt", sep = ""), append = TRUE)
+
+cat(paste("Screen 1 upper bound:", max(long_tibble_normalised.mainscreen.matrix_3[screen.1_rows, "normalised_ALP_score"]), "\n", sep = " "), file = paste(results_dir, "RSA_parameters.txt", sep = ""), append = TRUE)
+cat(paste("Screen 1 lower bound:", min(long_tibble_normalised.mainscreen.matrix_3[screen.1_rows, "normalised_ALP_score"]), "\n", sep = " "), file = paste(results_dir, "RSA_parameters.txt", sep = ""), append = TRUE)
+
+cat(paste("Screen 2 upper bound:", max(long_tibble_normalised.mainscreen.matrix_3[screen.2_rows, "normalised_ALP_score"]), "\n", sep = " "), file = paste(results_dir, "RSA_parameters.txt", sep = ""), append = TRUE)
+cat(paste("Screen 2 lower bound:", min(long_tibble_normalised.mainscreen.matrix_3[screen.2_rows, "normalised_ALP_score"]), "\n", sep = " "), file = paste(results_dir, "RSA_parameters.txt", sep = ""), append = TRUE)
+
+```
+

@@ -1,0 +1,1697 @@
+---
+title: "Processing and analysis of Abbas' RNAi dataset"
+author: "CL"
+date: "June 26, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+
+```
+
+# Processing and preparation of the data
+
+## Read the mainscreen and the lookup table
+
+```{r}
+
+mainscreenmatrixqntoggle <- TRUE
+
+screendata.dir <- "C:/Users/CL/OneDrive/Documents/honours/theactualproject/rna_i/"
+
+results.dir <- "C:/Users/CL/OneDrive/Documents/honours/theactualproject/rna_i/processing_results/Results_divide/"
+
+mainscreen <- read.delim(paste(screendata.dir, "mainscreen_edited_2.txt", sep = ""), stringsAsFactors = FALSE)
+
+siRNA_lookuptable <- read.delim(paste(screendata.dir, "siRNA_lookuptable.txt", sep = ""), stringsAsFactors = FALSE)
+
+```
+
+## Split the plate name in the lookup table
+
+```{r}
+
+siRNA_lookuptable[, "plateletter"] <- data.frame(gsub("(Kinase_V3-)([A-Z])([0-9]{1,2})",
+                                                           "\\2",siRNA_lookuptable[, "Plate.Name"]))
+siRNA_lookuptable[, "platenumber"] <- data.frame(gsub("(Kinase_V3-)([A-Z])([0-9]{1,2})",
+                                                           "\\3",siRNA_lookuptable[, "Plate.Name"]))
+
+```
+
+## Re-arranging the plate layout scores into a matrix style format (mainscreen.matrix)
+
+```{r}
+
+# ESTABLISHED NOMENCLATURE: 
+##   Interplate: x-coordinate: [1-9]p
+##               y-coordinate: Screen 1: [A-C], screen 2: [X-Z]
+##   Intraplate: x-coordinate: [1-12]w
+##               y-coordinate: [A-H]
+##   Therefore to refer unambiguously to a single well in a particular plate:
+##   e.g. X2pH10w refers to well H10 in plate X2 (originally called plate A2 of the second screen)
+##   The wells A9 from first and second screen shall be called A9 and X9 respectively
+
+# create mainscreen.matrix as data frame
+
+mainscreen.matrix <- data.frame()
+
+# first screen first 
+
+# label the matrix table with the gene name
+
+matrix.cell.gene.x <- 1
+
+for (platenumber in 1:9) {
+  
+  for (intraplate.col in 1:11) {
+    
+    for (intraplate.row in c("A", "B", "C", "D", "E", "F", "G", "H")) {
+    
+    # paste the gene name from the lookup table
+      
+    mainscreen.matrix[matrix.cell.gene.x, 1] <- siRNA_lookuptable[siRNA_lookuptable$plateletter == "A" & 
+                                                                    siRNA_lookuptable$platenumber == platenumber &
+                                                                    siRNA_lookuptable$Row == intraplate.row &
+                                                                    siRNA_lookuptable$Col == intraplate.col, 8]
+    
+    # paste the gene accession from the lookup table
+    
+    mainscreen.matrix[matrix.cell.gene.x, 2] <- siRNA_lookuptable[siRNA_lookuptable$plateletter == "A" & 
+                                                                    siRNA_lookuptable$platenumber == platenumber &
+                                                                    siRNA_lookuptable$Row == intraplate.row &
+                                                                    siRNA_lookuptable$Col == intraplate.col, 7]
+    
+    matrix.cell.gene.x <- matrix.cell.gene.x + 1
+      
+    }
+    
+  }
+
+}
+
+# copy over the values in the main screen table into matrix form #
+
+## Letters of each plate correspond to row shifts in the mainscreen table: A = 2, B = 13, C = 24
+  ### note: this only copies over both screens
+## it scans along a whole intraplate column first, before moving onto a new plate number
+
+plate.letter.column.in.matrix <- 3
+
+for (plateletter in c(1, 12, 23, 37, 49, 61)) {
+  
+  matrix.cell.value.x <- 1
+  
+  for (platenumber in 1:9) {
+    
+    for (intraplate.col in 1:11) {
+      
+      mainscreen.cell.y <- 1 + intraplate.col + 14 * (platenumber - 1)
+      
+      mainscreen.matrix[matrix.cell.value.x:(matrix.cell.value.x + 7), plate.letter.column.in.matrix] <- 
+        mainscreen[plateletter:(plateletter + 7), mainscreen.cell.y]
+      
+      matrix.cell.value.x <- matrix.cell.value.x + 8
+      
+    }
+  
+  }
+  
+  plate.letter.column.in.matrix <- plate.letter.column.in.matrix + 1
+  
+}
+
+# label each gene with the co-ordinates and the plate number from the mainscreen
+## intraplate y co-ordinate construction
+
+mainscreen.matrix[, "intraplate.y.coord."] <- c("A", "B", "C", "D", "E", "F", "G", "H")
+
+## intraplate x co-ordinate construction
+
+temp <- list()
+
+for (col in 1:11){
+  
+  startrow <- 1 + 8 * (col-1)
+  finishrow <- 8*col
+  
+  temp[startrow:finishrow] <- unlist(lapply(1:8, function(x){paste(col)}))
+  
+}
+
+temp <- data.frame(temp)
+
+temp <- tidyr::gather(temp, "test1", "test2", 1:88)
+
+temp <- temp[, -1]
+
+mainscreen.matrix[, "intraplate.x.coord."] <- temp
+
+## pasting of interplate x co-ordinate into mainscreen.matrix
+
+temp.main <- data.frame(1:704)
+temp.aux <- data.frame(1:88)
+startrow.main <- 1
+endrow.main <- 88
+
+for (interplate.x.coord in 1:9){
+  
+  temp.aux[, 1] <- c(paste(interplate.x.coord))
+  
+  temp.main[startrow.main:endrow.main, ] <- temp.aux
+  
+  startrow.main <- startrow.main + 88
+  
+  endrow.main <- endrow.main + 88
+  
+}
+
+mainscreen.matrix[, "interplate.x.co-ordinate"] <- temp.main
+
+# rename columns of the table so they actually make sense =p
+
+colnames(mainscreen.matrix) <- c("Gene", "Refseq_Accession",
+                                 "Screen_1_A", "Screen_1_B", "Screen_1_C",
+                                 "Screen_2_X", "Screen_2_Y", "Screen_2_Z", 
+                                 "intraplate.y", "intraplate.x", "interplate.x")
+
+# get rid of the missing gene values since tables A9 and X9 were incomplete
+ 
+mainscreen.matrix <- na.omit(mainscreen.matrix)
+
+# reset row numbers after subsetting
+
+rownames(mainscreen.matrix) <- seq(length=nrow(mainscreen.matrix))
+
+# add row for ensembl ID
+## first export the mainscreen.matrix so i can convert the refseqs in biomart
+
+head(mainscreen.matrix)
+
+# EXPORT
+
+write.table(mainscreen.matrix, paste(results.dir, "mainscreen.matrix.txt", sep = ""), sep = "\t", row.names = FALSE)
+
+```
+
+## Creation of the concatenated mainscreen table
+
+```{r}
+
+# melt the columns to turn wide (matrix) into long (concatenated) format
+
+mainscreen.concatenated <- reshape2::melt(mainscreen.matrix, id.vars = c("Gene", "Refseq_Accession", "intraplate.y", "intraplate.x", "interplate.x"), measure.vars = c("Screen_1_A", "Screen_1_B", "Screen_1_C", "Screen_2_X", "Screen_2_Y", "Screen_2_Z"), value.name = "shRNA.intensity", variable.name = "interplate.y")
+
+# rename the interplate.y.coord column to be more consistent with the established nomenclature
+
+mainscreen.concatenated[, "interplate.y"] <- gsub("(Screen_)([1-2])(_)([A-Z])", "\\4", mainscreen.concatenated[, "interplate.y"])
+
+head(mainscreen.concatenated)
+
+```
+
+## CREATION OF THE TABLE OF CONTROLS
+
+copy over the controls in the main screen table into matrix form
+
+Letters of each plate correspond to row shifts in the mainscreen table: A = 2, B = 13, C = 24
+Note: this copies over data from both screens.
+It scans along a whole intraplate column first, before moving onto a new plate number
+WARNING: the matrix control table does not correctly reflect the controls layout in screen 2.
+In screen 2: 1. the C12 and D12 wells contain siCtrl#1+2 and not siCtrl#2 only. 2. The well F12 should be Lipofectamine 2000 treated cells, NOT siALP_2.
+
+*Important experimental note: the number 9 plates in screen 2 were all conducted on one plate
+
+```{r}
+
+mainscreen.controls.matrix <- data.frame()
+
+mainscreen.controls.matrix[1:8, "Control"] <- c("siCtrl1_1", "siCtrl1_2", "siCtrl2_1", "siCtrl2_2", "siALP_1", "siALP_2", "Induced", "NonInduced")
+
+column.in.matrix <- 2
+
+for (i in 1:6) {
+  
+  shifts <- c(1, 12, 23, 37, 49, 61)
+  
+  letters <- c("A", "B", "C", "X", "Y", "Z")
+  
+  interplate.y.shift <- shifts[i]
+  
+  interplateletter <- letters[i]
+  
+  for (interplatenumber in 1:9) {
+    
+      mainscreen.cell.y <- 1 + 12 + 14 * (interplatenumber - 1)
+      
+      colname <- paste(interplateletter, interplatenumber, "p", sep = "")
+      
+      mainscreen.controls.matrix[1:8, colname] <- mainscreen[interplate.y.shift:(interplate.y.shift + 7), mainscreen.cell.y]
+      
+      #colnames(mainscreen.controls.matrix[, c(1, column.in.matrix)]) <- c("Control", paste("Plate_", interplate.y.shift, sep = ""))
+      
+      column.in.matrix <- column.in.matrix + 1
+      
+  }
+  
+}
+
+# MELT THE CONTROL MATRIX OF THE MAINSCREEN INTO CONCATENATED FORM
+
+mainscreen.controls.concatenated <- reshape2::melt(mainscreen.controls.matrix, id.vars = "Control", variable.name = "Plate.ID", value.name = "shRNA.intensity")
+
+### regex to separate plate co-ordinates
+
+mainscreen.controls.concatenated[, "interplate.x"] <- gsub("([A-Z])([0-9])(p)", "\\2", mainscreen.controls.concatenated[, "Plate.ID"])
+mainscreen.controls.concatenated[, "interplate.y"] <- gsub("([A-Z])([0-9])(p)", "\\1", mainscreen.controls.concatenated[, "Plate.ID"])
+mainscreen.controls.concatenated <- mainscreen.controls.concatenated[, -2]
+
+### fix up the controls names for the concatenated control table.
+
+# C12, D12 change siCtrl2_1, siCtrl2_2 to siCtrl1and2_1, siCtrl1and2_2 respectively for the second screen only (interplate.y = X, Y or Z)
+# also change siALP_2 into LF_2000
+
+for (secondscreen.interplate.y in c("X", "Y", "Z")) {
+  
+  mainscreen.controls.concatenated[mainscreen.controls.concatenated$interplate.y == secondscreen.interplate.y, "Control"] <- 
+    gsub("(siCtrl2)(.*)", "siCtrl1and2\\2", mainscreen.controls.concatenated[mainscreen.controls.concatenated$interplate.y == secondscreen.interplate.y, "Control"])
+  
+  mainscreen.controls.concatenated[(mainscreen.controls.concatenated$interplate.y == secondscreen.interplate.y) &
+                                     (mainscreen.controls.concatenated$Control == "siALP_2"), "Control"] <- "LF_2000"
+  
+}
+
+head(mainscreen.controls.concatenated)
+
+```
+
+## CREATION OF THE SAMPLE + CONTROL TABLE
+
+```{r}
+
+## modification of concatenated mainscreen control table to include the intraplate x and y coordinates
+mainscreen.controls.concatenated2 <- mainscreen.controls.concatenated
+
+mainscreen.controls.concatenated2[, "intraplate.x"] <- c("12")
+
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siCtrl1_1", "intraplate.y"] <- c("A")
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siCtrl1_2", "intraplate.y"] <- c("B")
+#screen 1
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siCtrl2_1", "intraplate.y"] <- c("C")
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siCtrl2_2", "intraplate.y"] <- c("D")
+#screen 2
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siCtrl1and2_1", "intraplate.y"] <- c("C")
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siCtrl1and2_2", "intraplate.y"] <- c("D")
+
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siALP_1", "intraplate.y"] <- c("E")
+#screen 1
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "siALP_2", "intraplate.y"] <- c("F")
+#screen 2
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "LF_2000", "intraplate.y"] <- c("F")
+
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "Induced", "intraplate.y"] <- c("G")
+mainscreen.controls.concatenated2[mainscreen.controls.concatenated2$Control == "NonInduced", "intraplate.y"] <- c("H")
+
+colnames(mainscreen.controls.concatenated2) <- c("Gene", "shRNA.intensity", "interplate.x", 
+                                                 "interplate.y", "intraplate.x", "intraplate.y")
+
+## binding of rows of mainscreen.controls.concatenated2 to mainscreen.concatenated
+
+mainscreen.samples.controls.concatenated <- dplyr::bind_rows(mainscreen.concatenated,mainscreen.controls.concatenated2)
+
+
+mainscreen.samples.controls.concatenated[c(1:5, 4315:4320), ]
+
+###
+# 
+# library(ggfortify)
+# 
+# autoplot(prcomp(mainscreen.matrix[, 5:6]), data = mainscreen.matrix, colour = "interplate.x", label = TRUE, label.size = 2)
+
+
+# # test scaling for screen 1
+# 
+# mainscreen.concatenated.test <- mainscreen.concatenated
+# 
+# mainscreen.concatenated.test[mainscreen.concatenated.test$interplate.y == "A", 7] <- 3*mainscreen.concatenated[mainscreen.concatenated$interplate.y == "A", 7]
+# 
+# mainscreen.concatenated.test[mainscreen.concatenated.test$interplate.y == "B", 7] <- 3*mainscreen.concatenated[mainscreen.concatenated$interplate.y == "B", 7]
+# 
+# mainscreen.concatenated.test[mainscreen.concatenated.test$interplate.y == "C", 7] <- 3*mainscreen.concatenated[mainscreen.concatenated$interplate.y == "C", 7]
+
+
+
+```
+
+## NORMALISATION
+
+In this version of the code, this is our approach to normalisation:
+
+Start with the raw imported data: mainscreen.samples.controls.concatenated
+
+1. Filtering unwanted crap
+  a) SCREEN1: Remove all the siALP. Result: mainscreen.samples.controls.step1a (long)
+  b) SCREEN2: REMOVE OUTLIERS AND TAKE THE AVERAGE OF THE REMAINING TWO VALUES Result: mainscreen.samples.controls.step1b (long)
+2. Generate the PLATEWISE samples + controls data frame. Result: mainscreen.samples.controls.step2_2 (long)
+3. QUANTILE NORMALISATION
+  a) Quantile normalisation BETWEEN EVERY PLATE, ONCE FOR EACH SCREEN. Result: mainscreen.samples.controls.platewise_qn (weird matrix)
+  b) Remake the concatenated mainscreen samples + controls table, but now normalised. Result: mainscreen.samples.controls.concatenated_qn_2 (long)
+4. Simple linear normalisation
+  a) Divide by the AVERAGE siCtrl values for each plate. Result: mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted
+  b) (MAYBE) Divide by the induced values for each plate (scaling to account for differentiation efficiency)
+
+### Step 1: Filtering unwanted crap
+
+#### Step 1a: Removal of all SiALP from Screen 1
+
+```{r}
+
+mainscreen.samples.controls.step1a <- mainscreen.samples.controls.concatenated[!(grepl("(siALP)(.*)", mainscreen.samples.controls.concatenated$Gene) & grepl("A|B|C", mainscreen.samples.controls.concatenated$interplate.y)), ]
+
+row.names(mainscreen.samples.controls.step1a) <- 1:nrow(mainscreen.samples.controls.step1a)
+
+mainscreen.samples.controls.step1a[c(1:5, 4315:4320), ]
+
+
+```
+
+
+#### Step 1b: Turning the outliers of genes in screen 1 to the average of the two remaning probes
+
+```{r}
+
+mainscreen.samples.controls.step1b <- mainscreen.samples.controls.step1a
+
+outlier_rownames <- rownames(mainscreen.samples.controls.step1b[mainscreen.samples.controls.step1b$shRNA.intensity > 0.001, ])
+
+mainscreen.samples.controls.step1b[outlier_rownames, ]
+
+mainscreen.samples.controls.step1b[mainscreen.samples.controls.step1b$shRNA.intensity > 0.001, "shRNA.intensity"] <- NA
+
+mainscreen.samples.controls.step1b[outlier_rownames, ]
+
+for (outlier_rowname in outlier_rownames) {
+  
+  intraplate.y <- mainscreen.samples.controls.step1b[outlier_rowname, "intraplate.y"] 
+  intraplate.x <- mainscreen.samples.controls.step1b[outlier_rowname, "intraplate.x"] 
+  interplate.x <- mainscreen.samples.controls.step1b[outlier_rowname, "interplate.x"] 
+  
+  mainscreen.samples.controls.step1b[outlier_rowname, "shRNA.intensity"] <- mean(mainscreen.samples.controls.step1b[mainscreen.samples.controls.step1b$intraplate.y ==  intraplate.y & mainscreen.samples.controls.step1b$intraplate.x == intraplate.x & mainscreen.samples.controls.step1b$interplate.x == interplate.x & grepl("X|Y|Z", mainscreen.samples.controls.step1b$interplate.y), "shRNA.intensity"], na.rm = TRUE)
+  
+}
+
+# mainscreen.samples.controls.step1b[mainscreen.samples.controls.step1b$intraplate.y ==  intraplate.y & mainscreen.samples.controls.step1b$intraplate.x == intraplate.x & mainscreen.samples.controls.step1b$interplate.x == interplate.x & grepl("X|Y|Z", mainscreen.samples.controls.step1b$interplate.y), "shRNA.intensity"]
+
+# check to see if the averaging was done right
+
+mainscreen.samples.controls.step1a[grepl("CDC7", mainscreen.samples.controls.step1a$Gene), ]
+
+mainscreen.samples.controls.step1b[outlier_rownames, ]
+
+```
+
+### Step 2: Creation of the platewise WHOLE EXPERIMENT table
+#### Condense together the plate co-ordinates from the mainscreen.samples.controls.concatenated table
+
+Results in the creation of mainscreen.samples.controls.step2_2 (long)
+
+```{r}
+
+mainscreen.samples.controls.step2 <- mainscreen.samples.controls.step1b
+
+for (rownumber in 1:nrow(mainscreen.samples.controls.step2)) {
+  
+  mainscreen.samples.controls.step2[rownumber, "intraplate.coord"] <- paste(mainscreen.samples.controls.step2[rownumber, "intraplate.y"],
+                                                                            mainscreen.samples.controls.step2[rownumber, "intraplate.x"],
+                                                                            sep = "")
+  
+  mainscreen.samples.controls.step2[rownumber, "interplate.coord"] <- paste(mainscreen.samples.controls.step2[rownumber, "interplate.y"],
+                                                                            mainscreen.samples.controls.step2[rownumber, "interplate.x"],
+                                                                            sep = "")
+  
+}
+
+head(mainscreen.samples.controls.step2)
+
+mainscreen.samples.controls.step2_2 <- mainscreen.samples.controls.step2[, c(1:2, 7:9)]
+
+head(mainscreen.samples.controls.step2_2)
+
+```
+
+#### Cast the samples and controls table into a large matrix with one plate per column
+
+results in the creation of mainscreen.samples.controls.platewise
+
+```{r}
+
+mainscreen.samples.controls.platewise <- data.frame()
+
+interplate.coord.list <- unique(mainscreen.samples.controls.step2_2[, "interplate.coord"])
+
+interplate.coord.list[1:10]
+
+for (interplate.coord in interplate.coord.list){
+  
+  genecolumn <- mainscreen.samples.controls.step2_2[mainscreen.samples.controls.step2_2$interplate.coord == interplate.coord, "Gene"]
+  mainscreen.samples.controls.platewise[1:length(genecolumn), paste("Gene_", interplate.coord, sep = "")] <- genecolumn
+  
+  
+  RAcolumn <- mainscreen.samples.controls.step2_2[mainscreen.samples.controls.step2_2$interplate.coord == interplate.coord, "Refseq_Accession"]
+  mainscreen.samples.controls.platewise[1:length(RAcolumn), paste("Refseq_Accession_", interplate.coord, sep = "")] <- RAcolumn
+  
+  
+  intensitycolumn <- mainscreen.samples.controls.step2_2[mainscreen.samples.controls.step2_2$interplate.coord == interplate.coord, "shRNA.intensity"]
+  mainscreen.samples.controls.platewise[1:length(intensitycolumn), paste("shRNA.intensity_", interplate.coord, sep = "")] <- intensitycolumn
+  
+  
+  intraplatecolumn <- mainscreen.samples.controls.step2_2[mainscreen.samples.controls.step2_2$interplate.coord == interplate.coord, "intraplate.coord"]
+  mainscreen.samples.controls.platewise[1:length(intraplatecolumn), paste("intraplate.coord_", interplate.coord, sep = "")] <- intraplatecolumn
+  
+  
+}
+
+head(mainscreen.samples.controls.platewise)
+
+```
+
+
+### Step 3: QUANTILE NORMALISATION
+
+#### THE FUNCTION TO DO MANUAL QUANTILE NORMALISATION (DEFUNCT)
+
+NOTE: this is defunct, quantile normalisation is to be performed with preprocesscore instead
+
+It quantile normalises columns of values in a data frame.
+You must specify only numeric columns as input.
+
+```{r}
+
+# quantile_normalisation <- function(df){
+#   df_rank <- apply(df,2,rank,ties.method="min")
+#   df_sorted <- data.frame(apply(df, 2, sort))
+#   df_mean <- apply(df_sorted, 1, mean)
+#    
+#   index_to_mean <- function(my_index, my_mean){
+#     return(my_mean[my_index])
+#   }
+#    
+#   df_final <- apply(df_rank, 2, index_to_mean, my_mean=df_mean)
+#   rownames(df_final) <- rownames(df)
+#   return(df_final)
+# }
+
+```
+
+#### Step 3a: Quantile normalisation of mainscreen.samples.controls.platewise_qn
+
+BY NOW, ALL THE PLATES IN ONE SCREEN 
+
+Input: unnormalised matrix of plates for the whole experiment (mainscreen.samples.controls.platewise)
+
+Output: normalised matrix of plates for the whole experiment (mainscreen.samples.controls.platewise_qn)
+
+```{r}
+
+mainscreen.samples.controls.platewise_qn <- mainscreen.samples.controls.platewise
+
+library(preprocessCore)
+
+# QN screen 1 using preprocesscore
+
+mainscreen.samples.controls.platewise_qn[, 4 * (1:27) - 1] <- normalize.quantiles(as.matrix(mainscreen.samples.controls.platewise_qn[, 4 * (1:27) - 1]), copy = FALSE)
+
+# QN screen 2 using preprocesscore
+
+mainscreen.samples.controls.platewise_qn[, 4 * (28:54) - 1] <- normalize.quantiles(as.matrix(mainscreen.samples.controls.platewise_qn[, 4 * (28:54) - 1]), copy = FALSE)
+# 
+# # normalisation of the first screen
+# 
+# mainscreen.samples.controls.platewise_qn[, 4 * (1:27) - 1] <- quantile_normalisation(mainscreen.samples.controls.platewise_qn[, 4 * (1:27) - 1])
+# 
+# # normalisation of the second screen
+# 
+# mainscreen.samples.controls.platewise_qn[, 4 * (28:54) - 1] <- quantile_normalisation(mainscreen.samples.controls.platewise_qn[, 4 * (28:54) - 1])
+
+head(mainscreen.samples.controls.platewise_qn)
+
+```
+
+#### Step 3b: RECREATION OF THE MAINSCREEN.CONCATENATED TABLE NORMALISED
+
+machinery to split the plates and bind them into a supercolumn
+
+```{r}
+
+# mainscreen.samples.controls.concatenated_qn <- data.frame(Gene = "", Refseq_Accession = "", shRNA.intensity = "", intraplate.coord = "", interplate.coord = "")
+
+interplate.coord.list[1]
+
+mainscreen.samples.controls.concatenated_qn <- mainscreen.samples.controls.platewise_qn[, grepl(interplate.coord.list[1], colnames(mainscreen.samples.controls.platewise_qn))]
+
+mainscreen.samples.controls.concatenated_qn[, "interplate.coord"] <- interplate.coord.list[1]
+
+colnames(mainscreen.samples.controls.concatenated_qn) <- c("Gene", "Refseq_Accession", "shRNA.intensity", "intraplate.coord", "interplate.coord")
+
+for (interplate.coord in interplate.coord.list[2:length(interplate.coord.list)]) {
+  
+  currentplate <- mainscreen.samples.controls.platewise_qn[, grepl(interplate.coord, colnames(mainscreen.samples.controls.platewise_qn))]
+
+  currentplate[, "interplate.coord"] <- interplate.coord
+  
+  colnames(currentplate) <- c("Gene", "Refseq_Accession", "shRNA.intensity", "intraplate.coord", "interplate.coord")
+  
+  mainscreen.samples.controls.concatenated_qn <- dplyr::bind_rows(mainscreen.samples.controls.concatenated_qn, currentplate)
+
+}
+
+head(mainscreen.samples.controls.concatenated_qn)
+
+head(mainscreen.samples.controls.concatenated)
+
+```
+
+regex to re-split the plate co-coordinates
+
+```{r}
+
+mainscreen.samples.controls.concatenated_qn[, "intraplate.x"] <- gsub("([A-Z])([0-9]{1,2})", "\\2",  mainscreen.samples.controls.concatenated_qn$intraplate.coord)
+
+mainscreen.samples.controls.concatenated_qn[, "intraplate.y"] <- gsub("([A-Z])([0-9]{1,2})", "\\1",  mainscreen.samples.controls.concatenated_qn$intraplate.coord)
+
+mainscreen.samples.controls.concatenated_qn[, "interplate.x"] <- gsub("([A-Z])([0-9]{1,2})", "\\2",  mainscreen.samples.controls.concatenated_qn$interplate.coord)
+
+mainscreen.samples.controls.concatenated_qn[, "interplate.y"] <- gsub("([A-Z])([0-9]{1,2})", "\\1",  mainscreen.samples.controls.concatenated_qn$interplate.coord)
+
+head(mainscreen.samples.controls.concatenated_qn)
+
+mainscreen.samples.controls.concatenated_qn_2 <- mainscreen.samples.controls.concatenated_qn[, c(1, 2, 7, 6, 8, 9, 3)]
+
+head(mainscreen.samples.controls.concatenated_qn_2)
+
+```
+
+### Step 4: Simple Linear Normalisation
+
+#### Step 4a: SiCtrl (Scrambled control) divide
+
+Divide the average of all 4 scrambled controls on each plate from each measured shRNA intensity on each plate
+
+```{r}
+
+mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted <- mainscreen.samples.controls.concatenated_qn_2
+
+for (interplate.x in 1:9) {
+  
+  for (interplate.y in c("A", "B", "C", "X", "Y", "Z")) {
+    
+  scrambledmean <- mean(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("siCtrl", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[, "Gene"]) & mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.x == interplate.x & mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.y == interplate.y, "shRNA.intensity"])
+  
+  mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.x == interplate.x & mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.y == interplate.y, "shRNA.intensity"] <- mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.x == interplate.x & mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.y == interplate.y, "shRNA.intensity"] / scrambledmean
+    
+  }
+  
+}
+
+mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted <- mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[is.na(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene) == FALSE, ]
+
+rownames(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted) <-1:nrow(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted)
+
+mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[c(1:10, 88:95), ]
+
+```
+
+#### Step 4b: divide by "induced" to scale to 100%
+
+```{r}
+# 
+# for (interplate.x_loop in 1:9) {
+#   
+#   for (interplate.y_loop in c("A", "B", "C", "X", "Y", "Z")) {
+#     
+#     samples.controls.concatenated_rubberband[samples.controls.concatenated_rubberband$interplate.x == interplate.x_loop &
+#                                                samples.controls.concatenated_rubberband$interplate.y == interplate.y_loop, "shRNA.intensity"] <- 
+#       samples.controls.concatenated_rubberband[samples.controls.concatenated_rubberband$interplate.x == interplate.x_loop &
+#                                                  samples.controls.concatenated_rubberband$interplate.y == interplate.y_loop, "shRNA.intensity"] / 
+#       mainscreen.controls.concatenated_rubberband[mainscreen.controls.concatenated_rubberband$Control == "Induced" &
+#                                                     mainscreen.controls.concatenated_rubberband$interplate.x == interplate.x_loop &
+#                                                     mainscreen.controls.concatenated_rubberband$interplate.y == interplate.y_loop, "shRNA.intensity"]
+#     
+#     mainscreen.controls.concatenated_rubberband[mainscreen.controls.concatenated_rubberband$interplate.x == interplate.x_loop &
+#                                                   mainscreen.controls.concatenated_rubberband$interplate.y == interplate.y_loop, "shRNA.intensity"] <-
+#       mainscreen.controls.concatenated_rubberband[mainscreen.controls.concatenated_rubberband$interplate.x == interplate.x_loop &
+#                                                     mainscreen.controls.concatenated_rubberband$interplate.y == interplate.y_loop, "shRNA.intensity"] /
+#       mainscreen.controls.concatenated_rubberband[mainscreen.controls.concatenated_rubberband$Control == "Induced" &
+#                                                     mainscreen.controls.concatenated_rubberband$interplate.x == interplate.x_loop &
+#                                                     mainscreen.controls.concatenated_rubberband$interplate.y == interplate.y_loop, "shRNA.intensity"]
+#     
+#   }
+#   
+# }
+
+```
+
+##### reCAST the sample table into matrix format
+
+THIS IS SO POWERFUL OMG
+
+```{r}
+# 
+# samplesonly.concatenated_rubberband <- samples.controls.concatenated_rubberband[samples.controls.concatenated_rubberband$Refseq_Accession != "NA", ]
+# samplesonly.concatenated_rubberband <- samplesonly.concatenated_rubberband[1:4314, ]
+# 
+# # for (replicate in 1:6) {
+# #   
+# #   samplesonly.concatenated_rubberband[(1 + 719 * (replicate - 1)) : (replicate * 719), "replicatenumber"] <- replicate
+# #   
+# # }
+# 
+# samplesonly.matrix_rubberband <- 
+#   reshape2::dcast(data = samplesonly.concatenated_rubberband, formula = Gene + Refseq_Accession + intraplate.y + intraplate.x + interplate.x ~ interplate.y, value.var = "shRNA.intensity")
+# 
+# # EXPORT
+# 
+# write.table(samplesonly.matrix_rubberband, paste(results.dir, "samplesonly.matrix_rubberband.txt", sep = ""), sep = "\t", row.names = FALSE)
+
+```
+
+
+# QUALITY CONTROL
+
+## GGPLOT OF CONTROLS
+
+```{r}
+# 
+# # raw data (raw)
+# mainscreen.samples.controls.concatenated
+# # Step 3b (QN)
+# mainscreen.samples.controls.concatenated_qn_2
+# # Step 4a (QN.-siCtrl)
+# mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted
+#
+```
+
+```{r}
+
+library(ggplot2)
+library(stringi)
+library(extrafont)
+
+# loading the Helvetica fonts
+
+font_import(pattern="[H/h]elvetica", prompt = FALSE)
+
+loadfonts(device="win")
+
+# 
+# # set the theme text
+# 
+# CL_theme <- theme(plot.title = element_text(family="Helvetica", face="bold"),
+#                   legend.title = element_text(family="Helvetica", face="bold"),
+#                   text = element_text(family="Helvetica"))
+
+
+```
+
+### Whole experiment HEATMAP edge-effect check
+
+```{r}
+
+# raw data
+
+ggplot(mainscreen.samples.controls.concatenated, 
+       aes(x = intraplate.x, y = intraplate.y)) +
+  geom_raster(aes(fill = shRNA.intensity), hjust = 0.5, vjust = 0.5, interpolate = FALSE) +
+  scale_fill_gradient2(name = "ALP activity per cell", limits = c(0, 10e-5), low = "yellow", mid = "#FF0000", high = "#000000", midpoint = 2.5e-5, na.value = "green") +
+  scale_x_discrete(limits = 1:12) +
+  scale_y_discrete(limits = c("H", "G", "F", "E", "D", "C", "B", "A")) +
+  labs(title = "Heatmap of ALP activities (whole experiment, raw)", x = "Intraplate Well x-coordinate", y = "Intraplate Well y-coordinate") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(interplate.y ~ interplate.x) +
+  ggsave(filename = paste(results.dir, "qc_heatmap_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 20, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_heatmap_raw.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 20, units = "cm")
+
+# Step 3b
+
+ggplot(mainscreen.samples.controls.concatenated_qn_2, 
+       aes(x = intraplate.x, y = intraplate.y)) +
+  geom_raster(aes(fill = shRNA.intensity), hjust = 0.5, vjust = 0.5, interpolate = FALSE) +
+  scale_fill_gradient2(name = "ALP signal", low = "yellow", mid = "#FF0000", high = "#000000", midpoint = 3e-5, na.value = "green") +
+  scale_x_discrete(limits = 1:12) +
+  scale_y_discrete(limits = c("H", "G", "F", "E", "D", "C", "B", "A")) +
+  labs(title = "Heatmap of ALP activities (whole experiment, QN)", x = "Intraplate Well x-coordinate", y = "Intraplate Well y-coordinate") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(interplate.y ~ interplate.x) +
+  ggsave(filename = paste(results.dir, "qc_heatmap_QN.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 20, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_heatmap_QN.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 20, units = "cm")
+
+# Step 4a
+
+ggplot(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted, 
+       aes(x = intraplate.x, y = intraplate.y)) +
+  geom_raster(aes(fill = shRNA.intensity), hjust = 0.5, vjust = 0.5, interpolate = FALSE) +
+  scale_fill_gradient2(name = "Fold change in ALP signal", low = "yellow", mid = "#FF0000", high = "#000000", midpoint = 2, na.value = "green") +
+  scale_x_discrete(limits = 1:12) +
+  scale_y_discrete(limits = c("H", "G", "F", "E", "D", "C", "B", "A")) +
+  labs(title = "Heatmap of ALP signal fold changes (whole experiment, QN, -siCtrl)", x = "Intraplate Well x-coordinate", y = "Intraplate Well y-coordinate") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  # theme(axis.text.x = element_text(vjust = c(0, -2, 0, -2, 0, -2, 0, -2))) +
+  facet_grid(interplate.y ~ interplate.x) +
+  # theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggsave(filename = paste(results.dir, "qc_heatmap_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 20, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_heatmap_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 20, units = "cm")
+
+```
+
+### All controls dotplot quality check
+
+```{r}
+
+# raw data
+
+ggplot(data = mainscreen.samples.controls.concatenated[grepl("(siCtrl)|(siALP)|(LF_)|(induced)", mainscreen.samples.controls.concatenated$Gene, ignore.case = TRUE), ], aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  scale_fill_continuous(name = "ALP activity") +
+  ggtitle("Dotplot of all controls per plate (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y)+
+  ggsave(filename = paste(results.dir, "qc_dotplot.allcontrols_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.allcontrols_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 3b
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2[grepl("(siCtrl)|(siALP)|(LF)|(induced)", mainscreen.samples.controls.concatenated_qn_2$Gene, ignore.case = TRUE), ], aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  scale_fill_continuous(name = "ALP activity") +
+  ggtitle("Dotplot of all controls per plate (QN)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y)+
+  ggsave(filename = paste(results.dir, "qc_dotplot.allcontrols_QN.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.allcontrols_QN.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(siCtrl)|(siALP)|(LF)|(induced)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene, ignore.case = TRUE), ], aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  scale_fill_continuous(name = "ALP activity") +
+  ggtitle("Dotplot of all controls per plate (QN, -siCtrl)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.allcontrols_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.allcontrols_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+```
+
+### non-targeting (scrambled) control dot quality check
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data = mainscreen.samples.controls.concatenated[grepl("(siCtrl)", mainscreen.samples.controls.concatenated$Gene, ignore.case = TRUE), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of scrambled ALP activity per plate (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.nontargeting_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.nontargeting_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 3b (QN)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2[grepl("(siCtrl)", mainscreen.samples.controls.concatenated_qn_2$Gene, ignore.case = TRUE), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of scrambled ALP activity per plate (QN)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.nontargeting_QN.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.nontargeting_QN.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(siCtrl)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene, ignore.case = TRUE), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of scrambled ALP activity per plate (QN.-siCtrl)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.nontargeting_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.nontargeting_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+```
+
+### high/low control dot quality check
+
+We can see that the quantile normalisation itself is effective to scale the full range from induced to noninduced in order to a similar value between each plate.
+
+After each plate has been subtracted from by the average of their scrambled controls, the ranges still appear to differ between plates. Although this implies differing sensitivity to knockdown/extent of differentiation between plates, it is ill-advised to scale each plate's value by dividing by the induced value, since there is only one replicate of it on each plate, and is a very unreliable measurement. Instead, we say that both screens are not comparable, and leave it at that. ^_^
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data = mainscreen.samples.controls.concatenated[grepl("(.*)(Induced)", mainscreen.samples.controls.concatenated$Gene), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of Induced/non-Induced intensity per plate (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.ind.nonind_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.ind.nonind_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 3b (QN)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2[grepl("(.*)(Induced)", mainscreen.samples.controls.concatenated_qn_2$Gene), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of Induced/non-Induced intensity per plate (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.ind.nonind_QN.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.ind.nonind_QN.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(.*)(Induced)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of Induced/non-Induced intensity per plate (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.ind.nonind_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.ind.nonind_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+```
+
+### positive knockdown control (SiALP) and ind/non-ind dotplot quality check
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data = mainscreen.samples.controls.concatenated[grepl("(siALP|Induced)(.*)", mainscreen.samples.controls.concatenated$Gene), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of siALP and induced/noninduced per plate (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siALP.inds_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siALP.inds_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+
+# others are meaningless
+#
+# # Step 3b (QN)
+# 
+# ggplot(data = mainscreen.samples.controls.concatenated_qn_2[grepl("(siALP|Induced)(.*)", mainscreen.samples.controls.concatenated_qn_2$Gene), ], 
+#        aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+#   geom_point(aes(interplate.x)) +
+#   ggtitle("Dotplot of siALP and induced/noninduced per plate (raw)") +
+#   theme_bw() +
+#   facet_grid(.~interplate.y)
+# 
+# # Step 4a (QN.-siCtrl)
+# 
+# ggplot(data = mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(siALP|Induced)(.*)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene), ], 
+#        aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+#   geom_point(aes(interplate.x)) +
+#   ggtitle("Dotplot of siALP and induced/noninduced per plate (raw)") +
+#   theme_bw() +
+#   facet_grid(.~interplate.y)
+# 
+
+```
+
+### non-targeting control (SiCtrl) vs. non/induced
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data = mainscreen.samples.controls.concatenated[grepl("(siCtrl|Induced)(.*)", mainscreen.samples.controls.concatenated$Gene, ignore.case = TRUE), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of siALP and induced/noninduced intensity per plate (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siCtrl.inds_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siCtrl.inds_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 3b (QN)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2[grepl("(siCtrl|Induced)(.*)", mainscreen.samples.controls.concatenated_qn_2$Gene, ignore.case = TRUE), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of siALP and induced/noninduced intensity per plate (QN)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siCtrl.inds_QN.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siCtrl.inds_QN.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(siCtrl|Induced)(.*)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene, ignore.case = TRUE), ], 
+       aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = Gene)) +
+  geom_point(aes(interplate.x)) +
+  ggtitle("Dotplot of siALP and induced/noninduced intensity per plate (QN.-siCtrl)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siCtrl.inds_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_dotplot.siCtrl.inds_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+```
+
+### all boxplot quality check
+
+well, quantile normalisation obviously worked here...
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data = mainscreen.samples.controls.concatenated, aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = interplate.x)) +
+  stat_boxplot(aes(interplate.x), geom = "errorbar") +
+  geom_boxplot(aes(interplate.x)) +
+  scale_y_continuous(limits = c(0, 8e-5)) +
+  # i set the y axis limit manually since there are are alot of high value outliers
+  ggtitle("Boxplots of ALP activity per plate (raw)") +
+  xlab("Plate Column Number") +
+  ylab("ALP activity") +
+  scale_colour_discrete(name = "Plate
+Column
+Number") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 15), legend.title = element_text(size = 15), axis.text = element_text(size = 12, colour = "black"), strip.text = element_text(size = 12, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_boxplot.all_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_boxplot.all_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 3b (QN)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2, aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = interplate.x)) +
+  stat_boxplot(aes(interplate.x), geom = "errorbar") +
+  geom_boxplot(aes(interplate.x)) +
+  # i set the y axis limit manually since there are are alot of high value outliers
+  ggtitle("Boxplots of ALP activity per plate (QN)") +
+  xlab("Plate Column Number") +
+  ylab("ALP activity") +
+  scale_colour_discrete(name = "Plate
+Column
+Number") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 15), legend.title = element_text(size = 15), axis.text = element_text(size = 12, colour = "black"), strip.text = element_text(size = 12, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_boxplot.all_QN.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_boxplot.all_QN.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data = mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted, aes(y = shRNA.intensity, group = interaction(interplate.y, interplate.x), colour = interplate.x)) +
+  stat_boxplot(aes(interplate.x), geom = "errorbar") +
+  geom_boxplot(aes(interplate.x)) +
+  # i set the y axis limit manually since there are are alot of high value outliers
+  ggtitle("Boxplots of ALP activity per plate (QN.-siCtrl)") +
+  xlab("Plate Column Number") +
+  ylab("ALP activity") +
+  scale_colour_discrete(name = "Plate
+Column
+Number") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 15), legend.title = element_text(size = 15), axis.text = element_text(size = 12, colour = "black"), strip.text = element_text(size = 12, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  facet_grid(.~interplate.y) +
+  ggsave(filename = paste(results.dir, "qc_boxplot.all_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_boxplot.all_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+```
+
+### Normal QQ plot of controls to check for normality
+
+sictrl1
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated[grepl("(siCtrl1)(.*)", mainscreen.samples.controls.concatenated$Gene, ignore.case = TRUE), "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all siCtrl1 probes (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.sictrl1_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.sictrl1_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(siCtrl1)(.*)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene, ignore.case = TRUE), "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all siCtrl1 probes (QN.-siCtrl)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.sictrl1_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.sictrl1_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+```
+
+induced
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated[grepl("(Induced)(.*)", mainscreen.samples.controls.concatenated$Gene, ignore.case = TRUE), "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all induced probes (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.induced_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.induced_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(Induced)(.*)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene, ignore.case = TRUE), "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all induced probes (QN.-siCtrl)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.induced_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.induced_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+
+```
+
+noninduced
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated[grepl("(NonInduced)(.*)", mainscreen.samples.controls.concatenated$Gene, ignore.case = TRUE), "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all induced probes (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.noninduced_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.noninduced_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("(NonInduced)(.*)", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene, ignore.case = TRUE), "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all induced probes (QN.-siCtrl)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.noninduced_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.noninduced_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+
+```
+
+normal QQ plot of samples to check for normality
+
+```{r}
+
+# raw data (raw)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated[(is.na(mainscreen.samples.controls.concatenated$Refseq_Accession) == FALSE) & (mainscreen.samples.controls.concatenated$shRNA.intensity < 0.001), "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all sample probes (raw)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.allsamples_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.allsamples_raw.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+# Step 4a (QN.-siCtrl)
+
+ggplot(data.frame(qqnorm(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[is.na(mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Refseq_Accession) == FALSE, "shRNA.intensity"])), 
+       aes(x = x, y = y)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  ggtitle("Q-Q plot of all induced probes (QN.-siCtrl)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "qc_QQplot.allsamples_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 15, units = "cm") +
+  ggsave(filename = paste(results.dir, "qc_QQplot.allsamples_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 15, units = "cm")
+
+```
+
+## Scatterplots of screen 1 vs. screen 2 screen values
+
+### First join the screen 1 with screen 2 by reconcatenating
+
+Construction of screen 1 concatenated matrix
+
+```{r}
+
+# raw
+
+screen1.concatenated.raw <- mainscreen.samples.controls.concatenated[grepl("A|B|C", mainscreen.samples.controls.concatenated$interplate.y), c(1, 3:7)]
+
+colnames(screen1.concatenated.raw) <- c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y", "shRNA.intensity_screen1")
+
+head(screen1.concatenated.raw)
+
+# QN.-siCtrl
+
+screen1.concatenated.QN.siCtrl <- mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("A|B|C", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.y), c(1, 3:7)]
+
+colnames(screen1.concatenated.QN.siCtrl) <- c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y", "shRNA.intensity_screen1")
+
+head(screen1.concatenated.QN.siCtrl)
+
+```
+
+Construction of screen 2 concatenated matrix
+
+```{r}
+
+# raw
+
+screen2.concatenated.raw <- mainscreen.samples.controls.concatenated[grepl("X|Y|Z", mainscreen.samples.controls.concatenated$interplate.y), c(1, 3:7)]
+
+screen2.concatenated.raw$interplate.y <- gsub("X", "A", screen2.concatenated.raw$interplate.y)
+
+screen2.concatenated.raw$interplate.y <- gsub("Y", "B", screen2.concatenated.raw$interplate.y)
+
+screen2.concatenated.raw$interplate.y <- gsub("Z", "C", screen2.concatenated.raw$interplate.y)
+
+colnames(screen2.concatenated.raw) <- c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y", "shRNA.intensity_screen2")
+
+head(screen2.concatenated.raw)
+
+# QN.-siCtrl
+
+screen2.concatenated.QN.siCtrl <- mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[grepl("X|Y|Z", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$interplate.y), c(1, 3:7)]
+
+screen2.concatenated.QN.siCtrl$interplate.y <- gsub("X", "A", screen2.concatenated.QN.siCtrl$interplate.y)
+
+screen2.concatenated.QN.siCtrl$interplate.y <- gsub("Y", "B", screen2.concatenated.QN.siCtrl$interplate.y)
+
+screen2.concatenated.QN.siCtrl$interplate.y <- gsub("Z", "C", screen2.concatenated.QN.siCtrl$interplate.y)
+
+colnames(screen2.concatenated.QN.siCtrl) <- c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y", "shRNA.intensity_screen2")
+
+head(screen2.concatenated.QN.siCtrl)
+
+```
+
+### construction of the joined table with screen 1 and screen 2 separated
+
+```{r}
+
+# raw
+
+screen1.vs.screen2.absoluteintensity.raw <- dplyr::inner_join(screen1.concatenated.raw, screen2.concatenated.raw, 
+                                        by = c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y"))
+
+colnames(screen1.vs.screen2.absoluteintensity.raw) <- c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y", "shRNA.intensity_screen1", "shRNA.intensity_screen2")
+
+## FILTER OUT THE OUTLIERS AND NA
+
+screen1.vs.screen2.absoluteintensity.raw <- na.omit(screen1.vs.screen2.absoluteintensity.raw)
+
+
+head(screen1.vs.screen2.absoluteintensity.raw)
+
+# QN.-siCtrl
+
+screen1.vs.screen2.absoluteintensity.QN.siCtrl <- dplyr::inner_join(screen1.concatenated.QN.siCtrl, screen2.concatenated.QN.siCtrl, 
+                                        by = c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y"))
+
+colnames(screen1.vs.screen2.absoluteintensity.QN.siCtrl) <- c("Gene", "intraplate.y", "intraplate.x", "interplate.x", "screenplate.y", "shRNA.intensity_screen1", "shRNA.intensity_screen2")
+
+## FILTER OUT THE OUTLIERS AND NA
+
+screen1.vs.screen2.absoluteintensity.QN.siCtrl <- na.omit(screen1.vs.screen2.absoluteintensity.QN.siCtrl)
+
+
+head(screen1.vs.screen2.absoluteintensity.QN.siCtrl)
+
+```
+
+### GGPLOT
+
+
+```{r}
+
+# raw
+
+LOBF <- lm(formula = shRNA.intensity_screen2 ~ shRNA.intensity_screen1, data = screen1.vs.screen2.absoluteintensity.raw, na.action = na.omit)
+
+correlation <- cor(screen1.vs.screen2.absoluteintensity.raw$shRNA.intensity_screen1, screen1.vs.screen2.absoluteintensity.raw$shRNA.intensity_screen2, use = "pairwise.complete.obs")
+
+ggplot(screen1.vs.screen2.absoluteintensity.raw, aes(x = shRNA.intensity_screen1, y = shRNA.intensity_screen2)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  annotate("text", x = 4e-5, y = 5e-5, label = "y = x", colour = "red", size = 5) +
+  geom_abline(slope = as.numeric(paste(LOBF$coefficients[2])), intercept = as.numeric(paste(LOBF$coefficients[1])), colour = "darkolivegreen4", linetype = "longdash") +
+  annotate("text", x = 2.5e-5, y = 7.2e-5, size = 5, label = paste("y = ", signif(LOBF$coefficients[2], digits = 4), "x + ", signif(LOBF$coefficients[1], digits = 4), 
+                                                                 "\n R = ", signif(correlation, digits = 4), sep = ""), colour = "darkolivegreen") +
+  scale_x_continuous(limits = c(0, 4e-5)) +
+  scale_y_continuous(limits = c(0, 8e-5)) +
+  ggtitle("Scatterplot of screen 1 vs. screen 2 by probe intensities (raw)") +
+  xlab("Raw ALP activity (Screen 1)") +
+  ylab("Raw ALP activity (Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 24), legend.title = element_text(size = 24), axis.text = element_text(size = 18, colour = "black"), strip.text = element_text(size = 18, colour = "black"), axis.ticks = element_line(colour = "black")) +
+    ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_absolute_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 7, height = 7, units = "in") +
+  ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_absolute_raw.svg", sep = ""), device = "svg", dpi = 600, width = 7, height = 7, units = "in")
+
+# # raw - LOG-LOG plotted
+# 
+# ## preparing the logged values
+# 
+# screen1.vs.screen2.absoluteintensity.raw_loglog <- screen1.vs.screen2.absoluteintensity.raw
+# 
+# screen1.vs.screen2.absoluteintensity.raw_loglog$shRNA.intensity_screen1 <- log(screen1.vs.screen2.absoluteintensity.raw_loglog$shRNA.intensity_screen1)
+# screen1.vs.screen2.absoluteintensity.raw_loglog$shRNA.intensity_screen2 <- log(screen1.vs.screen2.absoluteintensity.raw_loglog$shRNA.intensity_screen2)
+# 
+# LOBF <- lm(formula = shRNA.intensity_screen2 ~ shRNA.intensity_screen1, data = screen1.vs.screen2.absoluteintensity.raw_loglog, na.action = na.omit)
+# 
+# correlation <- cor(screen1.vs.screen2.absoluteintensity.raw_loglog$shRNA.intensity_screen1, screen1.vs.screen2.absoluteintensity.raw_loglog$shRNA.intensity_screen2, use = "pairwise.complete.obs")
+# 
+# ggplot(screen1.vs.screen2.absoluteintensity.raw_loglog, aes(x = shRNA.intensity_screen1, y = shRNA.intensity_screen2)) +
+#   geom_point() +
+#   geom_abline(slope = 1, intercept = 0, colour = "red") +
+#   annotate("text", x = -11, y = -11.5, label = "y = x", colour = "red") +
+#   geom_abline(slope = as.numeric(paste(LOBF$coefficients[2])), intercept = as.numeric(paste(LOBF$coefficients[1])), colour = "darkolivegreen4", linetype = "longdash") +
+#   annotate("text", x = -13, y = -10, size = 3, label = paste("y = ", signif(LOBF$coefficients[2], digits = 4), "x + ", signif(LOBF$coefficients[1], digits = 4), 
+#                                                                  "\n R_sq = ", signif(correlation, digits = 4), sep = ""), colour = "darkolivegreen") +
+#   # scale_x_continuous(limits = c(0, 4e-5)) +
+#   # scale_y_continuous(limits = c(0, 8e-5)) +
+#   ggtitle("Scatterplot of screen 1 vs. screen 2 by probe intensities (raw, log-log)") +
+#   xlab("log(shRNA.intensity_screen1)") +
+#   ylab("log(shRNA.intensity_screen2)") +
+#   theme_bw() +                        
+#     ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_raw_loglog.pdf", sep = ""), device = "pdf") +
+#   ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_raw_loglog.svg", sep = ""), device = "svg")
+      
+
+# QN.-siCtrl
+???
+```
+
+## Rank/rank scatterplot
+
+### First, introduce ranks into the screen 1 and screen 2 concatenated tables.
+
+In this method of ranking, N/A values are ranked last.
+
+```{r}
+
+# raw
+
+screen1.vs.screen2.rank.raw <- screen1.vs.screen2.absoluteintensity.raw
+
+head(screen1.vs.screen2.rank.raw)
+
+screen1.vs.screen2.rank.raw[, "Rank.screen1"] <- rank(screen1.vs.screen2.rank.raw[, "shRNA.intensity_screen1"], na.last = TRUE, ties.method = "first")
+
+screen1.vs.screen2.rank.raw[, "Rank.screen2"] <- rank(screen1.vs.screen2.rank.raw[, "shRNA.intensity_screen2"], na.last = TRUE, ties.method = "first")
+
+head(screen1.vs.screen2.rank.raw)
+
+# QN.-siCtrl
+
+screen1.vs.screen2.rank.QN.siCtrl <- screen1.vs.screen2.absoluteintensity.QN.siCtrl
+
+head(screen1.vs.screen2.rank.QN.siCtrl)
+
+screen1.vs.screen2.rank.QN.siCtrl[, "Rank.screen1"] <- rank(screen1.vs.screen2.rank.QN.siCtrl[, "shRNA.intensity_screen1"], na.last = TRUE, ties.method = "first")
+
+screen1.vs.screen2.rank.QN.siCtrl[, "Rank.screen2"] <- rank(screen1.vs.screen2.rank.QN.siCtrl[, "shRNA.intensity_screen2"], na.last = TRUE, ties.method = "first")
+
+head(screen1.vs.screen2.rank.QN.siCtrl)
+
+```
+
+### calculated pearson correlation coeffient
+
+```{r}
+
+# raw
+
+
+
+# QN.-siCtrl
+
+screen1.vs.screen2.rank.raw.QN.siCtrl <- cor(screen1.vs.screen2.rank.QN.siCtrl$Rank.screen1, screen1.vs.screen2.rank.QN.siCtrl$Rank.screen2, method = "pearson")
+
+
+```
+
+### GGPLOT
+
+```{r}
+
+# raw
+
+LOBF <- lm(formula = Rank.screen2 ~ Rank.screen1, data = screen1.vs.screen2.rank.raw, na.action = na.omit)
+
+correlation <- cor(screen1.vs.screen2.rank.raw$Rank.screen1, screen1.vs.screen2.rank.raw$Rank.screen2, use = "pairwise.complete.obs")
+
+## scatterplot
+
+ggplot(screen1.vs.screen2.rank.raw, aes(x = Rank.screen1, y = Rank.screen2)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  annotate("text", x = 2400, y = 2200, label = "y = x", colour = "red", size = 5) +
+  ggtitle("Scatterplot of screen 1 vs. screen 2 by probe ranks (raw)") +
+  xlab("Raw rank (Screen 1)") +
+  ylab("Raw rank (Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 24), legend.title = element_text(size = 24), axis.text = element_text(size = 18, colour = "black"), strip.text = element_text(size = 18, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_ranks_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 7, height = 7, units = "in") +
+  ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_ranks_raw.svg", sep = ""), device = "svg", dpi = 600, width = 7, height = 7, units = "in")
+
+## heatmap
+
+ggplot(screen1.vs.screen2.rank.raw, aes(x = Rank.screen1, y = Rank.screen2)) +
+  geom_bin2d(binwidth = c(260, 260), aes(xmin = 0, xmax = 2600, ymin = 0, ymax = 2600)) +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  # geom_point(colour = "black", size = 0.1) +
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "grey") +  
+  annotate("text", x = 2500, y = 2200, label = "y = x", colour = "red") +
+  ggtitle("Heatmap of screen 1 vs. screen 2 by probe ranks (raw)") +
+  xlab("Raw rank (Screen 1)") +
+  ylab("Raw rank (Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 24), legend.title = element_text(size = 24), legend.text = element_text(size = 18), axis.text = element_text(size = 18, colour = "black"), strip.text = element_text(size = 18, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  ggsave(filename = paste(results.dir, "qc_heatmaponly.screen1.vs.screen2_ranks_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 7, height = 7, units = "in") +
+  ggsave(filename = paste(results.dir, "qc_heatmaponly.screen1.vs.screen2_ranks_raw.svg", sep = ""), device = "svg", dpi = 600, width = 7, height = 7, units = "in")
+
+# QN.-siCtrl
+
+LOBF <- lm(formula = Rank.screen2 ~ Rank.screen1, data = screen1.vs.screen2.rank.QN.siCtrl, na.action = na.omit)
+
+correlation <- cor(screen1.vs.screen2.rank.QN.siCtrl$Rank.screen1, screen1.vs.screen2.rank.QN.siCtrl$Rank.screen2, use = "pairwise.complete.obs")
+
+## scatterplot
+
+ggplot(screen1.vs.screen2.rank.QN.siCtrl, aes(x = Rank.screen1, y = Rank.screen2)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  annotate("text", x = 2400, y = 2200, label = "y = x", colour = "red", size = 5) +
+  ggtitle("Scatterplot of screen 1 vs. screen 2 by probe ranks (QN.-siCtrl)") +
+  xlab("Normalised rank (Screen 1)") +
+  ylab("Normalised rank (Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 24), legend.title = element_text(size = 24), axis.text = element_text(size = 18, colour = "black"), strip.text = element_text(size = 18, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_ranks_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 7, height = 7, units = "in") +
+  ggsave(filename = paste(results.dir, "qc_scatterplot.screen1.vs.screen2_ranks_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 7, height = 7, units = "in")
+
+## heatmap
+
+ggplot(screen1.vs.screen2.rank.QN.siCtrl, aes(x = Rank.screen1, y = Rank.screen2)) +
+  geom_bin2d(binwidth = c(260, 260), aes(xmin = 0, xmax = 2600, ymin = 0, ymax = 2600)) +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  # geom_point(colour = "black", size = 0.1) +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  annotate("text", x = 2500, y = 2200, label = "y = x", colour = "red") +
+  ggtitle("Heatmap of screen 1 vs. screen 2 by probe ranks (QN.-siCtrl)") +
+  xlab("Normalised rank (Screen 1)") +
+  ylab("Normalised rank (Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 24), legend.title = element_text(size = 24), legend.text = element_text(size = 18), axis.text = element_text(size = 18, colour = "black"), strip.text = element_text(size = 18, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  ggsave(filename = paste(results.dir, "qc_heatmaponly.screen1.vs.screen2_ranks_QN.-siCtrl.pdf", sep = ""), device = "pdf", dpi = 600, width = 7, height = 7, units = "in") +
+  ggsave(filename = paste(results.dir, "qc_heatmaponly.screen1.vs.screen2_ranks_QN.-siCtrl.svg", sep = ""), device = "svg", dpi = 600, width = 7, height = 7, units = "in")
+
+```
+
+## CALCULATION OF QUALITY METRICS
+
+Note 1: We cannot calculate the Z' factor because we cannot calculate the variance of only one high and low control
+
+Note 2: We shall calculate the Z factor instead
+
+### Generating a quality metrics table 
+
+First I need to put in the mean of the siCtrl's
+
+Note: I believe that I can just average out the siCtrl because from the QC dotplots, siCtrl 1 and 2 seem sufficiently similar in value
+
+Note: NA will be generated from the mean and sd calculations because some plates do not have siALP
+
+```{r}
+
+qualitymetric.matrix <- mainscreen.controls.matrix
+
+for (columnnumber in 1:ncol(qualitymetric.matrix)) {
+  
+  qualitymetric.matrix[9, columnnumber] <- mean(qualitymetric.matrix[1:4, columnnumber])
+  qualitymetric.matrix[10, columnnumber] <- sd(qualitymetric.matrix[1:4, columnnumber])
+  
+}
+
+qualitymetric.matrix[9, 1] <- "siCtrl_mean"
+
+qualitymetric.matrix[10, 1] <- "siCtrl_stdev"
+
+print(qualitymetric.matrix)
+
+```
+
+### Generating the standard deviation and mean of samples.
+
+```{r}
+
+qualitymetric.matrix[11, 1] <- "sample_mean"
+
+qualitymetric.matrix[12, 1] <- "sample_stdev"
+
+for (interplate.y in c("A", "B", "C", "X", "Y", "Z")) {
+  
+  for (interplate.x in 1:9){
+    
+    qualitymetric.matrix[11, paste(interplate.y, interplate.x, "p", sep = "")] <- 
+      mean(mainscreen.concatenated[(mainscreen.concatenated$interplate.x == interplate.x) &
+                                (mainscreen.concatenated$interplate.y == interplate.y), "shRNA.intensity"])
+    
+    qualitymetric.matrix[12, paste(interplate.y, interplate.x, "p", sep = "")] <- 
+      sd(mainscreen.concatenated[(mainscreen.concatenated$interplate.x == interplate.x) &
+                                     (mainscreen.concatenated$interplate.y == interplate.y), "shRNA.intensity"])
+    
+  }
+  
+}
+
+print(qualitymetric.matrix)
+
+```
+
+### calculation of the Z factor
+
+*"The range of both measures is negative infinity to 1, with > 0.5 as a very good assay, > 0 an acceptable assay and < 0 an unacceptable assay."*
+                  - Birmingham et. al., Nature Methods, 2009, 6:8, p569-575
+                  
+The quality of this assay is clearly atrocious.
+
+```{r}
+
+qualitymetric.matrix[13, 1] <- "Z factor"
+
+for (colnumber in 2:ncol(qualitymetric.matrix)) {
+  
+  qualitymetric.matrix[13, colnumber] <- 1 - (((3 * qualitymetric.matrix[12, colnumber]) + (3 * qualitymetric.matrix[10, colnumber])) / abs(qualitymetric.matrix[11, colnumber] - qualitymetric.matrix[9, colnumber]))
+  
+}
+
+print(qualitymetric.matrix[13, ])
+
+```
+
+END QUALITY CONTROL
+
+# z-Score calculation
+
+We shall proceed with the z-score calculation of each screen separately, for the QN.-siCtrl treated dataset (mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted)
+
+Outliers have already been filtered. Good.
+
+## CREATION OF THE NORMALISED CONCATENATED SAMPLES TABLE
+
+```{r}
+
+mainscreen.samples.concatenated_normalised <- mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted[!grepl("sictrl|sialp|lf_|induced", mainscreen.samples.controls.concatenated_qn_2_sictrlsubtracted$Gene, ignore.case = TRUE), ]
+
+head(mainscreen.samples.concatenated_normalised)
+
+```
+
+## Casting of the normalised concatenated sample table into wide format
+
+```{r}
+
+mainscreen.samples.matrix_normalised <- reshape2::dcast(data = mainscreen.samples.concatenated_normalised, formula = Gene + Refseq_Accession + intraplate.y + intraplate.x + interplate.x ~ interplate.y, value.var = "shRNA.intensity")
+
+colnames(mainscreen.samples.matrix_normalised) <- c("Gene", "Refseq_Accession", "intraplate.y", "intraplate.x", "interplate.x", "Screen_1_A", "Screen_1_B", "Screen_1_C", "Screen_2_X", "Screen_2_Y", "Screen_2_Z")
+
+head(mainscreen.samples.matrix_normalised)
+
+```
+
+## calculation of the average ALP signal
+
+averaging the probe values for each gene, including the variance
+
+```{r}
+
+for (rownumber in 1:nrow(mainscreen.samples.matrix_normalised)){
+  
+  mainscreen.samples.matrix_normalised[rownumber, "avg_screen_1"] <- mean(t(mainscreen.samples.matrix_normalised[rownumber, 6:8]), na.rm = TRUE)
+  
+  mainscreen.samples.matrix_normalised[rownumber, "stdev_screen_1"] <- sd(t(mainscreen.samples.matrix_normalised[rownumber, 6:8]), na.rm = TRUE)
+  
+  mainscreen.samples.matrix_normalised[rownumber, "avg_screen_2"] <- mean(t(mainscreen.samples.matrix_normalised[rownumber, 9:11]), na.rm = TRUE)
+  
+  mainscreen.samples.matrix_normalised[rownumber, "stdev_screen_2"] <- sd(t(mainscreen.samples.matrix_normalised[rownumber, 9:11]), na.rm = TRUE)
+                                                           
+}
+
+head(mainscreen.samples.matrix_normalised)
+
+```
+
+APPENDING OF RANK
+
+```{r}
+
+mainscreen.samples.matrix_normalised[, "screen_1_rank"] <- rank(mainscreen.samples.matrix_normalised$avg_screen_1, na.last = TRUE, ties.method = "first")
+
+mainscreen.samples.matrix_normalised[, "screen_2_rank"] <- rank(mainscreen.samples.matrix_normalised$avg_screen_2, na.last = TRUE, ties.method = "first")
+
+head(mainscreen.samples.matrix_normalised)
+
+```
+
+EXPORT OF THE AVERAGE TABLE
+
+```{r}
+
+mainscreen.samples.matrix_normalised_divide <- mainscreen.samples.matrix_normalised
+
+write.table(mainscreen.samples.matrix_normalised_divide, paste(results.dir, "mainscreen.samples.matrix_normalised_divide.txt", sep = ""), row.names = FALSE, sep = "\t")
+
+```
+
+SCATTERPLOT OF PER GENE RANKS
+
+```{r}
+
+# normalised
+
+LOBF <- lm(formula = screen_2_rank ~ screen_1_rank, data = mainscreen.samples.matrix_normalised, na.action = na.omit)
+
+correlation <- cor(mainscreen.samples.matrix_normalised$screen_1_rank, mainscreen.samples.matrix_normalised$screen_2_rank, use = "pairwise.complete.obs")
+
+## scatterplot
+
+ggplot(mainscreen.samples.matrix_normalised, aes(x = screen_1_rank, y = screen_2_rank)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  annotate("text", x = 750, y = 750, label = "y = x", colour = "red", size = 5) +
+  ggtitle("Scatterplot of screen 1 vs. screen 2 by gene (normalised)") +
+  xlab("Normalised rank (Screen 1)") +
+  ylab("Normalised rank (Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 24), legend.title = element_text(size = 24), axis.text = element_text(size = 18, colour = "black"), strip.text = element_text(size = 18, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  ggsave(filename = paste(results.dir, "qc_scatterplot.s1vss2_genes_ranks_normalised.pdf", sep = ""), device = "pdf", dpi = 600, width = 7, height = 7, units = "in") +
+  ggsave(filename = paste(results.dir, "qc_scatterplot.s1vss2_genes_ranks_normalised.svg", sep = ""), device = "svg", dpi = 600, width = 7, height = 7, units = "in")
+
+## heatmap
+
+ggplot(mainscreen.samples.matrix_normalised, aes(x = screen_1_rank, y = screen_2_rank)) +
+  geom_bin2d(binwidth = c(90, 90), aes(xmin = 0, xmax = 720, ymin = 0, ymax = 720)) +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  # geom_point(colour = "black", size = 0.1) +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  annotate("text", x = 750, y = 750, label = "y = x", colour = "red") +
+  ggtitle("Heatmap of screen 1 vs. screen 2 by gene (normalised)") +
+  xlab("Normalised rank (Screen 1)") +
+  ylab("Normalised rank (Screen 2)") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica"), axis.title = element_text(size = 24), legend.title = element_text(size = 24), legend.text = element_text(size = 18), axis.text = element_text(size = 18, colour = "black"), strip.text = element_text(size = 18, colour = "black"), axis.ticks = element_line(colour = "black")) +
+  ggsave(filename = paste(results.dir, "qc_heatmaponly.s1vss2_genes_ranks_normalised.pdf", sep = ""), device = "pdf", dpi = 600, width = 7, height = 7, units = "in") +
+  ggsave(filename = paste(results.dir, "qc_heatmaponly.s1vss2_genes_ranks_normalised.svg", sep = ""), device = "svg", dpi = 600, width = 7, height = 7, units = "in")
+
+```
+
+Observe the distributions of the z-scores
+
+```{r}
+
+# screen 1
+
+screen_1_density <- data.frame(x = density(mainscreen.samples.matrix_normalised$zscore_screen_1)$x, y = density(mainscreen.samples.matrix_normalised$zscore_screen_1)$y)
+
+ggplot(screen_1_density, aes(x = x, y = y)) +
+  geom_line() +
+  labs(title = "Probability density of z-Scores for screen 1", x = "z-Score", y = "Probability") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "density_zscore_screen1.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "density_zscore_screen1.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 9, units = "cm")
+  
+# screen 2
+
+screen_2_density <- data.frame(x = density(mainscreen.samples.matrix_normalised$zscore_screen_2)$x, y = density(mainscreen.samples.matrix_normalised$zscore_screen_2)$y)
+
+ggplot(screen_2_density, aes(x = x, y = y)) +
+  geom_line() +
+  labs(title = "Probability density of z-Scores for screen 2", x = "z-Score", y = "Probability") +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "density_zscore_screen2.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "density_zscore_screen2.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 9, units = "cm")
+  
+# both screens
+
+ggplot() +
+  geom_line(data = screen_1_density, aes(x = x, y = y, colour = "Screen 1")) +
+  geom_line(data = screen_2_density, aes(x = x, y = y, colour = "Screen 2")) +
+  labs(title = "Probability density of z-Scores", x = "z-Score", y = "Probability") +
+  scale_colour_manual(name = "Screen", values = c("darkolivegreen4", "firebrick3")) +
+  theme_bw() +
+  theme(text = element_text(family="Helvetica")) +
+  ggsave(filename = paste(results.dir, "density_zscore_bothscreens.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 9, units = "cm") +
+  ggsave(filename = paste(results.dir, "density_zscore_bothscreens.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 9, units = "cm")
+
+```
+
+
+

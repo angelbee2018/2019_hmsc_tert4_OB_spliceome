@@ -618,19 +618,19 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_modificationSpe
 
 ```{r}
 
-list_of_dfs_phosphosites.proteingroups_intensities <- purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], 
+list_of_dfs_phosphosites.proteingroups <- purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], 
                                                                   .y = list_imported_maxquant_tibbles_processed[vector_proteingroups.txt_list.indices],
                                                                   .f = ~list("phosphosites" = .x,
                                                                              "protein groups" = .y))
 
-list_of_dfs_phosphosites_intensities <- purrr::map(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .f = function(.x) {
+list_of_tibble_intensities_for_pca <- purrr::map_depth(.x = list_of_dfs_phosphosites.proteingroups, .depth = 2, .ragged = FALSE, .f = function(.x) {
 
   # plot the PCA of the phosphosites and the proteins
   # first, we get the phosphosites from phosphosites.txt and the proteins from proteingroups.txt and then we make matrices using the intensities
   ## phosphosites
-  df_phosphosites <- .x
+  df <- .x
   ## subset intensity values
-  tibble_phosphosites_intensities <- df_phosphosites[, colnames(df_phosphosites)[grep(x = colnames(df_phosphosites), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")]]
+  tibble_phosphosites_intensities <- df[, colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")]]
   ## rename columns
   colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(L).(IB|IB2|KR)_(30_6)", replacement = "ud_30_6|\\2")
   colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(M).(IB|IB2|KR)_(30_6)", replacement = "30m|\\2")
@@ -644,31 +644,6 @@ list_of_dfs_phosphosites_intensities <- purrr::map(.x = list_imported_maxquant_t
   return(tibble_phosphosites_intensities)
 
 } )
-
-list_of_dfs_proteingroups_intensities <- purrr::map(.x = list_imported_maxquant_tibbles_processed[vector_proteingroups.txt_list.indices], .f = function(.x) {
-
-  ## protein groups
-  df_proteingroups <- .x
-  ## subset intensity values
-  tibble_proteingroups_intensities <- df_proteingroups[, colnames(df_proteingroups)[grep(x = colnames(df_proteingroups), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")]]
-  ## rename columns
-  colnames(tibble_proteingroups_intensities) <- gsub(x = colnames(tibble_proteingroups_intensities), pattern = "Intensity.(L).(IB|IB2|KR)_(30_6)", replacement = "ud_30_6|\\2")
-  colnames(tibble_proteingroups_intensities) <- gsub(x = colnames(tibble_proteingroups_intensities), pattern = "Intensity.(M).(IB|IB2|KR)_(30_6)", replacement = "30m|\\2")
-  colnames(tibble_proteingroups_intensities) <- gsub(x = colnames(tibble_proteingroups_intensities), pattern = "Intensity.(H).(IB|IB2|KR)_(30_6)", replacement = "6h|\\2")
-  
-  colnames(tibble_proteingroups_intensities) <- gsub(x = colnames(tibble_proteingroups_intensities), pattern = "Intensity.(L).(IB|IB2|KR)_(1_24)", replacement = "ud_1_24|\\2")
-  colnames(tibble_proteingroups_intensities) <- gsub(x = colnames(tibble_proteingroups_intensities), pattern = "Intensity.(M).(IB|IB2|KR)_(1_24)", replacement = "1h|\\2")
-  colnames(tibble_proteingroups_intensities) <- gsub(x = colnames(tibble_proteingroups_intensities), pattern = "Intensity.(H).(IB|IB2|KR)_(1_24)", replacement = "1d|\\2")
-  # done fixing tibble_proteingroups_intensities
-  
-  return(tibble_proteingroups_intensities)
-
-} )
-
-# list-ify
-list_of_tibble_intensities_for_pca <- purrr::map2(.x = list_of_dfs_phosphosites_intensities, .y = list_of_dfs_proteingroups_intensities, 
-                                                  .f = ~list("phosphosites" = .x,
-                                                             "protein groups" = .y))
 
 library(Amelia)
 
@@ -752,14 +727,14 @@ purrr::map2(.x = list_of_tibble_intensities_for_pca, .y = list_of_nested_table_n
 
 ```{r}
 
-list_of_dfs_phosphosites_ratios <- purrr::map(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .f = function(.x) {
+list_of_tibble_ratios_for_pca <- purrr::map_depth(.x = list_of_dfs_phosphosites.proteingroups, .depth = 2, .ragged = FALSE, .f = function(.x) {
 
   # plot the PCA of the phosphosites and the proteins
   # first, we get the phosphosites from phosphosites.txt and the proteins from proteingroups.txt and then we make matrices using the intensities
   ## phosphosites
-  df_phosphosites <- .x
+  df <- .x
   ## subset intensity values
-  tibble_phosphosites_ratios <- df_phosphosites[, colnames(df_phosphosites)[grep(x = colnames(df_phosphosites), pattern = "Ratio.*normalized.(KR_|IB_|IB2_).*(6|24)$")]]
+  tibble_phosphosites_ratios <- df[, colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.(KR_|IB_|IB2_).*(6|24)$")]]
   ## rename columns
   colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(M.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "30m_vs_ud|\\2")
   colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(H.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "6h_vs_ud|\\2")
@@ -771,31 +746,6 @@ list_of_dfs_phosphosites_ratios <- purrr::map(.x = list_imported_maxquant_tibble
   return(tibble_phosphosites_ratios)
 
 } )
-
-list_of_dfs_proteingroups_ratios <- purrr::map(.x = list_imported_maxquant_tibbles_processed[vector_proteingroups.txt_list.indices], .f = function(.x) {
-  
-## protein groups
-df_proteingroups <- .x
-## subset intensity values
-tibble_proteingroups_ratios <- df_proteingroups[, colnames(df_proteingroups)[grep(x = colnames(df_proteingroups), pattern = "Ratio.*normalized.(KR_|IB_|IB2_).*(6|24)$")]]
-## rename columns
-colnames(tibble_proteingroups_ratios) <- gsub(x = colnames(tibble_proteingroups_ratios), pattern = "Ratio.(M.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "30m_vs_ud|\\2")
-colnames(tibble_proteingroups_ratios) <- gsub(x = colnames(tibble_proteingroups_ratios), pattern = "Ratio.(H.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "6h_vs_ud|\\2")
-
-colnames(tibble_proteingroups_ratios) <- gsub(x = colnames(tibble_proteingroups_ratios), pattern = "Ratio.(M.L).normalized.(IB|IB2|KR)_(1_24)", replacement = "1h_vs_ud|\\2")
-colnames(tibble_proteingroups_ratios) <- gsub(x = colnames(tibble_proteingroups_ratios), pattern = "Ratio.(H.L).normalized.(IB|IB2|KR)_(1_24)", replacement = "1d_vs_ud|\\2")
-# done fixing tibble_proteingroups_ratios
-
-return(tibble_proteingroups_ratios)
-
-} )
-
-# list-ify
-list_of_tibble_ratios_for_pca <- purrr::map2(.x = list_of_dfs_phosphosites_ratios, .y = list_of_dfs_proteingroups_ratios, 
-
-                                                  .f = ~list("phosphosites" = .x,
-
-                                                             "protein groups" = .y))
 
 library(Amelia)
 
@@ -874,12 +824,20 @@ purrr::map2(.x = list_of_tibble_ratios_for_pca, .y = list_of_nested_table_names[
 
 # Normalisation using EigenMS
 
+```{r}
+
+library(ProteoMM)
+
+set.seed(7)
+
+```
+
 ## treat all zeroes as NA
 
 EigenMS input intensities MUST be log transformed and not zero - not even potentially real zeroes.
 ```{r}
 
-list_of_tibble_intensities_for_processing <- list_of_dfs_phosphosites_intensities %>% purrr::map(.f = ~mutate_all(., .funs = function(x) {
+list_of_tibble_intensities_for_processing <- list_of_tibble_intensities_for_pca %>% purrr::map_depth(.depth = 2, .ragged = FALSE, .f = ~mutate_all(., .funs = function(x) {
 
   out.column <- x
 
@@ -893,6 +851,16 @@ list_of_tibble_intensities_for_processing <- list_of_dfs_phosphosites_intensitie
 
 ```
 
+## prepare annotation column so that each row is traceable
+
+```{r}
+
+list_of_tibble_intensities_for_processing_ids <- list_of_dfs_phosphosites.proteingroups %>% purrr::map_depth(.depth = 2, .ragged = FALSE, .f = ~.x[, "id"])
+
+```
+
+## run eigenMS normalisation
+
 (Karpievitch et al. Bioinformatics 2009)
 ```{r}
 
@@ -900,67 +868,220 @@ list_of_tibble_intensities_for_processing <- list_of_dfs_phosphosites_intensitie
 # data_cols <- tibble_normalised_result[, 3:ncol(tibble_normalised_result)]
 # annotation_cols <- tibble_normalised_result[, c("id", "Protein.IDs")]
 
-purrr::map(.x = list_of_tibble_intensities_for_processing, .f = function(.x) {
+list_of_tibbles_eigenMS_normalisation_result <- future_pmap(.l = list(
   
-  # define tables #####
-  data_cols <- list_of_tibble_intensities_for_processing[[1]]
-  annotation_cols <- list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices][[1]][, c("id", "Proteins")]
+  "L1" = list_of_tibble_intensities_for_processing,
+  "L2" = list_of_tibble_intensities_for_processing_ids,
+  "L3" = list_of_nested_table_names[vector_phosphosites.txt_list.indices]
   
-  # Proteins: phosphosites.txt
-  # Protein.IDs: proteingroups.txt
+), .f = function(L1, L2, L3) {
   
-  library(ProteoMM)
+  # DEBUG ###
+  # list_data_tibbles <- list_of_tibble_intensities_for_processing[[1]]
+  # list_id_tibbles <- list_of_tibble_intensities_for_processing_ids[[1]]
+  # TABLE_NAMES <- list_of_nested_table_names[vector_phosphosites.txt_list.indices][[1]]
+  ###########
   
-  set.seed(7)
+  list_data_tibbles <- L1
+  list_id_tibbles <- L2
+  TABLE_NAMES <- L3
   
-  # this doesn't seem to work if you have rows which are totally complete
-  PI_value <- ProteoMM::eigen_pi(data_cols[-which(rowSums(is.na(data_cols))/ncol(data_cols) == 0), ])
-  
-  # create sample groupings for each timepoint
-  design_factor_info <- gsub(x = colnames(list_of_tibble_intensities_for_processing[[2]]), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
-  
-  eigen_ms_first_normalisation_result <- ProteoMM::eig_norm1(data_cols %>% as.matrix, treatment = design_factor_info, prot.info = annotation_cols %>% as.matrix)
-  
-  # set the number of bias trends manually
-  eigen_ms_first_normalisation_result$h.c <- 4
-  
-  pdf(paste(R_processing_results_dir, "test.pdf", sep = ""), width = 10, height = 6)
-  
-  eigen_ms_second_normalisation_result <- ProteoMM::eig_norm2(eigen_ms_first_normalisation_result)
-  
-  dev.off()
-  
-  # extract the normalised values and put them into a tibble
-  tibble_normalised_result <- eigen_ms_second_normalisation_result$normalized %>% as_tibble
-  
-  # rename columns
-  colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "^X", replacement = "")
-  colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "(.*).(IB|IB2|KR)", replacement = "\\1\\|\\2")
-  
-} )
+  eigenMS_result_of_single_table <- purrr::pmap(.l = list(
+    
+    "l1" = list_data_tibbles, 
+    "l2" = list_id_tibbles,
+    "l3" = names(list_data_tibbles)
+    
+  ), .f = function(l1, l2, l3) {
+    
+    # DEBUG ###
+    # data_cols <- list_of_tibble_intensities_for_processing[[1]][[1]]
+    # annotation_cols <- list_of_tibble_intensities_for_processing_ids[[1]][[1]]
+    # name_phospho_or_protein <- names(list_of_tibble_intensities_for_processing[[1]])[[1]]
+    ###########
+    
+    # define tables #####
+    data_cols <- l1
+    annotation_cols <- l2
+    name_phospho_or_protein <- l3
+    
+    # calculate PI value
+    # this doesn't seem to work if you have rows which are totally complete
+    pdf(paste(R_processing_results_dir, "eigenMS_PI_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+    PI_value <- ProteoMM::eigen_pi(data_cols[-which(rowSums(is.na(data_cols))/ncol(data_cols) == 0), ])
+    dev.off()
+    
+    # create sample groupings for each timepoint
+    design_factor_info <- gsub(x = colnames(data_cols), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
+    
+    # first normalisation
+    pdf(paste(R_processing_results_dir, "eigenMS_first_normalisation_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+    eigen_ms_first_normalisation_result <- ProteoMM::eig_norm1(data_cols %>% as.matrix, treatment = design_factor_info, prot.info = annotation_cols %>% as.matrix)
+    dev.off()
+    
+    # set the number of bias trends manually
+    # eigen_ms_first_normalisation_result$h.c <- 4
+    
+    pdf(paste(R_processing_results_dir, "eigenMS_second_normalisation_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+    eigen_ms_second_normalisation_result <- ProteoMM::eig_norm2(eigen_ms_first_normalisation_result)
+    dev.off()
+    
+    # extract the normalised values and put them into a tibble
+    tibble_normalised_result <- eigen_ms_second_normalisation_result$normalized %>% as_tibble
+    
+    # rename columns
+    colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "^X", replacement = "")
+    colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "(.*).(IB|IB2|KR)", replacement = "\\1\\|\\2")
+    colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "present", replacement = "id")
 
-
+    return(list("result_table" = tibble_normalised_result,
+                "hc_value" = eigen_ms_first_normalisation_result$h.c))
+    
+  } )
+  
+  return(eigenMS_result_of_single_table)
+  
+}, .progress = TRUE)
 
 ```
 
-plot RLE
+## plot RLE and MDS before and after normalisation
 
 ```{r}
 
-plotRLE(list_of_tibble_intensities_for_processing[[2]] %>% as.matrix, main = paste("raw"))
+purrr::pmap(.l = list(
+  
+  "L1" = list_of_tibbles_eigenMS_normalisation_result,
+  "L2" = list_of_tibble_intensities_for_pca,
+  "L3" = list_of_nested_table_names[vector_phosphosites.txt_list.indices]
+  
+  ), .f = function(L1, L2, L3) {
+    
+    # DEBUG ###
+    # list_eigenMS_normalised_tibbles <- list_of_tibbles_eigenMS_normalisation_result[[1]]
+    # list_raw_tibbles <- list_of_tibble_intensities_for_pca[[1]]
+    # TABLE_NAMES <- list_of_nested_table_names[vector_phosphosites.txt_list.indices][[1]]
+    ###########
+  
+    list_eigenMS_normalised_tibbles <- L1
+    list_raw_tibbles <- L2
+    TABLE_NAMES <- L3
+  
+    # this is where the actual plotting happens
+    purrr::pmap(.l = list(
+      
+      "l1" = list_eigenMS_normalised_tibbles, 
+      "l2" = list_raw_tibbles,
+      "l3" = names(list_eigenMS_normalised_tibbles)
+      
+    ), .f = function(l1, l2, l3) {
+      
+      # DEBUG ###
+      # normalised_tibble_and_hc <- list_of_tibbles_eigenMS_normalisation_result[[1]][[1]]
+      # raw_tibble <- list_of_tibble_intensities_for_pca[[1]][[1]]
+      # name_phospho_or_protein <- names(list_of_tibbles_eigenMS_normalisation_result[[1]])[[1]]
+      ###########
+    
+      # define tables #####
+      normalised_tibble_and_hc <- l1
+      raw_tibble <- l2
+      name_phospho_or_protein <- l3
+      
+      # PLOT RLE #####
+      # plot raw
+      pdf(paste(R_processing_results_dir, "RLE_plot_raw_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      plotRLE(raw_tibble %>% as.matrix, main = paste("raw", TABLE_NAMES[[1]], name_phospho_or_protein, sep = ", "))
+      dev.off()
+      # plot normalised
+      pdf(paste(R_processing_results_dir, "RLE_plot_normalised_eigenMS_k", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      plotRLE(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, main = paste("normalised_eigenMS, k=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""))
+      dev.off()
+      ################
+      
+      # PLOT MDS #####
+      # design factor info for legend
+      design_factor_info_normalised <- gsub(x = colnames(normalised_tibble_and_hc$result_table %>% .[, -1]), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
+      design_factor_info_raw <- gsub(x = colnames(raw_tibble), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
+      # plot normalised
+      pdf(paste(R_processing_results_dir, "MDSplot_eigenMS_normalised, k", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      par(oma = c(0, 0, 0, 5))
+      plotMDS(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), main = paste("normalised, k=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""), cex = 2, pch = 1:length(levels(design_factor_info_normalised)))
+      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_normalised), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), pch = 1:length(levels(design_factor_info_normalised)))
+      dev.off()
+      # plot raw
+      pdf(paste(R_processing_results_dir, "MDSplot_raw_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      par(oma = c(0, 0, 0, 5))
+      plotMDS(raw_tibble %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), main = paste("raw", TABLE_NAMES[[1]], name_phospho_or_protein, sep = ", "), cex = 2, pch = 1:length(levels(design_factor_info_raw)))
+      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_raw), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), pch = 1:length(levels(design_factor_info_raw)))
+      dev.off()
+      ################
+      
+    } )
+    
+  })
+      
+```
 
-plotRLE(tibble_normalised_result[, 3:ncol(tibble_normalised_result)] %>% as.matrix, main = paste("normalised"))
+## plot MDS before and after normalisation
 
+```{r}
 
-pdf(paste(R_processing_results_dir, "MDSplot_eigen_test.pdf", sep = ""))
-
-par(oma = c(0, 0, 0, 5))
-
-plotMDS(tibble_normalised_result[, 3:ncol(tibble_normalised_result)] %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info))), main = paste("normalised"), cex = 2, pch = 1:length(levels(design_factor_info)))
-
-legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info))), pch = 1:length(levels(design_factor_info)))
-
-dev.off()
+purrr::pmap(.l = list(
+  
+  "L1" = list_of_tibbles_eigenMS_normalisation_result,
+  "L2" = list_of_tibble_intensities_for_pca,
+  "L3" = list_of_nested_table_names[vector_phosphosites.txt_list.indices]
+  
+  ), .f = function(L1, L2, L3) {
+    
+    # DEBUG ###
+    # list_eigenMS_normalised_tibbles <- list_of_tibbles_eigenMS_normalisation_result[[1]]
+    # list_raw_tibbles <- list_of_tibble_intensities_for_pca[[1]]
+    # TABLE_NAMES <- list_of_nested_table_names[vector_phosphosites.txt_list.indices][[1]]
+    ###########
+  
+    list_eigenMS_normalised_tibbles <- L1
+    list_raw_tibbles <- L2
+    TABLE_NAMES <- L3
+  
+    # this is where the actual plotting happens
+    purrr::pmap(.l = list(
+      
+      "l1" = list_eigenMS_normalised_tibbles, 
+      "l2" = list_raw_tibbles,
+      "l3" = names(list_eigenMS_normalised_tibbles)
+      
+    ), .f = function(l1, l2, l3) {
+      
+      # DEBUG ###
+      # normalised_tibble_and_hc <- list_of_tibbles_eigenMS_normalisation_result[[1]][[1]]
+      # raw_tibble <- list_of_tibble_intensities_for_pca[[1]][[1]]
+      # name_phospho_or_protein <- names(list_of_tibbles_eigenMS_normalisation_result[[1]])[[1]]
+      ###########
+      
+      # define tables #####
+      normalised_tibble_and_hc <- l1
+      raw_tibble <- l2
+      name_phospho_or_protein <- l3
+      
+      design_factor_info_normalised <- gsub(x = colnames(normalised_tibble_and_hc$result_table %>% .[, -1]), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
+      design_factor_info_raw <- gsub(x = colnames(raw_tibble), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
+      
+      pdf(paste(R_processing_results_dir, "MDSplot_eigenMS_normalised, k", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      par(oma = c(0, 0, 0, 5))
+      plotMDS(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), main = paste("normalised, k=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""), cex = 2, pch = 1:length(levels(design_factor_info_normalised)))
+      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_normalised), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), pch = 1:length(levels(design_factor_info_normalised)))
+      dev.off()
+      
+      pdf(paste(R_processing_results_dir, "MDSplot_raw_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      par(oma = c(0, 0, 0, 5))
+      plotMDS(raw_tibble %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), main = paste("raw", TABLE_NAMES[[1]], name_phospho_or_protein, sep = ", "), cex = 2, pch = 1:length(levels(design_factor_info_raw)))
+      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_raw), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), pch = 1:length(levels(design_factor_info_raw)))
+      dev.off()
+      
+    } )
+    
+  } )
 
 ```
 

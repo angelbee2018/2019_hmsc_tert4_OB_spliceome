@@ -1038,6 +1038,9 @@ wide_table_all_splicemodes_split_with_na <- type_convert(wide_table_all_splicemo
 # create isoform_ID
 wide_table_all_splicemodes_split_with_na[, "isoform_ID"] <- paste(wide_table_all_splicemodes_split_with_na[, "splicemode"], wide_table_all_splicemodes_split_with_na[, "AS_event_ID"], wide_table_all_splicemodes_split_with_na[, "isoform_number"], sep = "_")
 
+# write table 
+write.table(x = wide_table_all_splicemodes_split_with_na, file = paste(results_directory_figures, "wide_table_of_", nrow(wide_table_all_splicemodes_split_with_na), "_junctions_dPSI_all.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
 ```
 
 # DRAWING SOMS TO ANALYSE TIME SERIES DATA
@@ -1054,6 +1057,90 @@ Our trick is to use only the "deltaPSI_BM_MSC_to_OB_[something]d-BM_MSC_to_ud" c
 
 **SETUP**
 
+## prepare to filter table of values with na
+
+```{r}
+
+PSI_levels_timeseries_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na %>% as.data.frame
+
+```
+
+## plot the pvalue, qvalue and dpsi distributions
+
+### pvalue
+
+```{r}
+
+# set column indices
+vector_PSI_levels_timeseries_OB_wide_pvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "pvalue")
+
+# plot the pvalue distribution - density
+pdf(paste(results_directory_figures, "qualityplot_pvalue_density_distribution_OB_diff.pdf", sep = ""))
+
+plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_pvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM pvalue density distribution"), xlab = "pvalue", ylab = "frequency density")
+
+dev.off()
+
+# plot the pvalue distribution - CDF
+pdf(paste(results_directory_figures, "qualityplot_pvalue_CDF_distribution_OB_diff.pdf", sep = ""))
+
+plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_pvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM pvalue CDF distribution"), xlab = "pvalue", ylab = "cumulative frequency")
+
+dev.off()
+
+```
+
+### qvalue
+
+```{r}
+
+# set column indices
+vector_PSI_levels_timeseries_OB_wide_qvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "qvalue")
+
+# plot the qvalue distribution - density
+pdf(paste(results_directory_figures, "qualityplot_qvalue_density_distribution_OB_diff.pdf", sep = ""))
+
+plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM qvalue density distribution"), xlab = "qvalue", ylab = "frequency density")
+
+dev.off()
+
+# plot the qvalue distribution - CDF
+pdf(paste(results_directory_figures, "qualityplot_qvalue_CDF_distribution_OB_diff.pdf", sep = ""))
+
+plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM qvalue CDF distribution"), xlab = "qvalue", ylab = "cumulative frequency")
+
+dev.off()
+
+```
+
+### dpsi
+
+```{r}
+
+# set column indices
+vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "deltaPSI")
+
+# plot the dpsi distribution - density
+pdf(paste(results_directory_figures, "qualityplot_dpsi_density_distribution_OB_diff.pdf", sep = ""))
+
+plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), xlim = c(-0.4, 0.4), main = paste("JUM dpsi density distribution"), xlab = "dpsi", ylab = "frequency density")
+
+dev.off()
+
+# plot the dpsi distribution - density
+pdf(paste(results_directory_figures, "qualityplot_dpsi_CDF_distribution_OB_diff.pdf", sep = ""))
+
+plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), xlim = c(-0.4, 0.4), main = paste("JUM dpsi CDF distribution"), xlab = "dpsi", ylab = "cumulative frequency")
+axis(side = 2, at = seq(0, 1, by = 0.1))
+
+dev.off()
+
+```
+
+## filter tables for the specified cutoffs, both with and without NA.
+
+### specify qpvalue, dpsi cutoff
+
 ```{r}
 
 dPSI_cutoff <- 0.15
@@ -1065,31 +1152,15 @@ qpvalue_cutoff <- 0.01
 
 ```
 
+### do the filtering
+
 ```{r}
-
-# reducing the table to only contain OB-specific comparisons
-PSI_levels_timeseries_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na %>% as.data.frame
-
-# [, -grep(x = colnames(wide_table_all_splicemodes_split), pattern = "OB")]
-
-# reducing the table to only contain OB-specific comparisons
-# PSI_levels_timeseries_OB_wide_with_na <- wide_table_all_splicemodes_split[, -grep(x = colnames(wide_table_all_splicemodes_split), pattern = "OB")]
 
 vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "deltaPSI")
 vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = p_or_q_value)
 
-# look at distribution of all dpsis
-plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), xlim = c(-0.4, 0.4))
-plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), xlim = c(-0.4, 0.4))
-
 # filtering for dPSI cutoff
 PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% as.numeric) > dPSI_cutoff)}) == TRUE, ]
-
-# PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, grep(colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "deltaPSI")], 1, function(x){any(abs(x) > dPSI_cutoff)}) == TRUE, ]
-
-# look at distribution of all pvalues
-plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit))
-plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit))
 
 # filtering for FDR/pvalue
 PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% as.numeric < qpvalue_cutoff)}) == TRUE, ]
@@ -1113,7 +1184,7 @@ PSI_levels_timeseries_OB_wide_with_na <- cbind(PSI_levels_timeseries_OB_wide_wit
 
 PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_na.rows, ]
 
-print(paste("There are", nrow(PSI_levels_timeseries_OB_wide_with_na), "junctions with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
+print(paste("There are", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
 
 write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_OB_wide_with_na), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -1125,9 +1196,60 @@ PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide_with_na[-PSI_leve
 
 row.names(PSI_levels_timeseries_OB_wide) <- NULL
 
-print(paste("There are", nrow(PSI_levels_timeseries_OB_wide), "junctions with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
+print(paste("There are", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
 
 write.table(x = PSI_levels_timeseries_OB_wide, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+### create table of constitutive junctions as well
+
+```{r}
+
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na %>% as.data.frame
+
+# define col indices
+vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "deltaPSI")
+vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = p_or_q_value)
+
+# filtering for dPSI cutoff
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% as.numeric) < dPSI_cutoff)}) == TRUE, ]
+
+# filtering for FDR/pvalue
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% as.numeric > qpvalue_cutoff)}) == TRUE, ]
+
+# further subsetting into ud-only comparisons
+
+##  OB #####
+
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na)[grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_OB_ud)")])]
+
+colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na) <- gsub(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
+
+# remove extra na
+OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+
+PSI_levels_timeseries_constitutive_OB_wide_na.rows <- apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, OBseries_timepoints[2:length(OBseries_timepoints)]], 1, function(X) {all(is.na(X))}) %>% which(. == TRUE)
+
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- cbind(PSI_levels_timeseries_constitutive_OB_wide_with_na, MSC = 0)
+
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[-PSI_levels_timeseries_constitutive_OB_wide_na.rows, ]
+
+print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide_with_na$AS_event_ID %>% unique), "unique CONSTITUTIVE junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
+
+write.table(x = PSI_levels_timeseries_constitutive_OB_wide_with_na, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_constitutive_OB_wide_with_na), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# remove ALL na to produce the timeseries-ready table
+
+PSI_levels_timeseries_constitutive_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, OBseries_timepoints], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
+
+PSI_levels_timeseries_constitutive_OB_wide <- PSI_levels_timeseries_constitutive_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_with_na_na.rows, ]
+
+row.names(PSI_levels_timeseries_constitutive_OB_wide) <- NULL
+
+print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide$AS_event_ID %>% unique), "unique CONSTITUTIVE junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
+
+write.table(x = PSI_levels_timeseries_constitutive_OB_wide, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_OB_wide), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1220,7 +1342,7 @@ use gene ontology to analyse all the genes which had at least one differential s
 
 ### p value and FDR (q value) cutoff filtering
 
-In this step: we will use the wide_table_of_all_splicemodes_with_na and filter it for isoforms with least one qvalue < 0.01 and dPSI > 0.2
+In this step: we will use the wide_table_of_all_splicemodes_with_na and filter it for isoforms with least one qvalue < 0.01 and dPSI > 0.15
 
 ```{r}
 
@@ -1240,7 +1362,7 @@ This gene background shall contain all ensembl protein coding, long noncoding an
 
 ```{r}
 
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
 
 # # GOTERM
 # polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "go_id", "namespace_1003"), mart = ensembl_mart) %>% .[.$namespace_1003 != "",]
@@ -1753,21 +1875,6 @@ bar graph of GO terms
 
 # OB series
 
-# ggplot(OB_anysig_family_enrichment_topten, aes(x = reorder(TermID, padj), y = genes)) +
-#   geom_col(aes(fill = log(padj))) +
-#   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-#   # facet_grid(~ Ont, scales = "free") +
-#   ggtitle(paste("Top 10 significantly over-represented families for OB series for dPSI cutoff of", dPSI_cutoff, "and any sig", p_or_q_value,"encompassing", numberofgenes_anysig_OBseries, "genes")) +
-#   xlab("Family description (PFAM)") +
-#   ylab("Number of genes captured in family") +
-#   # coord_cartesian(ylim = c(0, 20)) +
-#   theme_bw() +
-#   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
-#  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-#  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, "_", numberofgenes_anysig_OBseries, "_genes_anysig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
-
-# OB series
-
 ggplot(OB_anysig_family_enrichment_topten, aes(x = reorder(TermID, padj), y = genes)) +
   geom_col(aes(fill = log(padj))) +
   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
@@ -1805,19 +1912,6 @@ wide_table_of_timepointwise_highestPSI_families_OBseries <- type_convert(wide_ta
 
 wide_table_of_timepointwise_highestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_highestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_highestPSI_families_OBseries$timepoint))), timepoint)
 
-# OB ###
-
-# list_of_highest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
-# 
-# list_of_highest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
-                       
-# un-nest by binding rows
-# wide_table_of_timepointwise_highestPSI_families_OBseries <- purrr::reduce(.x = list_of_highest_PSI_per_timepoint_familyenrichment_OBseries_topten, .f = bind_rows)
-# 
-# wide_table_of_timepointwise_highestPSI_families_OBseries <- type_convert(wide_table_of_timepointwise_highestPSI_families_OBseries)
-# 
-# wide_table_of_timepointwise_highestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_highestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_highestPSI_families_OBseries$timepoint))), timepoint)
-
 ```
 
 #### anysig, lowest PSI
@@ -1837,19 +1931,6 @@ wide_table_of_timepointwise_lowestPSI_families_OBseries <- purrr::reduce(.x = li
 wide_table_of_timepointwise_lowestPSI_families_OBseries <- type_convert(wide_table_of_timepointwise_lowestPSI_families_OBseries)
 
 wide_table_of_timepointwise_lowestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_lowestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_lowestPSI_families_OBseries$timepoint))), timepoint)
-
-# OB ###
-
-# list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
-# 
-# list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))     
-
-# un-nest by binding rows
-# wide_table_of_timepointwise_lowestPSI_families_OBseries <- purrr::reduce(.x = list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries_topten, .f = bind_rows)
-# 
-# wide_table_of_timepointwise_lowestPSI_families_OBseries <- type_convert(wide_table_of_timepointwise_lowestPSI_families_OBseries)
-# 
-# wide_table_of_timepointwise_lowestPSI_families_OBseries <- arrange(transform(wide_table_of_timepointwise_lowestPSI_families_OBseries, timepoint = factor(timepoint, levels = unique(wide_table_of_timepointwise_lowestPSI_families_OBseries$timepoint))), timepoint)
 
 ```
 
@@ -2035,13 +2116,13 @@ phenotype_isoforms_consequence_simplified <- phenotype_isoforms_consequence %>% 
 # function to fetch maximum AA length of each protein coding gene. AS regions cant be longer than this. very difficult to filter. in my experience, most exons are at most 200 nt but ok
 filtering_chr_strand_start_end_tibble_for_plausible_AS_events <- function(tibble_chr_strand_start_end) {
   
-  a <- getBM(filters = "external_gene_name", values = tibble_chr_strand_start_end$Gene, attributes = c("external_gene_name", "cds_length"), mart = ensembl_mart)
-b <- a %>% group_by(external_gene_name) %>% na.omit %>% filter(cds_length == max(cds_length))
-colnames(b) <- c("Gene", "cds_length")
+a <- getBM(filters = "external_gene_name", values = tibble_chr_strand_start_end$Gene, attributes = c("external_gene_name", "transcript_length"), mart = ensembl_mart)
+b <- a %>% group_by(external_gene_name) %>% na.omit %>% filter(transcript_length == max(transcript_length))
+colnames(b) <- c("Gene", "transcript_length")
 c <- dplyr::left_join(tibble_chr_strand_start_end, b, by = "Gene")
-d <- c[-which(c$width >= c$cds_length), ]
+d <- c[-which(c$width >= c$transcript_length), ]
 # retained introns and entire composite structures can be long. the other 4 have no excuse. the longest exon known in existence is 11555 bp long.
-e <- d[-which(d$width > 34665 & (d$splicemode == "A3SS_events" | d$splicemode == "A5SS_events" | d$splicemode == "cassette_exon_events" | d$splicemode == "MXE_events")), ]
+e <- d[-which(d$width > 11555 & (d$splicemode == "A3SS_events" | d$splicemode == "A5SS_events" | d$splicemode == "cassette_exon_events" | d$splicemode == "MXE_events")), ]
 # e contains the final list of isoforms which have plausible AS length.
 print(paste(nrow(e), "unique genes with plausible AS length after filtering"))
 
@@ -2053,9 +2134,27 @@ return(e)
 
 ```
 
-## repeat GO analysis with na
+## filter for plausible AS events only, constitutive
 
-preprocessing 
+```{r}
+
+# filter for plausible anysig table
+
+all_filtered_isoforms <- PSI_levels_timeseries_constitutive_OB_wide_with_na %>% as_tibble %>% mutate_if(is.factor, as.character)
+
+all_filtered_isoforms_chr_strand_start_end <- all_filtered_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% unique
+
+all_filtered_isoforms_chr_strand_start_end_AS_plausible <- all_filtered_isoforms_chr_strand_start_end %>% filtering_chr_strand_start_end_tibble_for_plausible_AS_events
+
+wide_table_of_all_splicemodes_constitutive_with_na_OBseries_filtered_qvalue_0.05_AS_plausible <- dplyr::semi_join(PSI_levels_timeseries_constitutive_OB_wide_with_na, all_filtered_isoforms_chr_strand_start_end_AS_plausible, by = "Gene")
+
+numberofgenes_constitutive_anysig_OBseries_AS_plausible <- wide_table_of_all_splicemodes_constitutive_with_na_OBseries_filtered_qvalue_0.05_AS_plausible$Gene %>% unique %>% length
+
+print(paste("There are", numberofgenes_constitutive_anysig_OBseries_AS_plausible, "genes with constitutive junctions anysig with na with plausible AS length"))
+
+```
+
+## filter for plausible AS events only, differential
 
 ```{r}
 
@@ -2072,6 +2171,14 @@ wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible
 numberofgenes_anysig_OBseries_AS_plausible <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible$Gene %>% unique %>% length
 
 print(paste("There are", numberofgenes_anysig_OBseries_AS_plausible, "genes anysig with na with plausible AS length"))
+
+```
+
+## repeat GO analysis with na
+
+preprocessing 
+
+```{r}
 
 # GO analysis, OB series
 
@@ -3021,16 +3128,16 @@ num_junctions_vs_coverage_intercept <- lm(formula = junction_counts ~ read_count
 
 ggplot(num_junctions_vs_coverage, aes(y = junction_counts, x = read_count)) +
   geom_point() +
-  geom_smooth(method = "lm", formula = y~x, colour = "red") +
-  annotate(geom = "text", label = bquote("R"^2 ~ "=" ~ .(num_junctions_vs_coverage_pearson)), x = 3.75e7, y = 244000, color = "red") +
-  annotate(geom = "text", label = bquote("y =" ~ .(num_junctions_vs_coverage_gradient) ~ "x +" ~ .(num_junctions_vs_coverage_intercept)), x = 3.75e7, y = 240000, color = "red") +
+  geom_smooth(method = "lm", formula = y~x, colour = "blue") +
+  annotate(geom = "text", label = bquote("R"^2 ~ "=" ~ .(num_junctions_vs_coverage_pearson)), x = 3.75e7, y = 244000, color = "blue") +
+  annotate(geom = "text", label = bquote("y =" ~ .(num_junctions_vs_coverage_gradient) ~ "x +" ~ .(num_junctions_vs_coverage_intercept)), x = 3.75e7, y = 240000, color = "blue") +
   ggtitle(paste("plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", sep = "")) +
-  xlab("number of splice junctions detected") +
-  ylab("read count") +
+  xlab("Sequencing Depth") +
+  ylab("Number of splice junctions detected") +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 15, height = 15, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".svg", sep = ""), device = "svg", dpi = 600, width = 15, height = 15, units = "cm")
 
 
 ```
@@ -3099,33 +3206,66 @@ ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
 
 ```
 
-## frequency distribution of no. junctions detected/gene
+## frequency distribution of no. junctions structures detected/gene
 
-### all junctions
+### all constitutive junctions
 
 ```{r}
 
-avg_junctions_per_gene_all <- (PSI_levels_timeseries_OB_wide_with_na$isoform_ID %>% length)/(PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% length)
+avg_junctions_per_gene_all <- (PSI_levels_timeseries_constitutive_OB_wide_with_na$AS_event_ID %>% unique %>% length)/(PSI_levels_timeseries_constitutive_OB_wide_with_na$Gene %>% unique %>% length)
 
-print(paste("There are", avg_junctions_per_gene_all, "differentially spliced junctions detected without considering plausible AS length"))
+print(paste("There are", avg_junctions_per_gene_all, "unique constitutive junction structures detected without considering plausible AS length"))
 
-junctions_per_gene_all_freq <- PSI_levels_timeseries_OB_wide_with_na %>% group_by(Gene) %>% summarise(no_junctions = n())
+junctions_per_gene_all_freq <- PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
 
 junctions_per_gene_all_freq_2 <- junctions_per_gene_all_freq %>% group_by(no_junctions) %>% summarise(numberofgeneswithjunctionnumber = n())
 
 # ggplot
 
 ggplot(junctions_per_gene_all_freq_2) + 
-geom_col(aes(y = numberofgeneswithjunctionnumber, x = no_junctions)) +
-geom_text(data = junctions_per_gene_all_freq_2, aes(label = numberofgeneswithjunctionnumber, y = numberofgeneswithjunctionnumber + 20, x = no_junctions)) +
-ggtitle(paste("frequency distribution of differentially spliced junctions per gene for all genes 
-              ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
-xlab("number of junctions/gene") +
-ylab("number of genes") +
-theme_bw() +
-theme(text = element_text(family = "Helvetica")) +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+  geom_col(aes(y = numberofgeneswithjunctionnumber, x = no_junctions)) +
+  geom_text(data = junctions_per_gene_all_freq_2, aes(label = numberofgeneswithjunctionnumber, y = numberofgeneswithjunctionnumber + 20, x = no_junctions), position = position_nudge(y = 50)) +
+  ggtitle(paste("frequency distribution of constitutive junctions per gene for all genes 
+                ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+  # scale_x_continuous(trans = "log2") +
+  xlim(c(0, 20)) +
+  xlab("number of junctions/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_constitutive_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_constitutive_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+
+print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_per_gene_all_freq_2[1, 2]/junctions_per_gene_all_freq_2[2, 2]))
+
+```
+
+### all differential junctions
+
+```{r}
+
+avg_junctions_per_gene_all <- (PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique %>% length)/(PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% length)
+
+print(paste("There are", avg_junctions_per_gene_all, "unique differentially spliced junction structures detected without considering plausible AS length"))
+
+junctions_per_gene_all_freq <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
+
+junctions_per_gene_all_freq_2 <- junctions_per_gene_all_freq %>% group_by(no_junctions) %>% summarise(numberofgeneswithjunctionnumber = n())
+
+# ggplot
+
+ggplot(junctions_per_gene_all_freq_2) + 
+  geom_col(aes(y = numberofgeneswithjunctionnumber, x = no_junctions)) +
+  geom_text(data = junctions_per_gene_all_freq_2, aes(label = numberofgeneswithjunctionnumber, y = numberofgeneswithjunctionnumber + 20, x = no_junctions)) +
+  ggtitle(paste("frequency distribution of differentially spliced junctions per gene for all genes 
+                ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+  xlim(c(0, 20)) +
+  xlab("number of junctions/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
 
 print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_per_gene_all_freq_2[1, 2]/junctions_per_gene_all_freq_2[2, 2]))
 
@@ -3135,27 +3275,28 @@ print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_
 
 ```{r}
 
-avg_junctions_per_gene_AS_plausible <- (wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible$isoform_ID %>% length)/(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible$Gene %>% unique %>% length)
+avg_junctions_per_gene_AS_plausible <- (wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible$AS_event_ID %>% unique %>% length)/(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible$Gene %>% unique %>% length)
 
-print(paste("There are", avg_junctions_per_gene_AS_plausible, "differentially spliced junctions with a plausible AS length"))
+print(paste("There are", avg_junctions_per_gene_AS_plausible, "unique differentially spliced junction structures with a plausible AS length"))
 
-junctions_per_gene_AS_plausible_freq <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% group_by(Gene) %>% summarise(no_junctions = n())
+junctions_per_gene_AS_plausible_freq <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
 
 junctions_per_gene_AS_plausible_freq_2 <- junctions_per_gene_AS_plausible_freq %>% group_by(no_junctions) %>% summarise(numberofgeneswithjunctionnumber = n())
 
 # ggplot
 
 ggplot(junctions_per_gene_AS_plausible_freq_2) + 
-geom_col(aes(y = numberofgeneswithjunctionnumber, x = no_junctions)) +
-geom_text(data = junctions_per_gene_AS_plausible_freq_2, aes(label = numberofgeneswithjunctionnumber, y = numberofgeneswithjunctionnumber + 10, x = no_junctions)) +
-ggtitle(paste("frequency distribution of differentially spliced junctions per gene for plausible genes 
-              ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
-xlab("number of junctions/gene") +
-ylab("number of genes") +
-theme_bw() +
-theme(text = element_text(family = "Helvetica")) +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+  geom_col(aes(y = numberofgeneswithjunctionnumber, x = no_junctions)) +
+  geom_text(data = junctions_per_gene_AS_plausible_freq_2, aes(label = numberofgeneswithjunctionnumber, y = numberofgeneswithjunctionnumber + 10, x = no_junctions)) +
+  ggtitle(paste("frequency distribution of differentially spliced junctions per gene for plausible genes 
+                ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+  xlim(c(0, 20)) +
+  xlab("number of junctions/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
 
 print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_per_gene_AS_plausible_freq_2[1, 2]/junctions_per_gene_AS_plausible_freq_2[2, 2]))
 
@@ -3168,9 +3309,9 @@ print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_
 
 ```{r}
 
-junctions_per_category_all_freq <- PSI_levels_timeseries_OB_wide_with_na %>% group_by(splicemode) %>% summarise(no_junctions_all = n())
+junctions_per_category_all_freq <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode) %>% summarise(no_junctions_all = n())
 
-junctions_per_category_AS_plausible_freq <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% group_by(splicemode) %>% summarise(no_junctions_AS_plausible = n())
+junctions_per_category_AS_plausible_freq <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode) %>% summarise(no_junctions_AS_plausible = n())
 
 junctions_per_category_summary <- dplyr::full_join(junctions_per_category_all_freq, junctions_per_category_AS_plausible_freq, by = "splicemode")
 
@@ -3410,6 +3551,76 @@ write.table(x = tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched
 
 ```
 
+## checking the junction counts and LRT statistics
+
+### import the detailed tables into the environment
+
+```{r message=FALSE, warning=FALSE}
+
+wide_table_of_all_detailed_tables <- list_of_detailed_tables_3 %>% rbindlist %>% as_tibble
+
+wide_table_of_all_detailed_tables_maxCPM <- wide_table_of_all_detailed_tables %>% dplyr::group_by(Gene) %>% dplyr::summarise(., maxCPM = max(logCPM_1 %>% na.omit, logCPM_2 %>% na.omit))
+
+wide_table_of_all_detailed_tables_maxtranscriptlength <- getBM(filters = "external_gene_name", values = wide_table_of_all_detailed_tables_maxCPM$Gene, attributes = c("external_gene_name", "transcript_length"), mart = ensembl_mart) %>% group_by(external_gene_name) %>% na.omit %>% filter(transcript_length == max(transcript_length	)) %>% 
+  setNames(c("Gene", "maxtranscriptlength"))
+
+wide_table_of_all_detailed_tables_maxCPM_maxtranscriptlength <- dplyr::full_join(wide_table_of_all_detailed_tables_maxCPM, 
+                                                                           wide_table_of_all_detailed_tables_maxtranscriptlength, 
+                                                                           by = "Gene")
+
+```
+
+### graph the no. of junctions detected vs. max. junction counts logCPM OR maximum transcript length
+
+```{r}
+
+junctions_per_gene_constitutive_all_freq <- PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
+
+junctions_per_gene_all_freq <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
+
+junctions_per_gene_AS_plausible_freq <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
+
+wide_table_numberof_junctions_per_gene_maxCPM_maxtranscriptlength <- dplyr::full_join(wide_table_of_all_detailed_tables_maxCPM_maxtranscriptlength, junctions_per_gene_constitutive_all_freq, by = "Gene") %>% 
+  dplyr::full_join(., junctions_per_gene_all_freq, by = "Gene") %>%
+  dplyr::full_join(., junctions_per_gene_AS_plausible_freq, by = "Gene") %>% setNames(., c("Gene", "maxCPM", "maxtranscriptlength", "no_junctions_constitutive", "no_junctions_allsig", "no_junctions_AS_plausible"))
+
+long_table_numberof_junctions_per_gene_maxCPM_maxtranscriptlength <- reshape2::melt(wide_table_numberof_junctions_per_gene_maxCPM_maxtranscriptlength, 
+                                                                                    id = c("Gene", "maxCPM", "maxtranscriptlength"), variable.name = "filteringstep",
+                                                                                    value.name = "no_junctions") %>% as_tibble %>% type_convert
+
+# no junctions vs. max junction counts in logCPM
+
+ggplot(long_table_numberof_junctions_per_gene_maxCPM_maxtranscriptlength %>% na.omit %>% type_convert) + 
+geom_point(aes(y = no_junctions, x = maxCPM)) +
+geom_smooth(method = "lm", formula = y~x, colour = "red", aes(y = no_junctions, x = maxCPM)) +
+facet_wrap(~filteringstep, scales = "free") +
+ggtitle(paste("scatterplot of the number of junctions detected per gene against max. junction counts 
+              ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+xlab("maximum junction count for a gene (logCPM)") +
+ylab("number of (differential) junctions detected") +
+theme_bw() +
+theme(axis.text.x = element_text(hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no_junctions_vs_max_junctioncounts_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no_junctions_vs_max_junctioncounts_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+
+
+# no. junctions detected vs. maximum annotated transcript length
+
+ggplot(long_table_numberof_junctions_per_gene_maxCPM_maxtranscriptlength) + 
+geom_point(aes(y = no_junctions, x = maxtranscriptlength)) +
+geom_smooth(method = "lm", formula = y~x, colour = "red", aes(y = no_junctions, x = maxtranscriptlength)) +
+facet_wrap(~filteringstep, scales = "free") +
+ggtitle(paste("scatterplot of the number of unique junction structures detected per gene against max. annotated transcipt length 
+              ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+xlab("maximum annotated transcript length") +
+ylab("number of (differential) junctions detected") +
+theme_bw() +
+theme(axis.text.x = element_text(hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no_junctions_vs_max_transcriptlength_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no_junctions_vs_max_transcriptlength_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+
+```
+
 ## PCA analysis of junction counts per sample (replicate)
 
 read the combined counts in the environment
@@ -3469,8 +3680,8 @@ ggplot(PCA_loadings) +
   ylab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 ggplot(PCA_loadings) + 
   geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
@@ -3480,8 +3691,8 @@ ggplot(PCA_loadings) +
   ylab(paste("PC3 (", PCA_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 # I wonder if filtering for low junction counts improves the clustering
 
@@ -3537,8 +3748,8 @@ ggplot(PCA_loadings_filtered) +
   ylab(paste("PC2 (", PCA_variance_filtered[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 ggplot(PCA_loadings_filtered) + 
   geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
@@ -3548,8 +3759,8 @@ ggplot(PCA_loadings_filtered) +
   ylab(paste("PC3 (", PCA_variance_filtered[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_JUM_combined_count_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 ```
 

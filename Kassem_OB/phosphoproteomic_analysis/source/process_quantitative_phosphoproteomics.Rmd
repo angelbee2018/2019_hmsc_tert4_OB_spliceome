@@ -79,11 +79,11 @@ list_output.table_categories <- list("evidence" = "evidence.txt",
                                      "phosphosites" = "Phospho (STY)Sites.txt")
 
 # create combinations of files and runs
-list_for_maxquant_table_import <- purrr::cross2(list_maxquant_run_dirs, list_output.table_categories)
+list_for_maxquant_table_import <- purrr::map(.x = list_maxquant_run_dirs, .f = ~purrr::cross2(.x, list_output.table_categories))
 # also create corresponding combinations of names to annotate with
-list_of_nested_table_names <- purrr::cross2(names(list_maxquant_run_dirs), names(list_output.table_categories))
+list_of_nested_table_names <- purrr::map(.x = names(list_maxquant_run_dirs), .f = ~purrr::cross2(.x, names(list_output.table_categories)))
 
-list_imported_maxquant_tibbles <- future_map(.x = list_for_maxquant_table_import, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble, .progress = TRUE)
+list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~future_map(.x = .x, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble, .progress = TRUE))
 
 ```
 
@@ -175,7 +175,9 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.tx
     scale_x_discrete(limits = df2$channel_name_intensity %>% unique, breaks = df2$channel_name_intensity %>% unique, labels = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = "(L|M|H).(.*)", replacement = "\\2_\\1") %>% unique) + 
     scale_y_log10(limits = c(min(df2 %>% dplyr::filter(., intensity > 0) %>% .$intensity), max(df2$intensity) * 1e1)) +
     theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"))
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(R_processing_results_dir, "qualityplot_intensity_distribution_per_mass_channel_", .y[[1]], "_phosphosites.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+    ggsave(filename = paste(R_processing_results_dir, "qualityplot_intensity_distribution_per_mass_channel_", .y[[1]], "_phosphosites.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
   
 } )
 
@@ -935,7 +937,8 @@ list_of_tibbles_eigenMS_normalisation_result <- future_pmap(.l = list(
     colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "present", replacement = "id")
 
     return(list("result_table" = tibble_normalised_result,
-                "hc_value" = eigen_ms_first_normalisation_result$h.c))
+                "hc_value" = eigen_ms_first_normalisation_result$h.c,
+                "PI_value" = PI_value))
     
   } )
   
@@ -945,7 +948,9 @@ list_of_tibbles_eigenMS_normalisation_result <- future_pmap(.l = list(
 
 ```
 
-## plot RLE and MDS before and after normalisation
+## plot RLE, MDS, intra-timepoint correlation scatterplot and CV vs. mean before and after normalisation
+
+CV = sd/mean
 
 ```{r}
 
@@ -993,8 +998,8 @@ purrr::pmap(.l = list(
       plotRLE(raw_tibble %>% as.matrix, main = paste("raw", TABLE_NAMES[[1]], name_phospho_or_protein, sep = ", "))
       dev.off()
       # plot normalised
-      pdf(paste(R_processing_results_dir, "RLE_plot_normalised_eigenMS_k", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-      plotRLE(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, main = paste("normalised_eigenMS, k=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""))
+      pdf(paste(R_processing_results_dir, "RLE_plot_normalised_eigenMS_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      plotRLE(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, main = paste("normalised_eigenMS, hc=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""))
       dev.off()
       ################
       
@@ -1003,9 +1008,9 @@ purrr::pmap(.l = list(
       design_factor_info_normalised <- gsub(x = colnames(normalised_tibble_and_hc$result_table %>% .[, -1]), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
       design_factor_info_raw <- gsub(x = colnames(raw_tibble), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
       # plot normalised
-      pdf(paste(R_processing_results_dir, "MDSplot_eigenMS_normalised, k", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
+      pdf(paste(R_processing_results_dir, "MDSplot_eigenMS_normalised, hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
       par(oma = c(0, 0, 0, 5))
-      plotMDS(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), main = paste("normalised, k=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""), cex = 2, pch = 1:length(levels(design_factor_info_normalised)))
+      plotMDS(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), main = paste("normalised, hc=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""), cex = 2, pch = 1:length(levels(design_factor_info_normalised)))
       legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_normalised), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), pch = 1:length(levels(design_factor_info_normalised)))
       dev.off()
       # plot raw
@@ -1016,125 +1021,100 @@ purrr::pmap(.l = list(
       dev.off()
       ################
       
+      # SCATTERPLOT: the intra-timepoint correlation #####
+      df <- normalised_tibble_and_hc$result_table
+      combs <- combn(x = colnames(df[, -1]), m = 2) %>% t
+      combs2 <- combs %>% as_tibble %>% add_column("comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
+                                                   "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
+                                                   "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"), 
+                                                   "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"))
+      combs2 <- combs2[combs2$comparison_1_replicate != combs2$comparison_2_replicate &
+                         combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
+      
+      list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+        
+        # DEBUG #####
+        # .x <- combs2[1, 1]
+        # .y <- combs2[1, 2]
+        #############
+          
+        colnames_id.vars <- colnames(df[, 1])
+        
+        pairwise_subset_table <- df[, colnames_id.vars] %>% add_column("comparison_1_value" = df[, .x %>% paste] %>% unlist, "comparison_2_value" = df[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+        
+        return(pairwise_subset_table)
+        
+      })
+      
+      tibble_pairwise_comparisons_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
+      
+      ggplot(tibble_pairwise_comparisons_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
+        geom_point() +
+        geom_smooth(formula = y ~ x, method = "lm") +
+        annotate(geom = "text", x = 15, y = 30, label = bquote(R^2 == ~ .(cor(x = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_1_value, y = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_2_value, method = "pearson"))), size = 5) +
+        # scale_x_continuous(trans = "log2") +
+        # scale_y_continuous(trans = "log2") +
+        xlab("Comparison 1 normalised intensity (log2)") + 
+        ylab("Comparison 2 normalised intensity (log2)") + 
+        ggtitle(paste("Intra-timepoint (between replicates) correlation after EigenMS normalisation,
+                hc = ", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = "")) +
+        # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
+        theme_bw() +
+        theme(text = element_text(family = "Helvetica")) +
+        ggsave(filename = paste(R_processing_results_dir, "scatterplot_intra.timepoint_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
+        ggsave(filename = paste(R_processing_results_dir, "scatterplot_intra.timepoint_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+        ################
+      
+        # plot the CV vs. mean log2 intensity for each item-per-timepoint #####
+        # melt by subsetting table by each timepoint.
+        list_of_values_per_timepoint <- purrr::map(.x = design_factor_info_normalised, .f = function(.x) {
+          
+          # DEBUG #####
+          # .x <- design_factor_info[1]
+          #############
+            
+          id.cols <- df[, 1]
+          
+          col.indices_data.vars <- grep(x = colnames(df), pattern = .x)
+          
+          # extract the data cols for all reps of 1 timepoint and rename the colnames so that we can rbind properly
+          data.cols <- df[, col.indices_data.vars] %>% setNames(., c("intensity_IB", "intensity_IB2", "intensity_KR")) %>% add_column(., "timepoint" = .x)
+          
+          timepointwise_subset_table <- dplyr::bind_cols(id.cols, data.cols)
+          
+          return(timepointwise_subset_table)
+          
+        })
+    
+        tibble_of_values_per_timepoint <- list_of_values_per_timepoint %>% rbindlist %>% as_tibble
+        # add mean and CV columns
+        tibble_of_values_per_timepoint <- tibble_of_values_per_timepoint %>% 
+          add_column("mean" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {mean(X %>% na.omit)}),
+                     "CV" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {return(sd(X %>% na.omit)/mean(X %>% na.omit))}))
+        
+        ggplot(tibble_of_values_per_timepoint, aes(x = 2^mean, y = CV)) +
+          geom_point() +
+          geom_smooth(formula = y ~ x, method = "loess", span = normalised_tibble_and_hc$PI_value) +
+          # scale_x_continuous(trans = "log2") +
+          # scale_y_continuous(trans = "log2") +
+          # cut the axis at the 90% percentile highest value
+          coord_cartesian(xlim = c(0, 2^quantile(tibble_of_values_per_timepoint$mean, probs = c(0.92)))) +
+          xlab("Mean Intensity (normalised)") + 
+          ylab("CV") + 
+          ggtitle(paste("CV vs. mean after EigenMS normalisation,
+                hc = ", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = "")) +
+          # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
+          theme_bw() +
+          theme(text = element_text(family = "Helvetica")) +
+          ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
+          ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+        
+        ################
+      
     } )
     
   })
       
-```
-
-## plot MDS before and after normalisation
-
-```{r}
-
-purrr::pmap(.l = list(
-  
-  "L1" = list_of_tibbles_eigenMS_normalisation_result,
-  "L2" = list_of_tibble_intensities_for_pca,
-  "L3" = list_of_nested_table_names[vector_phosphosites.txt_list.indices]
-  
-  ), .f = function(L1, L2, L3) {
-    
-    # DEBUG ###
-    # list_eigenMS_normalised_tibbles <- list_of_tibbles_eigenMS_normalisation_result[[1]]
-    # list_raw_tibbles <- list_of_tibble_intensities_for_pca[[1]]
-    # TABLE_NAMES <- list_of_nested_table_names[vector_phosphosites.txt_list.indices][[1]]
-    ###########
-  
-    list_eigenMS_normalised_tibbles <- L1
-    list_raw_tibbles <- L2
-    TABLE_NAMES <- L3
-  
-    # this is where the actual plotting happens
-    purrr::pmap(.l = list(
-      
-      "l1" = list_eigenMS_normalised_tibbles, 
-      "l2" = list_raw_tibbles,
-      "l3" = names(list_eigenMS_normalised_tibbles)
-      
-    ), .f = function(l1, l2, l3) {
-      
-      # DEBUG ###
-      # normalised_tibble_and_hc <- list_of_tibbles_eigenMS_normalisation_result[[1]][[1]]
-      # raw_tibble <- list_of_tibble_intensities_for_pca[[1]][[1]]
-      # name_phospho_or_protein <- names(list_of_tibbles_eigenMS_normalisation_result[[1]])[[1]]
-      ###########
-      
-      # define tables #####
-      normalised_tibble_and_hc <- l1
-      raw_tibble <- l2
-      name_phospho_or_protein <- l3
-      
-      design_factor_info_normalised <- gsub(x = colnames(normalised_tibble_and_hc$result_table %>% .[, -1]), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
-      design_factor_info_raw <- gsub(x = colnames(raw_tibble), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
-      
-      pdf(paste(R_processing_results_dir, "MDSplot_eigenMS_normalised, k", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-      par(oma = c(0, 0, 0, 5))
-      plotMDS(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), main = paste("normalised, k=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""), cex = 2, pch = 1:length(levels(design_factor_info_normalised)))
-      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_normalised), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), pch = 1:length(levels(design_factor_info_normalised)))
-      dev.off()
-      
-      pdf(paste(R_processing_results_dir, "MDSplot_raw_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-      par(oma = c(0, 0, 0, 5))
-      plotMDS(raw_tibble %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), main = paste("raw", TABLE_NAMES[[1]], name_phospho_or_protein, sep = ", "), cex = 2, pch = 1:length(levels(design_factor_info_raw)))
-      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_raw), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), pch = 1:length(levels(design_factor_info_raw)))
-      dev.off()
-      
-    } )
-    
-  } )
-
-```
-
-plot the intra-timepoint correlation
-
-```{r warning=FALSE}
-
-# purrr::map(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .f = function(.x) {
-
-  df <- tibble_normalised_result
-
-  combs <- combn(x = colnames(df[, 3:ncol(df)]), m = 2) %>% t
-  
-  combs2 <- combs %>% as_tibble %>% add_column("comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
-                                               "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
-                                               "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"), 
-                                               "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"))
-  
-  combs2 <- combs2[combs2$comparison_1_replicate != combs2$comparison_2_replicate &
-                     combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
-  
-  list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
-    
-    # DEBUG #####
-    # .x <- combs2[1, 1]
-    # .y <- combs2[1, 2]
-    #############
-      
-    colnames_id.vars <- colnames(df[, 1:2])
-    
-    pairwise_subset_table <- df[, colnames_id.vars] %>% add_column("comparison_1_value" = df[, .x %>% paste] %>% unlist, "comparison_2_value" = df[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
-    
-    return(pairwise_subset_table)
-    
-  })
-  
-  tibble_pairwise_comparisons_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
-  
-  ggplot(tibble_pairwise_comparisons_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "lm") +
-    annotate(geom = "text", x = 15, y = 30, label = bquote(R^2 == ~ .(cor(x = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_1_value, y = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_2_value, method = "pearson"))), size = 5) +
-    # scale_x_continuous(trans = "log2") +
-    # scale_y_continuous(trans = "log2") +
-    xlab("Comparison 1 normalised intensity (log2)") + 
-    ylab("Comparison 2 normalised intensity (log2)") + 
-    ggtitle("Intra-timepoint (between replicates) correlation after EigenMS normalisation") +
-    # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-# } )
-
 ```
 
 plot the CV vs. mean log2 intensity for each item-per-timepoint
@@ -1203,7 +1183,7 @@ library(NormalyzerDE)
 Normalyzer input intensities should NOT be log transformed, since it's going to be done somewhere along the track
 ```{r}
 
-list_of_tibble_intensities_for_processing <- list_of_dfs_phosphosites_intensities %>% purrr::map(.f = ~mutate_all(., .funs = function(x) {
+list_of_tibble_intensities_for_processing <- list_of_tibble_intensities_for_pca %>% purrr::map_depth(.depth = 2, .ragged = FALSE, .f = ~mutate_all(., .funs = function(x) {
 
   out.column <- x
 
@@ -1241,6 +1221,7 @@ normalyzer_design_matrix <- tibble("sample" = colnames(list_of_tibble_intensitie
                           design_factor_info <- gsub(x = colnames(list_of_tibble_intensities_for_processing_with_id[[1]])[-c(1, 2)], pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
                         )
 
+
 ```
 
 ## generate SummarizedExperiment object
@@ -1269,7 +1250,7 @@ sumExpObj <- SummarizedExperiment::SummarizedExperiment(
 #            dataPath = dataFp, 
 #            outputDir = R_processing_results_dir)
 
-normalyzer(jobName = "test_run_phosphosites_junc.exons.diff", 
+normalyzer(jobName = "test", 
            experimentObj = sumExpObj, 
            outputDir = R_processing_results_dir)
 

@@ -82,7 +82,7 @@ vector_OBseries_timepoints <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d
 
 ref_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf"
 
-alltimepoints_reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last.gtf"
+alltimepoints_reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf"
 
 ```
 
@@ -480,7 +480,6 @@ tibble_ref_gtf <- rtracklayer::import(ref_gtf_path) %>% as_tibble %>% dplyr::mut
 
 tibble_alltimepoints_reconstructed_gtf <- rtracklayer::import(alltimepoints_reconstructed_gtf_path) %>% as_tibble %>% type_convert %>% dplyr::mutate_if(is.factor, as.character)
 
-
 ```
 
 #### match to junctions for IR and exons to non-IR
@@ -630,7 +629,6 @@ tibble_constitutive_exon_coords <- wide_tibble_of_psisigma_results_allcomparison
 write.table(x = tibble_constitutive_exon_coords[, c("splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% setNames(c("splicemode", "chr", "start", "end", "strand")) %>% unique, file = paste(R_processing_results_dir, "table_of_all_constitutive_exons_coords_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_constitutive_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
-
 
 # Exon switching analysis
 
@@ -1050,7 +1048,7 @@ wide_tibble_of_absolute_PSI_averages_complete.timeseries <- wide_tibble_of_absol
 
 wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum <- dplyr::semi_join(wide_tibble_of_absolute_PSI_averages_complete.timeseries, tibble_differential_exon_coords)
 
-no.exons_differentially.spliced_complete.timeseries_sum <- nrow(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)
+no.exons_differentially.spliced_complete.timeseries_sum <- length(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum$diff_exon_coords)
 
 cat("There are", no.exons_differentially.spliced_complete.timeseries_sum, "exons with a complete time profile of exon-based PSI which are differentially spliced.")
 
@@ -1149,15 +1147,15 @@ This gene background shall contain all ensembl protein coding, long noncoding an
 ```{r}
 
 # GOTERM
-polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "go_id", "namespace_1003"), mart = ensembl_mart) %>% .[.$namespace_1003 != "",]
+# polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "go_id", "namespace_1003"), mart = ensembl_mart) %>% .[.$namespace_1003 != "",]
 #
-polyA_RNAseq_GO_background[, "namespace_1003"] <- as.character(polyA_RNAseq_GO_background[, "namespace_1003"])
+# polyA_RNAseq_GO_background[, "namespace_1003"] <- as.character(polyA_RNAseq_GO_background[, "namespace_1003"])
 #
-write.table(x = polyA_RNAseq_GO_background, file = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+# write.table(x = polyA_RNAseq_GO_background, file = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
 
 ## Create catDB instance (takes a while but needs to be done only once)
 # note: you had to save the GO annotation file to disk in the previous steps above
-catdb <- makeCATdb(myfile = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+# catdb <- makeCATdb(myfile = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
 
 ```
 
@@ -1270,10 +1268,10 @@ purrr::map2(.x = list_of_tibbles_SOM_hyperGOresult_clusterwise_top.hits, .y = li
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[2], "_exons_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[2], "_exons_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[2], "_genes_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[2], "_genes_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_tibbles_SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[2], "_exons_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_tibbles_SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[2], "_genes_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -1396,35 +1394,35 @@ goal: to conduct hypergeometric tests of overrepresentation for gene subsets in 
 ```{r}
 
 # PROTEINFAMILY
-polyA_RNAseq_background_pfam <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "pfam"), mart = ensembl_mart) %>% .[.$pfam != "",]
+# polyA_RNAseq_background_pfam <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "pfam"), mart = ensembl_mart) %>% .[.$pfam != "",]
 
 # obtain description(definition, DE) for each PFAM ID
-
-PFAM_all_descriptions <- as.data.frame(PFAMDE[mappedkeys(PFAMDE)]) %>% setNames(., c("pfam", "family_description"))
-
-polyA_RNAseq_background_pfam <- dplyr::left_join(polyA_RNAseq_background_pfam, PFAM_all_descriptions, by = "pfam")
-
-polyA_RNAseq_background_pfam[, "family_description"] <- as.character(polyA_RNAseq_background_pfam[, "family_description"])
-
-write.table(x = polyA_RNAseq_background_pfam, file = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_PROTEINFAMILY.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+# 
+# PFAM_all_descriptions <- as.data.frame(PFAMDE[mappedkeys(PFAMDE)]) %>% setNames(., c("pfam", "family_description"))
+# 
+# polyA_RNAseq_background_pfam <- dplyr::left_join(polyA_RNAseq_background_pfam, PFAM_all_descriptions, by = "pfam")
+# 
+# polyA_RNAseq_background_pfam[, "family_description"] <- as.character(polyA_RNAseq_background_pfam[, "family_description"])
+# 
+# write.table(x = polyA_RNAseq_background_pfam, file = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_PROTEINFAMILY.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
 
 # create list of gene UNIVERSE
 
-reference_geneset_universe <- polyA_RNAseq_background_pfam$external_gene_name
+# reference_geneset_universe <- polyA_RNAseq_background_pfam$external_gene_name
 
 # create list containing collections of genes under their according family descriptions
-
-polyA_RNAseq_background_pfam_2 <- polyA_RNAseq_background_pfam
-
-polyA_RNAseq_background_pfam_2 <- polyA_RNAseq_background_pfam_2[, names(polyA_RNAseq_background_pfam_2) != "pfam"]
-
-list_of_pfam_descriptions <- polyA_RNAseq_background_pfam_2$family_description %>% unique %>% as.list
-
-list_of_pfam_gene_family_categories <- purrr::map(.x = list_of_pfam_descriptions, .f = ~as.list(polyA_RNAseq_background_pfam[polyA_RNAseq_background_pfam$family_description == .x, "external_gene_name"]))
-
-names(list_of_pfam_gene_family_categories) <- list_of_pfam_descriptions
-
-list_of_pfam_gene_family_categories <- list_of_pfam_gene_family_categories %>% purrr::map(~unlist(.x))
+# 
+# polyA_RNAseq_background_pfam_2 <- polyA_RNAseq_background_pfam
+# 
+# polyA_RNAseq_background_pfam_2 <- polyA_RNAseq_background_pfam_2[, names(polyA_RNAseq_background_pfam_2) != "pfam"]
+# 
+# list_of_pfam_descriptions <- polyA_RNAseq_background_pfam_2$family_description %>% unique %>% as.list
+# 
+# list_of_pfam_gene_family_categories <- purrr::map(.x = list_of_pfam_descriptions, .f = ~as.list(polyA_RNAseq_background_pfam[polyA_RNAseq_background_pfam$family_description == .x, "external_gene_name"]))
+# 
+# names(list_of_pfam_gene_family_categories) <- list_of_pfam_descriptions
+# 
+# list_of_pfam_gene_family_categories <- list_of_pfam_gene_family_categories %>% purrr::map(~unlist(.x))
 
 ```
 
@@ -2333,14 +2331,216 @@ if(! dir.exists(qualitycheck_results_dir) ) {
 
 ```{r}
 
+# plot pvalue
 pdf(paste(qualitycheck_results_dir, "qualityplot_pvalues_density.distribution.pdf", sep = "")) 
   
-  plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[wide_tibble_of_psisigma_results_allcomparisons_final$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_12h", "pvalue"] %>% na.omit %>% unlist))
+  plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[, "pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "frequency density", main = "PSI-Sigma p-value density distribution")
   
-  dev.off()
+dev.off()
+
+pdf(paste(qualitycheck_results_dir, "qualityplot_pvalues_CDF.pdf", sep = "")) 
   
-    # plot all the absolute PSI values
-  plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[wide_tibble_of_psisigma_results_allcomparisons_final$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_12h" & wide_tibble_of_psisigma_results_allcomparisons_final$pvalue < 0.4 & wide_tibble_of_psisigma_results_allcomparisons_final$pvalue > 0.35, c(1, vector_col.index_absolute.psi.comparison.1, vector_col.index_absolute.psi.comparison.2)] %>% melt(id.vars = "event_region_coords", variable.name = "comparison.replicate", value.name = "absolute.psi") %>% .$absolute.psi %>% na.omit))
+  plot(ecdf(wide_tibble_of_psisigma_results_allcomparisons_final[, "pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "cumulative frequency", main = "PSI-Sigma p-value CDF")
+  
+dev.off()
+  
+vector_col.index_absolute.psi.comparison.1 <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final), pattern = "comparison.1_")
+vector_col.index_absolute.psi.comparison.2 <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final), pattern = "comparison.2_")
+
+# plot all the absolute PSI values
+plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[wide_tibble_of_psisigma_results_allcomparisons_final$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_12h" & wide_tibble_of_psisigma_results_allcomparisons_final$pvalue < 0.4 & wide_tibble_of_psisigma_results_allcomparisons_final$pvalue > 0.35, c(1, vector_col.index_absolute.psi.comparison.1, vector_col.index_absolute.psi.comparison.2)] %>% melt(.,id.vars = "database_ID", variable.name = "comparison.replicate", value.name = "absolute.psi") %>% .$absolute.psi %>% na.omit), main = "distribution of PSI values for comparisons with a p value of \n between 0.35 and 0.4")
+  
+# plot dpsi distribution
+pdf(paste(qualitycheck_results_dir, "qualityplot_dpsi_density.distribution.pdf", sep = "")) 
+  
+  plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[, "dpsi"] %>% na.omit %>% unlist), xlab = "dpsi", ylab = "frequency density", main = "PSI-Sigma dpsi frequency density")
+  
+dev.off()
+
+pdf(paste(qualitycheck_results_dir, "qualityplot_dpsi_CDF.pdf", sep = "")) 
+  
+  plot(ecdf(wide_tibble_of_psisigma_results_allcomparisons_final[, "dpsi"] %>% na.omit %>% unlist), xlab = "dpsi", ylab = "cumulative frequency", main = "PSI-Sigma dpsi CDF")
+  
+dev.off()
+
+```
+
+## check for whether there is any dependence of number of exons detected vs. coverage - CURRENTLY NOT POSSIBLE!
+
+```{r eval=FALSE, include=FALSE}
+
+# number_of_junctions_detected_per_sample <- read.delim(paste(qualitycheck_results_dir, "number_of_junctions_detected_per_sample.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE) %>% as_tibble
+# 
+# coveragedata <- read.delim(paste(qualitycheck_results_dir, "coveragedata.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+# 
+# num_junctions_vs_coverage <- dplyr::inner_join(number_of_junctions_detected_per_sample, coveragedata, by = "timepoint_name")
+# 
+# num_junctions_vs_coverage_pearson <- cor(num_junctions_vs_coverage[, 2], num_junctions_vs_coverage[, 3], method = "pearson") %>% signif(4)
+# 
+# num_junctions_vs_coverage_gradient <- lm(formula = junction_counts ~ read_count, num_junctions_vs_coverage) %>% .[[1]] %>% .[2] %>% signif(digits = 4)
+# 
+# num_junctions_vs_coverage_intercept <- lm(formula = junction_counts ~ read_count, num_junctions_vs_coverage) %>% .[[1]] %>% .[1] %>% signif(4)
+# 
+# ggplot(num_junctions_vs_coverage, aes(y = junction_counts, x = read_count)) +
+#   geom_point() +
+#   geom_smooth(method = "lm", formula = y~x, colour = "blue") +
+#   annotate(geom = "text", label = bquote("R"^2 ~ "=" ~ .(num_junctions_vs_coverage_pearson)), x = 3.75e7, y = 244000, color = "blue") +
+#   annotate(geom = "text", label = bquote("y =" ~ .(num_junctions_vs_coverage_gradient) ~ "x +" ~ .(num_junctions_vs_coverage_intercept)), x = 3.75e7, y = 240000, color = "blue") +
+#   ggtitle(paste("plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", sep = "")) +
+#   xlab("Sequencing Depth") +
+#   ylab("Number of splice junctions detected") +
+#   theme_bw() +
+#   theme(text = element_text(family = "Helvetica")) +
+#   ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 15, height = 15, units = "cm") +
+#   ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".svg", sep = ""), device = "svg", dpi = 600, width = 15, height = 15, units = "cm")
+
+```
+
+## frequency distribution of no. exons detected/gene
+
+### all constitutive exons
+
+```{r}
+
+avg_exons_per_gene_constitutive <- (wide_tibble_of_psisigma_results_allcomparisons_constitutive$diff_exon_coords %>% unique %>% length)/(wide_tibble_of_psisigma_results_allcomparisons_constitutive$matched_gene_names %>% unique %>% length)
+
+print(paste("There are", avg_exons_per_gene_constitutive, "unique constitutive exons/gene detected"))
+
+tibble_constitutive_exons_per_gene_freq <- wide_tibble_of_psisigma_results_allcomparisons_constitutive %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons = n())
+
+tibble_constitutive_exons_per_gene_freq_2 <- tibble_constitutive_exons_per_gene_freq %>% group_by(no_exons) %>% summarise(NumberOfGenesWithExonNumber = n())
+
+# ggplot
+
+ggplot(tibble_constitutive_exons_per_gene_freq_2) + 
+  geom_col(aes(y = NumberOfGenesWithExonNumber, x = no_exons)) +
+  geom_text(data = tibble_constitutive_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 50)) +
+  ggtitle(paste("frequency distribution of constitutive exons per gene for all genes 
+                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  # scale_x_continuous(trans = "log2") +
+  xlim(c(0, 20)) +
+  xlab("number of exons/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+
+print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_constitutive_exons_per_gene_freq_2[1, 2]/tibble_constitutive_exons_per_gene_freq_2[2, 2]))
+
+```
+
+### all differential exons
+
+```{r}
+
+avg_exons_per_gene_differential <- (wide_tibble_of_psisigma_results_allcomparisons_differential$diff_exon_coords %>% unique %>% length)/(wide_tibble_of_psisigma_results_allcomparisons_differential$matched_gene_names %>% unique %>% length)
+
+print(paste("There are", avg_exons_per_gene_differential, "unique differential exons/gene detected"))
+
+tibble_differential_exons_per_gene_freq <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons = n())
+
+tibble_differential_exons_per_gene_freq_2 <- tibble_differential_exons_per_gene_freq %>% group_by(no_exons) %>% summarise(NumberOfGenesWithExonNumber = n())
+
+# ggplot
+
+ggplot(tibble_differential_exons_per_gene_freq_2) + 
+  geom_col(aes(y = NumberOfGenesWithExonNumber, x = no_exons)) +
+  geom_text(data = tibble_differential_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 50)) +
+  ggtitle(paste("frequency distribution of differential exons per gene for all genes 
+                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  # scale_x_continuous(trans = "log2") +
+  xlim(c(0, 20)) +
+  xlab("number of exons/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+
+print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_differential_exons_per_gene_freq_2[1, 2]/tibble_differential_exons_per_gene_freq_2[2, 2]))
+
+```
+
+## frequency distribution of no. exons detected per category
+
+```{r}
+
+# category means splicemode + NMD status(reference only at this stage) + first/last exon(reference only at this stage)
+# also clean up the splicemode column
+tibble_exons_per_category_constitutive <- wide_tibble_of_psisigma_results_allcomparisons_constitutive %>% 
+  add_column(., "splice_NMD_first.last" = paste(gsub(x = wide_tibble_of_psisigma_results_allcomparisons_constitutive$splicemode, pattern = "^([^\\||_]+).*", replacement = "\\1"), " ", "NMD_", wide_tibble_of_psisigma_results_allcomparisons_constitutive$NMD_or_not, " ", wide_tibble_of_psisigma_results_allcomparisons_constitutive$first_or_last_exon_reference, sep = "")) %>% 
+  dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splice_NMD_first.last) %>% summarise(no_exons_constitutive = n())
+
+str_split_fixed(before$type, "_and_", 2)
+
+tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% 
+  add_column(., "splice_NMD_first.last" = paste(gsub(x = wide_tibble_of_psisigma_results_allcomparisons_differential$splicemode, pattern = "^([^\\||_]+).*", replacement = "\\1"), " ", "NMD_", wide_tibble_of_psisigma_results_allcomparisons_differential$NMD_or_not, " ", wide_tibble_of_psisigma_results_allcomparisons_differential$first_or_last_exon_reference, sep = "")) %>% 
+  dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splice_NMD_first.last) %>% summarise(no_exons_differential = n())
+
+tibble_exons_per_category_summary <- dplyr::full_join(tibble_exons_per_category_constitutive, tibble_exons_per_category_differential, by = "splice_NMD_first.last")
+
+long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = "splice_NMD_first.last") %>% as_tibble
+
+# ggplot
+
+ggplot(long_tibble_exons_per_category_summary) + 
+geom_col(aes(y = value, x = splice_NMD_first.last)) +
+facet_wrap(~variable, scales = "free") +
+geom_label(data = long_tibble_exons_per_category_summary, aes(label = value, y = value, x = splice_NMD_first.last)) +
+ggtitle(paste("frequency distribution of exons per category 
+              ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+xlab("Exon category (splicemode, NMD, first/last exon") +
+ylab("Number of exons") +
+theme_bw() +
+theme(text = element_text(family = "Helvetica")) +
+theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family ="Helvetica")) +
+ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
+ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm") 
+
+```
+
+## graph the no. of junctions detected vs. maximum transcript length
+
+### fetch max. transcript lengths for genes in biomart
+
+```{r}
+
+tibble_max_transcript_length_per_gene <- getBM(attributes = c("external_gene_name", "transcript_length"), mart = ensembl_mart) %>% group_by(external_gene_name) %>% na.omit %>% filter(transcript_length == max(transcript_length	)) %>% 
+  setNames(c("matched_gene_names", "maxtranscriptlength"))
+
+```
+
+
+```{r}
+
+exons_per_gene_constitutive <- wide_tibble_of_psisigma_results_allcomparisons_constitutive %>% 
+  dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons_constitutive = n())
+
+exons_per_gene_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% 
+  dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons_differential = n())
+
+exons_per_gene_merged <- dplyr::full_join(exons_per_gene_constitutive, exons_per_gene_differential, by = "matched_gene_names")
+
+wide_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength <- dplyr::right_join(tibble_max_transcript_length_per_gene, exons_per_gene_merged, by = "matched_gene_names") %>% setNames(., c("Gene", "maxtranscriptlength", "no_exons_constitutive", "no_exons_differential"))
+
+long_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength <- reshape2::melt(wide_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength, 
+                                                                                    id = c("Gene", "maxtranscriptlength"), variable.name = "filteringstep",
+                                                                                    value.name = "no_exons") %>% as_tibble %>% type_convert
+
+# no. junctions detected vs. maximum annotated transcript length
+ggplot(long_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength) + 
+geom_point(aes(y = no_exons, x = maxtranscriptlength)) +
+geom_smooth(method = "lm", formula = y~x, colour = "red", aes(y = no_exons, x = maxtranscriptlength)) +
+facet_wrap(~filteringstep, scales = "free") +
+ggtitle(paste("scatterplot of the number of unique exons detected per gene against max. annotated transcipt length 
+              ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+xlab("maximum annotated transcript length") +
+ylab("number of exons detected") +
+theme_bw() +
+theme(axis.text.x = element_text(hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no._exons_vs_max_transcript_length_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no._exons_vs_max_transcript_length_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
 
 ```
 

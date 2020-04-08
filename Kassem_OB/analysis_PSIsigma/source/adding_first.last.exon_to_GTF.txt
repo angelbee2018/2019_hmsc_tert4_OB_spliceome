@@ -1,0 +1,131 @@
+#!/bin/bash
+
+#PBS -N Adding info to GTF to indicate whether exons are first/last
+#PBS -l select=1:ncpus=32:mem=60gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -k eod
+#PBS -o /home/z3463471/PGNEXUS_kassem_MSC/OB/analysis_PSIsigma/run_1_OB_timeseries/results/
+#PBS -M z3463471@ad.unsw.edu.au
+#PBS -m ae
+
+module load R/3.6.1
+
+R
+
+library(tidyverse)
+library(data.table)
+library(rtracklayer)
+library(furrr)
+plan(multiprocess)
+options(future.globals.maxSize = 30000000000)
+
+reference_gtf_path <- "/srv/scratch/z3463471/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+
+reconstructed_gtf_path <- "/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+
+output_dir <- "/srv/scratch/z3463471/hg38_ensembl_reference/gtf/"
+
+# tibble_gtf <- rtracklayer::import(reference_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character) %>% type_convert
+
+tibble_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% type_convert %>% dplyr::mutate_if(is.factor, as.character)
+
+# automatically detect if exons are always numbered in increasing order regardless of strand (common for recon. transcripts)
+## sample the first transcript on the negative strand with more than 1 exon
+
+temp_number <- 1
+
+first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% .[temp_number]
+
+while (tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "+") {
+
+temp_number <- temp_number + 1
+
+first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% .[temp_number]
+
+}
+
+# the test condition
+max_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% max
+max_exon_start_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id & tibble_gtf$exon_number == max_test, "start"] %>% paste
+min_exon_start_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id & tibble_gtf$exon_number == 1, "start"] %>% paste
+
+exon_order <- NULL
+
+# if the exon 1 comes before the max exon, then the exon order is always increasing
+if (min_exon_start_test < max_exon_start_test) {
+
+  exon_order <- "increasing"
+
+# if the exon 1 cones after the max exon, then the exon order is stranded.
+} else if (min_exon_start_test > max_exon_start_test) {
+
+  exon_order <- "stranded"
+
+}
+
+# FUNCTION TO LABEL THE LAST EXON OF A SUBSET GTF (DESCRIBING A SINGLE TRANSCRIPT) WITH "last_exon"
+
+label_first_last_exon <- function(tibble_gtf_subset_by_transcript_id) {
+  
+  max_exon_number <- max(tibble_gtf_subset_by_transcript_id$exon_number)
+  
+  # account for transcripts which only have one exon
+  if (max_exon_number == 1) {
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "only_one_exon"
+    
+  } else {
+    
+    if (exon_order == "increasing" & tibble_gtf_subset_by_transcript_id$strand %>% unique == "-") {
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "first_exon"
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "last_exon"
+    
+    }
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "last_exon"
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "first_exon"
+    
+  }
+  
+  return(tibble_gtf_subset_by_transcript_id)
+  
+}
+
+# END label_first_last_exon() ######
+
+
+# MAIN FUNCTION TO LABEL THE FIRST/LAST EXONS OF GTF
+
+add_first.last.exon_info <- function(input_gtf) {
+
+# add in the first_or_last_exon column
+input_gtf_2 <- input_gtf %>% add_column("first_or_last_exon" = NA)
+
+# remove rows which have an NA exon number
+input_gtf_2 <- input_gtf_2[-which(is.na(input_gtf_2$exon_number)), ]
+
+# get all the unique transcript IDs for looping
+list_unique_transcript.ids <- input_gtf_2$transcript_id %>% unique %>% array_tree
+
+output_gtf <- future_map(.x = list_unique_transcript.ids, .f = ~label_last_exon(input_gtf_2[input_gtf_2$transcript_id == .x, ]), .progress = TRUE, .options = future_options(globals = c("input_gtf_2", "label_first_last_exon"))) %>% rbindlist %>% as_tibble
+
+return(output_gtf)
+
+}
+
+# END add_first.last.exon_info() ####
+
+# tibble_ref_gtf_subset.transcript_id_with_first.last.exon <- tibble_ref_gtf %>% add_first.last.exon_info
+
+tibble_reconstructed_gtf_subset.transcript_id_with_first.last.exon <- tibble_alltimepoints_reconstructed_gtf %>% add_first.last.exon_info
+
+## EXPORT # 
+# rtracklayer::export(tibble_ref_gtf_subset.transcript_id_with_first.last.exon, con = paste(output_dir, "Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf", sep = ""), format = "gtf")
+
+rtracklayer::export(tibble_reconstructed_gtf_subset.transcript_id_with_first.last.exon, con = paste(output_dir, "alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last.gtf", sep = ""), format = "gtf")
+
+q("no")

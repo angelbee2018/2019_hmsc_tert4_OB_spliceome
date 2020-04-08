@@ -82,7 +82,7 @@ vector_OBseries_timepoints <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d
 
 ref_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf"
 
-alltimepoints_reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf"
+alltimepoints_reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_first.last_NMD.gtf"
 
 ```
 
@@ -210,14 +210,27 @@ annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
     
   }
   
-  # NMD
-  NMD_or_not <- FALSE
+  # NMD - reference
+  NMD_reference <- FALSE
   
   if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
     
     if (all(list_matched_ref_recon_gtf[["reference_gtf_match"]]$transcript_biotype == "nonsense_mediated_decay")) {
       
-      NMD_or_not <- TRUE 
+      NMD_reference <- TRUE 
+      
+    }
+    
+  }
+  
+  # NMD - recon
+  NMD_recon <- FALSE
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    if (all(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$NMD_candidate == TRUE)) {
+      
+      NMD_recon <- TRUE 
       
     }
     
@@ -258,7 +271,8 @@ annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
               "matched_gene_names" = matched_gene_names,
               "matched_recon_transcript_names" = matched_recon_transcript_names,
               "matched_strand" = matched_strand,
-              "NMD_or_not" = NMD_or_not,
+              "NMD_reference" = NMD_reference,
+              "NMD_recon" = NMD_recon,
               "first_or_last_exon_reference" = first_or_last_exon_reference,
               "first_or_last_exon_recon" = first_or_last_exon_recon))
   
@@ -490,7 +504,8 @@ wide_tibble_of_all_unique_exon_coords <- wide_tibble_of_psisigma_results_allcomp
 
 # split exon co-ords by whether it's IR or not
 wide_tibble_of_all_unique_exon_coords_array.tree_IR <- wide_tibble_of_all_unique_exon_coords[grep(x = wide_tibble_of_all_unique_exon_coords$splicemode, pattern = "IR"), ] %>% array_tree
-wide_tibble_of_all_unique_exon_coords_array.tree_not_IR <- wide_tibble_of_all_unique_exon_coords[-grep(x = wide_tibble_of_all_unique_exon_coords$splicemode, pattern = "IR"), ] %>% array_tree
+wide_tibble_of_all_unique_exon_coords_array.tree_not_IR <- wide_tibble_of_all_uni
+que_exon_coords[-grep(x = wide_tibble_of_all_unique_exon_coords$splicemode, pattern = "IR"), ] %>% array_tree
 
 # junction-flanking exon matches for IR events
 list_ref_matching_exon_entries_IR <- future_imap(.x = wide_tibble_of_all_unique_exon_coords_array.tree_IR, .f = ~list(
@@ -528,8 +543,20 @@ tibble_ref_matching_exon_entries_all <- read.delim(file = paste(R_processing_res
 
 wide_tibble_of_psisigma_results_allcomparisons_final <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_processed, tibble_ref_matching_exon_entries_all, by = c("event_region_coords", "diff_exon_coords", "splicemode"))
 
+# create column of definitive NMD or not, and definitive first/last exon
+wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final %>% add_column(., "NMD_or_not" = FALSE, "first_exon" = FALSE, "last_exon" = FALSE)
+
+wide_tibble_of_psisigma_results_allcomparisons_final[union(which(wide_tibble_of_psisigma_results_allcomparisons_final$NMD_reference == TRUE), 
+                                                               which(wide_tibble_of_psisigma_results_allcomparisons_final$NMD_recon == TRUE)), "NMD_or_not"] <- TRUE
+  
+wide_tibble_of_psisigma_results_allcomparisons_final[union(grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "first_exon"), 
+                                                           grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "first_exon")), "first_exon"] <- TRUE
+
+wide_tibble_of_psisigma_results_allcomparisons_final[union(grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "last_exon"), 
+                                                           grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "last_exon")), "last_exon"] <- TRUE
+
 # reorder columns
-wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "psisigma_gene.symbol", "psisigma_reference.transcript", "psisigma_exon_type", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_gene_names", "matched_recon_transcript_names", "matched_strand", "NMD_or_not", "first_or_last_exon_reference", "first_or_last_exon_recon", "num.replicates_comparison.1", "num.replicates_comparison.2", "pvalue", "FDR", "dpsi", "comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3", "comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3", "comparison")]
+wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "psisigma_gene.symbol", "psisigma_reference.transcript", "psisigma_exon_type", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_gene_names", "matched_recon_transcript_names", "matched_strand", "NMD_reference", "NMD_recon", "NMD_or_not", "first_or_last_exon_reference", "first_or_last_exon_recon", "first_exon", "last_exon", "num.replicates_comparison.1", "num.replicates_comparison.2", "pvalue", "FDR", "dpsi", "comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3", "comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3", "comparison")]
 
 cat("There are", wide_tibble_of_psisigma_results_allcomparisons_final[, c("event_region_coords", "diff_exon_coords")] %>% unique %>% nrow, "exons detected in total (at least one observation across the entire time series)")
 
@@ -668,7 +695,7 @@ wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp[, "replicate"]
 ## ALERT! SUM USED AS FUN.AGGREGATE. it means we'll be getting PSI values for the whole exon, not LSV.
 ## aggregate function only sums if all values are not all NA. so it preserves values which are all NA.
 ## wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp[c(2200:2206, 2665:2670), ]
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp %>% unique, formula =  database_ID + event_region_coords + diff_exon_coords + splicemode + psisigma_gene.symbol + diff_exon_chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_strand + NMD_or_not + first_or_last_exon_reference + first_or_last_exon_recon + ud_absolute.psi_1 + ud_absolute.psi_2 + ud_absolute.psi_3 ~ timepoint + replicate, value.var = "absolute_psi") %>% as_tibble
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp %>% unique, formula =  database_ID + event_region_coords + diff_exon_coords + splicemode + psisigma_gene.symbol + diff_exon_chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_strand + NMD_reference + NMD_recon + NMD_or_not + first_or_last_exon_reference + first_or_last_exon_recon + first_exon + last_exon + ud_absolute.psi_1 + ud_absolute.psi_2 + ud_absolute.psi_3 ~ timepoint + replicate, value.var = "absolute_psi") %>% as_tibble
 
 # rename the columns. add "absolute.psi" to the colname.
 colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) <- gsub(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only), pattern = "(\\d+)(d|h)_(\\d)", replacement = "\\1\\2_absolute.psi_\\3")
@@ -2398,6 +2425,38 @@ dev.off()
 
 ## frequency distribution of no. exons detected/gene
 
+### ALL exons
+
+```{r}
+
+avg_exons_per_gene_all <- (wide_tibble_of_psisigma_results_allcomparisons_final$diff_exon_coords %>% unique %>% length)/(wide_tibble_of_psisigma_results_allcomparisons_final$matched_gene_names %>% unique %>% length)
+
+print(paste("There are", avg_exons_per_gene_all, "unique constitutive exons/gene detected"))
+
+tibble_all_exons_per_gene_freq <- wide_tibble_of_psisigma_results_allcomparisons_final %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons = n())
+
+tibble_all_exons_per_gene_freq_2 <- tibble_all_exons_per_gene_freq %>% group_by(no_exons) %>% summarise(NumberOfGenesWithExonNumber = n())
+
+# ggplot
+
+ggplot(tibble_all_exons_per_gene_freq_2) + 
+  geom_col(aes(y = NumberOfGenesWithExonNumber, x = no_exons)) +
+  geom_text(data = tibble_all_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 50)) +
+  ggtitle(paste("frequency distribution of constitutive exons per gene for all genes 
+                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  # scale_x_continuous(trans = "log2") +
+  xlim(c(0, 20)) +
+  xlab("number of exons/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+
+print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_all_exons_per_gene_freq_2[1, 2]/tibble_all_exons_per_gene_freq_2[2, 2]))
+
+```
+
 ### all constitutive exons
 
 ```{r}
@@ -2464,39 +2523,78 @@ print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_different
 
 ## frequency distribution of no. exons detected per category
 
+incl. NMD, first/last exon.
+
 ```{r}
 
-# category means splicemode + NMD status(reference only at this stage) + first/last exon(reference only at this stage)
+# category means splicemode + NMD status + first/last exon
 # also clean up the splicemode column
-tibble_exons_per_category_constitutive <- wide_tibble_of_psisigma_results_allcomparisons_constitutive %>% 
-  add_column(., "splice_NMD_first.last" = paste(gsub(x = wide_tibble_of_psisigma_results_allcomparisons_constitutive$splicemode, pattern = "^([^\\||_]+).*", replacement = "\\1"), " ", "NMD_", wide_tibble_of_psisigma_results_allcomparisons_constitutive$NMD_or_not, " ", wide_tibble_of_psisigma_results_allcomparisons_constitutive$first_or_last_exon_reference, sep = "")) %>% 
-  dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splice_NMD_first.last) %>% summarise(no_exons_constitutive = n())
+tibble_exons_per_category_all <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_all = n())
 
-str_split_fixed(before$type, "_and_", 2)
+all_exons_count <- tibble_exons_per_category_all$no_exons_all %>% sum(na.rm = TRUE)
+number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$NMD_or_not == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_first_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$first_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$last_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 
-tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% 
-  add_column(., "splice_NMD_first.last" = paste(gsub(x = wide_tibble_of_psisigma_results_allcomparisons_differential$splicemode, pattern = "^([^\\||_]+).*", replacement = "\\1"), " ", "NMD_", wide_tibble_of_psisigma_results_allcomparisons_differential$NMD_or_not, " ", wide_tibble_of_psisigma_results_allcomparisons_differential$first_or_last_exon_reference, sep = "")) %>% 
-  dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splice_NMD_first.last) %>% summarise(no_exons_differential = n())
+message("There are ", number_NMD_all_exons*100/all_exons_count, "% NMD exons overall.")
+message("There are ", number_first_exon_all_exons*100/all_exons_count, "% first exons overall.")
+message("There are ", number_last_exon_all_exons*100/all_exons_count, "% last exons overall.")
 
-tibble_exons_per_category_summary <- dplyr::full_join(tibble_exons_per_category_constitutive, tibble_exons_per_category_differential, by = "splice_NMD_first.last")
+tibble_exons_per_category_constitutive <- wide_tibble_of_psisigma_results_allcomparisons_constitutive %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_constitutive = n())
 
-long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = "splice_NMD_first.last") %>% as_tibble
+constitutive_exons_count <- tibble_exons_per_category_constitutive$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$NMD_or_not == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_first_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$first_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$last_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+
+message("There are ", number_NMD_constitutive_exons*100/constitutive_exons_count, "% NMD exons constitutive.")
+message("There are ", number_first_exon_constitutive_exons*100/constitutive_exons_count, "% first exons constitutive.")
+message("There are ", number_last_exon_constitutive_exons*100/constitutive_exons_count, "% last exons constitutive.")
+
+tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_differential = n())
+
+differential_exons_count <- tibble_exons_per_category_differential$no_exons_differential %>% sum(na.rm = TRUE)
+number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$NMD_or_not == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$first_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$last_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+
+message("There are ", number_NMD_differential_exons*100/differential_exons_count, "% NMD exons differential.")
+message("There are ", number_first_exon_differential_exons*100/differential_exons_count, "% first exons differential.")
+message("There are ", number_last_exon_differential_exons*100/differential_exons_count, "% last exons differential.")
+
+tibble_exons_per_category_summary <- list(tibble_exons_per_category_all, tibble_exons_per_category_constitutive, tibble_exons_per_category_differential) %>% purrr::reduce(dplyr::full_join)
+
+# melt the sample
+long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "NMD_or_not", "first_exon", "last_exon"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble
+
+# melt the category
+long_tibble_exons_per_category_summary_2 <- reshape2::melt(long_tibble_exons_per_category_summary, id.vars = c("splicemode", "sample", "number_of_exons_per_category"), variable.name = "NMD_first_last_exon", value.name = "NMD_first_last_exon_value") %>% as_tibble %>% 
+  # add the overall counts for each splicemode
+  dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_exons_per_splicemode" = sum(number_of_exons_per_category %>% na.omit)) %>% 
+  # add the overall counts for each unique category
+  dplyr::group_by(splicemode, sample, NMD_first_last_exon, NMD_first_last_exon_value) %>% dplyr::mutate("number_of_exons_per_category" = sum(number_of_exons_per_category %>% na.omit)) %>% unique %>%
+  # add the percentage for each category/splicemode
+  dplyr::mutate("percentage_exons_per_category" = number_of_exons_per_category*100/number_of_exons_per_splicemode)
+
+max_number_of_exons_per_splicemode <- max(long_tibble_exons_per_category_summary_2$number_of_exons_per_splicemode)
+max_percentage_exons_per_category <- max(long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ] %>% .$percentage_exons_per_category %>% na.omit)
 
 # ggplot
-
-ggplot(long_tibble_exons_per_category_summary) + 
-geom_col(aes(y = value, x = splice_NMD_first.last)) +
-facet_wrap(~variable, scales = "free") +
-geom_label(data = long_tibble_exons_per_category_summary, aes(label = value, y = value, x = splice_NMD_first.last)) +
-ggtitle(paste("frequency distribution of exons per category 
-              ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
-xlab("Exon category (splicemode, NMD, first/last exon") +
-ylab("Number of exons") +
-theme_bw() +
-theme(text = element_text(family = "Helvetica")) +
-theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family ="Helvetica")) +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm") 
+ggplot() + 
+  geom_col(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_exons_per_splicemode, x = splicemode)) +
+  facet_wrap(~sample, scales = "free", labeller = labeller(sample = c(no_exons_all = "All exons", no_exons_constitutive = "Constitutive", no_exons_differential = "Differential"))) +
+  geom_label(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_exons_per_splicemode, y = number_of_exons_per_splicemode, x = splicemode), position = position_identity()) +
+  geom_jitter(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode / max_percentage_exons_per_category , shape = NMD_first_last_exon), width = 0.1, height = 0) +
+  ggtitle(paste("Frequency distribution of exons per category 
+                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  xlab("Splicemode") +
+  scale_y_continuous(name = "Number of exons", sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
+  scale_shape_manual(name = "Category", limits = c("NMD_or_not", "first_exon", "last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm") 
 
 ```
 
@@ -2530,17 +2628,18 @@ long_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength <- reshape2::melt
 
 # no. junctions detected vs. maximum annotated transcript length
 ggplot(long_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength) + 
-geom_point(aes(y = no_exons, x = maxtranscriptlength)) +
-geom_smooth(method = "lm", formula = y~x, colour = "red", aes(y = no_exons, x = maxtranscriptlength)) +
-facet_wrap(~filteringstep, scales = "free") +
-ggtitle(paste("scatterplot of the number of unique exons detected per gene against max. annotated transcipt length 
-              ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
-xlab("maximum annotated transcript length") +
-ylab("number of exons detected") +
-theme_bw() +
-theme(axis.text.x = element_text(hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
-ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no._exons_vs_max_transcript_length_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
-ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no._exons_vs_max_transcript_length_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+  geom_point(aes(y = no_exons, x = maxtranscriptlength)) +
+  geom_smooth(method = "lm", formula = y~x, colour = "red", aes(y = no_exons, x = maxtranscriptlength)) +
+  # annotate(geom = "text", aes(x = 2e5, y = 20, label = paste(cor(x = comparison_1_value, y = comparison_2_value, method = "pearson"))), size = 5) +
+  facet_wrap(~filteringstep, scales = "free") +
+  ggtitle(paste("scatterplot of the number of unique exons detected per gene against max. annotated transcipt length 
+                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  xlab("maximum annotated transcript length") +
+  ylab("number of exons detected") +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no._exons_vs_max_transcript_length_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no._exons_vs_max_transcript_length_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
 
 ```
 

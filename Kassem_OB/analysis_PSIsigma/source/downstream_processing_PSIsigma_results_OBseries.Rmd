@@ -82,7 +82,7 @@ vector_OBseries_timepoints <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d
 
 ref_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf"
 
-alltimepoints_reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_first.last_NMD.gtf"
+alltimepoints_reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf"
 
 ```
 
@@ -504,8 +504,7 @@ wide_tibble_of_all_unique_exon_coords <- wide_tibble_of_psisigma_results_allcomp
 
 # split exon co-ords by whether it's IR or not
 wide_tibble_of_all_unique_exon_coords_array.tree_IR <- wide_tibble_of_all_unique_exon_coords[grep(x = wide_tibble_of_all_unique_exon_coords$splicemode, pattern = "IR"), ] %>% array_tree
-wide_tibble_of_all_unique_exon_coords_array.tree_not_IR <- wide_tibble_of_all_uni
-que_exon_coords[-grep(x = wide_tibble_of_all_unique_exon_coords$splicemode, pattern = "IR"), ] %>% array_tree
+wide_tibble_of_all_unique_exon_coords_array.tree_not_IR <- wide_tibble_of_all_unique_exon_coords[-grep(x = wide_tibble_of_all_unique_exon_coords$splicemode, pattern = "IR"), ] %>% array_tree
 
 # junction-flanking exon matches for IR events
 list_ref_matching_exon_entries_IR <- future_imap(.x = wide_tibble_of_all_unique_exon_coords_array.tree_IR, .f = ~list(
@@ -595,6 +594,15 @@ wide_tibble_of_psisigma_results_allcomparisons_final[row.indices_na_matched_stra
 cat("there are", which(is.na(wide_tibble_of_psisigma_results_allcomparisons_final$matched_strand)) %>% length, "rows with missing strand info")
 
 # this is the FINAL tibble of all all comparisons ######
+# export #
+write.table(x = wide_tibble_of_psisigma_results_allcomparisons_final, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_results.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# write all unique genes as background
+all_psi.sigma_genes_genesymbol <- wide_tibble_of_psisigma_results_allcomparisons_final$matched_gene_names %>% unique
+write.table(x = all_psi.sigma_genes_genesymbol, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_genesymbol.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+# convert to ENSG
+all_psi.sigma_genes_ENSG <- getBM(filters = "external_gene_name", values = all_psi.sigma_genes_genesymbol, attributes = "ensembl_gene_id", mart = ensembl_mart)
+write.table(x = all_psi.sigma_genes_ENSG, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_ENSG.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 ```
 
@@ -632,6 +640,11 @@ tibble_differential_exon_coords <- wide_tibble_of_psisigma_results_allcomparison
 
 # write table of unique differential exons co-ordinates only - for 3FT etc...
 write.table(x = tibble_differential_exon_coords[, c("splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% setNames(c("splicemode", "chr", "start", "end", "strand")) %>% unique, file = paste(R_processing_results_dir, "table_of_all_differential_exons_coords_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_differential_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# also write table of differential information for 12d vs. ud.
+tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & abs(dpsi) >= 10)
+
+write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing_results_dir, "table_of_differential_results_12d_vs_ud_only_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_differential_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1485,8 +1498,8 @@ ggplot(tibble_pfam.enrichment_anysig_with_na_top.hits, aes(x = reorder(TermID %>
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family ="Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "top_30_PFAM_families_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "top_30 PFAM_families_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
+ ggsave(filename = paste(R_processing_results_dir, "top_30_PFAM_families_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "top_30 PFAM_families_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm") 
 
 write.table(x = long_tibble_GO_test_anysig_with_na_top.hits, file = paste(R_processing_results_dir, "top_30_PFAM_families_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
   
@@ -2565,12 +2578,12 @@ message("There are ", number_last_exon_differential_exons*100/differential_exons
 tibble_exons_per_category_summary <- list(tibble_exons_per_category_all, tibble_exons_per_category_constitutive, tibble_exons_per_category_differential) %>% purrr::reduce(dplyr::full_join)
 
 # melt the sample
-long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "NMD_or_not", "first_exon", "last_exon"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble
+long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "NMD_or_not", "first_exon", "last_exon"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
+  # add the overall counts for each splicemode
+  dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_exons_per_splicemode" = sum(number_of_exons_per_category %>% na.omit))
 
 # melt the category
-long_tibble_exons_per_category_summary_2 <- reshape2::melt(long_tibble_exons_per_category_summary, id.vars = c("splicemode", "sample", "number_of_exons_per_category"), variable.name = "NMD_first_last_exon", value.name = "NMD_first_last_exon_value") %>% as_tibble %>% 
-  # add the overall counts for each splicemode
-  dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_exons_per_splicemode" = sum(number_of_exons_per_category %>% na.omit)) %>% 
+long_tibble_exons_per_category_summary_2 <- reshape2::melt(long_tibble_exons_per_category_summary, id.vars = c("splicemode", "sample", "number_of_exons_per_category", "number_of_exons_per_splicemode"), variable.name = "NMD_first_last_exon", value.name = "NMD_first_last_exon_value") %>% as_tibble %>% 
   # add the overall counts for each unique category
   dplyr::group_by(splicemode, sample, NMD_first_last_exon, NMD_first_last_exon_value) %>% dplyr::mutate("number_of_exons_per_category" = sum(number_of_exons_per_category %>% na.omit)) %>% unique %>%
   # add the percentage for each category/splicemode
@@ -2578,17 +2591,18 @@ long_tibble_exons_per_category_summary_2 <- reshape2::melt(long_tibble_exons_per
 
 max_number_of_exons_per_splicemode <- max(long_tibble_exons_per_category_summary_2$number_of_exons_per_splicemode)
 max_percentage_exons_per_category <- max(long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ] %>% .$percentage_exons_per_category %>% na.omit)
+max_number_of_exons_per_splicemode_for_plot <- max_number_of_exons_per_splicemode + 2000
 
 # ggplot
 ggplot() + 
   geom_col(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_exons_per_splicemode, x = splicemode)) +
   facet_wrap(~sample, scales = "free", labeller = labeller(sample = c(no_exons_all = "All exons", no_exons_constitutive = "Constitutive", no_exons_differential = "Differential"))) +
   geom_label(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_exons_per_splicemode, y = number_of_exons_per_splicemode, x = splicemode), position = position_identity()) +
-  geom_jitter(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode / max_percentage_exons_per_category , shape = NMD_first_last_exon), width = 0.1, height = 0) +
+  geom_jitter(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode_for_plot / max_percentage_exons_per_category , shape = NMD_first_last_exon), width = 0.1, height = 0) +
   ggtitle(paste("Frequency distribution of exons per category 
                 ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
   xlab("Splicemode") +
-  scale_y_continuous(name = "Number of exons", sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
+  scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
   scale_shape_manual(name = "Category", limits = c("NMD_or_not", "first_exon", "last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
@@ -2642,6 +2656,15 @@ ggplot(long_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength) +
   ggsave(filename = paste(qualitycheck_results_dir, "scatterplot_no._exons_vs_max_transcript_length_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
 
 ```
+
+## Use GTF to determine the regions where AS is occurring
+
+```{r}
+
+
+
+```
+
 
 ## Plot PCA to check for technical variation in absolute PSI values
 

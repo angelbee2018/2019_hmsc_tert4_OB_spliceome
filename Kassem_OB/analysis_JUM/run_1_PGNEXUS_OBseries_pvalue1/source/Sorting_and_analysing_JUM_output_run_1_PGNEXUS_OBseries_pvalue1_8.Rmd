@@ -27,6 +27,10 @@ library(genefilter)
 # library(lattice)
 library(svglite)
 library(scales)
+library(furrr)
+plan(multiprocess)
+options(future.globals.maxSize = 30000000000, mc.cores = 4)
+memory.limit(100000)
 
 library(biomaRt)
 library(systemPipeR)
@@ -46,10 +50,219 @@ results_directory_figures <- paste(results_dir, "figures/", sep="")
 if(! dir.exists(results_directory_figures) ) {
      dir.create(results_directory_figures, recursive = TRUE)}
 
+# import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
+tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+
+UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 ```
 
 ## defining functions
+
+```{r}
+
+# FUNCTION to extract the information from matched GTF entries.
+# input: a list containing ref + recon GTF entries, a single element of a list of all the matches for each exon.
+# things to annotate: gene name, strand, all exons are NMD in the reference GTF, first/last/only exon in reference or recon. GTF
+# this function appends to the original table before GTF entry match.
+
+annotate_differential_exon <- function(list_matched_ref_recon_gtf, original_tibble) {
+  
+  # print(paste("now processing junction number", index))
+  
+  # DEBUG ######
+  
+  # list_matched_ref_recon_gtf <- list_gtf_matching_exon_entries[[1]]
+  
+  ##############
+  
+  # gene name
+  matched_gene_names <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    matched_gene_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$gene_name %>% unique, collapse = ",")
+    
+  }
+  
+  # transcript name (ref)
+  matched_ref_transcript_names <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    matched_ref_transcript_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$transcript_id %>% unique, collapse = ",")
+    
+  }
+  
+  # transcript name (recon)
+  matched_recon_transcript_names <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    matched_recon_transcript_names <- paste(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$transcript_id %>% unique, collapse = ",")
+    
+  }
+  
+  # NMD - reference
+  NMD_reference <- FALSE
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    if (all(list_matched_ref_recon_gtf[["reference_gtf_match"]]$transcript_biotype == "nonsense_mediated_decay")) {
+      
+      NMD_reference <- TRUE 
+      
+    }
+    
+  }
+  
+  # NMD - recon
+  NMD_recon <- FALSE
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    if (all(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$NMD_candidate == TRUE)) {
+      
+      NMD_recon <- TRUE 
+      
+    }
+    
+  } 
+  
+  # first/last/only exon - reference and recon
+  first_or_last_exon_reference <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    first_or_last_exon_reference_temp <- list_matched_ref_recon_gtf[["reference_gtf_match"]]$first_or_last_exon %>% unique 
+    
+    if (all(is.na(first_or_last_exon_reference_temp)) != TRUE) {
+      
+      first_or_last_exon_reference <- first_or_last_exon_reference_temp %>% na.omit %>% paste(collapse = ",")
+      
+    }
+    
+  }
+  
+  first_or_last_exon_recon <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    first_or_last_exon_recon_temp <- list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$first_or_last_exon %>% unique 
+    
+    if (all(is.na(first_or_last_exon_recon_temp)) != TRUE) {
+      
+      first_or_last_exon_recon <- first_or_last_exon_recon_temp %>% na.omit %>% paste(collapse = ",")
+      
+    }
+    
+  }
+  
+  return(purrr::splice(original_tibble, 
+              "matched_gene_names" = matched_gene_names,
+              "matched_ref_transcript_names" = matched_ref_transcript_names,
+              "matched_recon_transcript_names" = matched_recon_transcript_names,
+              "NMD_reference" = NMD_reference,
+              "NMD_recon" = NMD_recon,
+              "first_or_last_exon_reference" = first_or_last_exon_reference,
+              "first_or_last_exon_recon" = first_or_last_exon_recon
+              ))
+  
+}
+
+```
+
+```{r}
+
+# FUNCTION TO EXTRACT TRANSCRIPTS WITH JUNCTION-FLANKING EXONS.
+# NOTE: to be used with purrr
+# input: spliceregion_list: a list containing details of ONE junction: $chr, $start, $end, $strand
+# tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
+# index: loop progress marker to be used with imap
+
+extract_junction.flanking.exons_JUM <- function(spliceregion_list, tibble_gtf_table) {
+  
+  # DEBUG ###################
+
+  # spliceregion_list <- UNION_junc_coor_table_array.tree[[50]]
+  # tibble_gtf_table <- tibble_ref_gtf
+  # tibble_gtf_table <- tibble_recon_gtf
+  # index <- 50
+
+  ###########################
+
+  # print(paste("now processing junction number", index))
+  
+if (spliceregion_list$strand == "." | spliceregion_list$strand == 0 | spliceregion_list$strand == "*") {
+    
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 2) & .$end >= ((spliceregion_list$start %>% as.numeric) - 2), ] %>% .[!(.$start <= ((spliceregion_list$end %>% as.numeric) - 2) & .$end >= ((spliceregion_list$start %>% as.numeric) + 2)), ] %>% .[.$type == "exon", ]
+    
+  } else if (spliceregion_list$strand == "+" | spliceregion_list$strand == "-") {
+    
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$strand == spliceregion_list$strand %>% trimws, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 2) & .$end >= ((spliceregion_list$start %>% as.numeric) - 2), ] %>% .[!(.$start <= ((spliceregion_list$end %>% as.numeric) - 2) & .$end >= ((spliceregion_list$start %>% as.numeric) + 2)), ] %>% .[.$type == "exon", ]
+    
+  } else {
+    
+    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
+    
+  }
+  
+  list_of_junction_associated_transcripts <- tibble_gtf_subset_flanking_exons$transcript_id %>% unique %>% array_tree %>% flatten
+  
+  # make a list for each transcript that directly flanks a junction.
+  # then filter so that there are only a) exon PAIRS which b) are directly connected in the mature (spliced) transcript
+  
+  list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% as.numeric)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% as.numeric) - (.x[1, "exon_number"] %>% paste %>% as.numeric)) == 1)
+  
+  return(list_of_tibbles_flanking_exon_gtf.entries_per_transcript)
+  
+}
+
+```
+
+```{r}
+
+# FUNCTION TO EXTRACT IR TRANSCRIPTS WITH JUNCTION-FLANKING EXONS.
+# NOTE: to be used with purrr
+# input: spliceregion_list: a list containing details of ONE junction: $chr, $start, $end, $strand
+# tibble_of_all_detailed_tables: the rbind result of all detailed tables
+# tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
+# index: loop progress marker to be used with imap
+
+extract_IR_junction_associated_exons <- function(spliceregion_list, tibble_of_all_detailed_tables, tibble_gtf_table, index) {
+  
+  # DEBUG ###################
+
+  index <- 1
+  spliceregion_list <- wide_tibble_of_all_unique_exon_coords_array.tree[[3]]
+  tibble_of_all_detailed_tables <- wide_tibble_of_all_detailed_tables
+  tibble_gtf_table <- tibble_ref_gtf
+  tibble_gtf_table <- tibble_alltimepoints_reconstructed_gtf
+  
+  ###########################
+
+  print(paste("now processing junction number", index))
+  
+  # +/- 1 nt tolerance
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$diff_exon_chr %>% trimws, ] %>% 
+      .[.$start <= ((spliceregion_list$diff_exon_end %>% as.numeric) + 2) & .$end >= ((spliceregion_list$diff_exon_start %>% as.numeric) - 2), ] %>% 
+      .[!(.$start <= ((spliceregion_list$diff_exon_end %>% as.numeric) - 1) & .$end >= ((spliceregion_list$diff_exon_start %>% as.numeric) + 1)), ] %>% 
+      .[.$type == "exon", ]
+  
+  list_of_junction_associated_transcripts <- tibble_gtf_subset_flanking_exons$transcript_id %>% unique %>% array_tree %>% flatten
+  
+  # make a list for each transcript that directly flanks the junction.
+  # then filter so that there are only a) exon PAIRS which b) are directly connected in the mature (spliced) transcript
+    list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% as.numeric)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% as.numeric) - (.x[1, "exon_number"] %>% paste %>% as.numeric)) == 1)
+    
+    tibbles_all_flanking_exon_gtf.entries_per_transcript <- list_of_tibbles_flanking_exon_gtf.entries_per_transcript %>% rbindlist %>% as_tibble
+  
+  return(tibbles_all_flanking_exon_gtf.entries_per_transcript)
+  
+}
+
+```
 
 ```{r}
 
@@ -650,7 +863,98 @@ simplify_consequence_table <- function(consequence_table, ensemblmart) {
 
 ```
 
-# read all the final tables into environment
+# Match all separate junctions to the reference and recon annotation
+
+We do this so that we can get NMD and and first/last exon info
+
+## import union_junc_coor table
+
+```{r}
+
+UNION_junc_coor_table <- read.delim(paste(UNION_junc_coor_path), sep = "\t", stringsAsFactors = FALSE, col.names = c("chr", "start", "end", "strand", "junction_ID")) %>% as_tibble
+
+```
+
+## annotate with reference and recon GTF info
+
+```{r}
+
+# remove all whitespace
+UNION_junc_coor_table_array.tree <- UNION_junc_coor_table %>% array_tree %>% future_map(~purrr::map(.x = .x, .depth = 2, .f = ~trimws(.x)), .progress = TRUE, .options = future_options(globals = FALSE))
+
+# get entries of junction-flanking exon matches
+list_gtf_matching_exon_entries <- future_map(.x = UNION_junc_coor_table_array.tree, .f = ~splice(.x, list(
+  "reference_gtf_match" = extract_junction.flanking.exons_JUM(.x, tibble_ref_gtf) %>% rbindlist, 
+  "reconstructed_gtf_match" =  extract_junction.flanking.exons_JUM(.x, tibble_recon_gtf) %>% rbindlist)), 
+  .progress = TRUE, .options = future_options(globals = c("extract_junction.flanking.exons_JUM", "tibble_ref_gtf", "tibble_recon_gtf", "data.table")))
+
+list_gtf_matching_exon_entries_extracted <- purrr::map2(.x = list_gtf_matching_exon_entries, .y = UNION_junc_coor_table_array.tree, .f = ~annotate_differential_exon(.x, .y) %>% as_tibble)
+
+tibble_gtf_matching_exon_entries_extracted <- list_gtf_matching_exon_entries_extracted %>% rbindlist %>% as_tibble
+
+# write table 
+write.table(x = tibble_gtf_matching_exon_entries_extracted, file = paste(results_directory_figures, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+tibble_gtf_matching_exon_entries_extracted <- read.delim(paste(results_directory_figures, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+
+```
+
+## import the detailed tables and process them
+
+only the detailed tables can link each AS_event_ID to their contributing junctions.
+
+```{r message=FALSE, warning=FALSE}
+
+list_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree %>% flatten
+
+list_of_AS_events <- c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events") %>% array_tree %>% flatten
+
+# read tables into environment
+
+list_of_detailed_tables <- future_map(.x = list_of_timepoint_comparisons_final, .f = ~purrr::map2(.x = .x, .y = list_of_AS_events, .f = ~read.delim(file = paste(results_dir, "final_JUM_output_", .x, "/", list.files(path = paste(results_dir, "final_JUM_output_", .x, "/", sep = ""), pattern = paste("(.)", .y, "(.*)detailed.txt", sep = "")), sep = ""), na.strings = c("NONE", "NA", "INF", "Inf") , sep = "\t", stringsAsFactors = FALSE) %>% as_tibble %>% add_column(., "splicemode" = .y)) %>% 
+                                        set_names(list_of_AS_events), .progress = TRUE, .options = future_options(globals = c("list_of_AS_events", "results_dir", "tibble"))) %>% set_names(list_of_timepoint_comparisons_final)
+
+# bind rows for each comparison
+
+list_of_detailed_tables_2 <- purrr::map(.x = list_of_detailed_tables, .f = ~rbindlist(.x))
+
+# rename the colnames to be not comparison-specific - we will add a comparison column later on
+
+list_of_detailed_tables_3 <- purrr::map2(.x = list_of_detailed_tables_2, .y = list_of_timepoint_comparisons_final, .f = ~setNames(., c("Gene", "AS_event_ID", "AS_structure_ID", "sub_junction_ID", "sub-junction_dispersion_estimate", "LRT_statistic-full_vs_reduced", "LRT_p_value-full_vs_reduced", "BH_adjusted_p-values", "logCPM_1", "logCPM_2", "fitting_parameter_log2fold_change_2_from_1", "sub_junction_chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand", "raw_count.1", "raw_count.2", "raw_count.3", "raw_count.4", "raw_count.5", "raw_count.6", "percentage_usage.1", "percentage_usage.2", "percentage_usage.3", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "deltaPSI", "splicemode")) %>% add_column(., "comparison" = .y)) 
+
+wide_tibble_of_all_detailed_tables_with_na <- list_of_detailed_tables_3 %>% rbindlist %>% as_tibble
+
+# remove rows where gene = gene
+wide_tibble_of_all_detailed_tables_with_na <- wide_tibble_of_all_detailed_tables_with_na[-which(wide_tibble_of_all_detailed_tables_with_na$Gene == "Gene"), ]
+
+# add column of contributing junctions
+## first remove the leading marker
+vector_AS.structure.ID.processed <- gsub(wide_tibble_of_all_detailed_tables_with_na$AS_structure_ID, pattern = "^(5_|3_|.*-)(.*)", replacement = "\\2")
+## then split the string by "Junction_"
+list_AS.structure.ID.processed <- vector_AS.structure.ID.processed %>% gsub(x = ., pattern = "Junction_", replacement = "") %>% strsplit(., split = "_")
+## then add the "Junction_" string back into the original table of all detailed tables
+unlist_AS.structure.ID.processed <- future_map(.x = list_AS.structure.ID.processed, .f = ~paste("Junction_", .x, sep = "") %>% paste(collapse = ","), .progress = TRUE, .options = future_options(globals = FALSE)) %>% unlist
+wide_tibble_of_all_detailed_tables_with_na <- wide_tibble_of_all_detailed_tables_with_na %>% add_column("contributing_junctions" = unlist_AS.structure.ID.processed, .after = "AS_structure_ID")
+
+```
+
+## match each AS_event_ID to the reference NMD/first_last annotation
+
+```{r}
+
+# split the contributing junction column by comma
+list_contributing_junctions <- strsplit(wide_tibble_of_all_detailed_tables_with_na$contributing_junctions, split = ",")
+
+# match each disassembled junction structure against the reference annotation of junctions.
+## set names for matching
+list_of_tibblised_contributing_junctions <- purrr::map(.x = list_contributing_junctions[1:100], .f = ~tibble::enframe(.x, value = "junction_ID", name = NULL))
+## do a dplyr left join on each disassembled junction with the annotation
+list_of_contributing_junctions_joined_to_annotation <- purrr::map(.x = list_of_tibblised_contributing_junctions, .f = ~dplyr::left_join(.x, tibble_gtf_matching_exon_entries_extracted, by = "junction_ID"))
+
+
+```
+
+# read all the simplified tables into environment
 
 ```{r}
 
@@ -1213,10 +1517,10 @@ vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnam
 vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = p_or_q_value)
 
 # filtering for dPSI cutoff
-PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% as.numeric) < dPSI_cutoff)}) == TRUE, ]
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums], 1, function(x){all(abs(x %>% as.numeric) < dPSI_cutoff)}) == TRUE, ]
 
 # filtering for FDR/pvalue
-PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% as.numeric > qpvalue_cutoff)}) == TRUE, ]
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){all(x %>% as.numeric > qpvalue_cutoff)}) == TRUE, ]
 
 # further subsetting into ud-only comparisons
 
@@ -2029,6 +2333,8 @@ write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, f
 library(rtracklayer)
 
 gtf_table <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+
+
 
 gtf_table <- dplyr::select(gtf_table, -source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
 
@@ -3208,6 +3514,38 @@ ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
 
 ## frequency distribution of no. junctions structures detected/gene
 
+### all junctions
+
+```{r}
+
+avg_junctions_per_gene_all <- (wide_table_all_splicemodes_split_with_na$AS_event_ID %>% unique %>% length)/(wide_table_all_splicemodes_split_with_na$Gene %>% unique %>% length)
+
+print(paste("There are", avg_junctions_per_gene_all, "unique junction structures overall without considering plausible AS length"))
+
+junctions_per_gene_all_freq <- wide_table_all_splicemodes_split_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
+
+junctions_per_gene_all_freq_2 <- junctions_per_gene_all_freq %>% group_by(no_junctions) %>% summarise(numberofgeneswithjunctionnumber = n())
+
+# ggplot
+
+ggplot(junctions_per_gene_all_freq_2) + 
+  geom_col(aes(y = numberofgeneswithjunctionnumber, x = no_junctions)) +
+  geom_text(data = junctions_per_gene_all_freq_2, aes(label = numberofgeneswithjunctionnumber, y = numberofgeneswithjunctionnumber + 20, x = no_junctions), position = position_nudge(y = 50)) +
+  ggtitle(paste("frequency distribution of ALL junctions per gene 
+                ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+  # scale_x_continuous(trans = "log2") +
+  xlim(c(0, 20)) +
+  xlab("number of junctions/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_all_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_all_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+
+print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_per_gene_all_freq_2[1, 2]/junctions_per_gene_all_freq_2[2, 2]))
+
+```
+
 ### all constitutive junctions
 
 ```{r}
@@ -3463,7 +3801,7 @@ wide_tibble_absolute.ud.PSI <- wide_tibble_of_all_detailed_tables_12d.ud.only_4[
 ```{r}
 
 # append the absolute PSI at timepoint ud
-wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table <- dplyr::left_join(PSI_levels_timeseries_OB_wide %>% type_convert, wide_tibble_absolute.ud.PSI %>% type_convert, by = c("AS_event_ID", "splicemode", "12d")) %>% as_tibble
+wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table <- dplyr::left_join(PSI_levels_timeseries_OB_wide_with_na %>% type_convert, wide_tibble_absolute.ud.PSI %>% type_convert, by = c("AS_event_ID", "splicemode", "12d")) %>% as_tibble
 
 tibble_OBseries_absolute_PSI_levels_timeseries <- wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table
 
@@ -3546,8 +3884,54 @@ list_of_tibbles_OBseries_absolute_PSI_levels_timeseries_junction.switched <- lis
 
 tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched <- list_of_tibbles_OBseries_absolute_PSI_levels_timeseries_junction.switched %>% rbindlist %>% as_tibble
 
-# by definition, candidate switched junctions do not have NA
+# by definition, junctions that go from NA to not NA are switched
 write.table(x = tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched, file = paste(results_directory_figures, "wide_table_of_",  nrow(tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched), "_switched.junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+## Use the NA values in junction switching to determine average expression of NA
+
+we can use this info to determine if values are missing at random or left-censored.
+
+### fetch row indices which have at least one NA
+
+```{r}
+
+# get row indices of the final junction switching table while have at least one NA
+
+row.indices_junc.switch.table_any.na <- tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched[, OBseries_timepoints] %>% apply(MARGIN = 1, FUN = function(X) {
+  
+  return(any(is.na(X)) == TRUE)
+  
+} )
+
+row.indices_junc.switch.table_any.na <- which(row.indices_junc.switch.table_any.na == TRUE)
+
+```
+
+### extract AS_event_ID of na, join onto the wide tibble of detailed tables
+
+```{r}
+
+tibble_AS_event_ID_which_have_na <- tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched[row.indices_junc.switch.table_any.na, ] %>% .$AS_event_ID %>% unique %>% tibble::enframe(value = "AS_event_ID")
+
+# join to get all the values with na
+wide_tibble_of_all_detailed_tables_with_na <- dplyr::semi_join(wide_tibble_of_all_detailed_tables, tibble_AS_event_ID_which_have_na, by = "AS_event_ID") %>% type_convert
+
+# join to get all the values with no na
+wide_tibble_of_all_detailed_tables_with_no_na <- dplyr::anti_join(wide_tibble_of_all_detailed_tables, tibble_AS_event_ID_which_have_na, by = "AS_event_ID") %>% type_convert
+
+```
+
+### plot distributions
+
+```{r}
+
+plot(density(bw = 0.01, c(wide_tibble_of_all_detailed_tables_with_na$logCPM_1 %>% na.omit, wide_tibble_of_all_detailed_tables_with_na[wide_tibble_of_all_detailed_tables_with_na$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud", ] %>% .$logCPM_2 %>% na.omit)), main = "junction logCPM counts for junction structures with missing values")
+
+plot(density(bw = 0.01, c(wide_tibble_of_all_detailed_tables_with_no_na$logCPM_1 %>% na.omit, wide_tibble_of_all_detailed_tables_with_no_na[wide_tibble_of_all_detailed_tables_with_no_na$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud", ] %>% .$logCPM_2 %>% na.omit)), main = "junction logCPM counts for junction structures with no missing values")
+
+plot(density(bw = 0.01, c(wide_tibble_of_all_detailed_tables %>% type_convert %>% .$logCPM_1 %>% na.omit, wide_tibble_of_all_detailed_tables[wide_tibble_of_all_detailed_tables$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud", ] %>% type_convert %>% .$logCPM_2 %>% na.omit)), main = "junction logCPM counts for all junction structures")
 
 ```
 

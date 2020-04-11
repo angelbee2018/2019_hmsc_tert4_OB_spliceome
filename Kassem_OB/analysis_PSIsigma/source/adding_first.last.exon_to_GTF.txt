@@ -37,13 +37,13 @@ temp_number <- 1
 
 first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% .[temp_number]
 
-while (tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "+") {
+while (tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "+" | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "." | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "*") {
 
 temp_number <- temp_number + 1
 
-first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% .[temp_number]
-
 }
+
+first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% .[temp_number]
 
 # the test condition
 max_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% max

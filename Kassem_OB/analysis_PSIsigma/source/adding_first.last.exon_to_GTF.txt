@@ -22,7 +22,7 @@ options(future.globals.maxSize = 30000000000)
 
 reference_gtf_path <- "/srv/scratch/z3463471/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 
-reconstructed_gtf_path <- "/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+reconstructed_gtf_path <- "/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMD.gtf"
 
 output_dir <- "/srv/scratch/z3463471/hg38_ensembl_reference/gtf/"
 
@@ -75,15 +75,13 @@ label_first_last_exon <- function(tibble_gtf_subset_by_transcript_id) {
     
     tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "only_one_exon"
     
-  } else {
-    
-    if (exon_order == "increasing" & tibble_gtf_subset_by_transcript_id$strand %>% unique == "-") {
+  } else if (exon_order == "increasing" & tibble_gtf_subset_by_transcript_id$strand %>% unique == "-") {
     
     tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "first_exon"
     
     tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "last_exon"
     
-    }
+    } else {
     
     tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "last_exon"
     
@@ -108,10 +106,13 @@ input_gtf_2 <- input_gtf %>% add_column("first_or_last_exon" = NA)
 # remove rows which have an NA exon number
 input_gtf_2 <- input_gtf_2[-which(is.na(input_gtf_2$exon_number)), ]
 
+# remove rows which don't have strand info
+input_gtf_2 <- input_gtf_2[-which(input_gtf_2$strand != "+" & input_gtf_2$strand != "-"), ]
+
 # get all the unique transcript IDs for looping
 list_unique_transcript.ids <- input_gtf_2$transcript_id %>% unique %>% array_tree
 
-output_gtf <- future_map(.x = list_unique_transcript.ids, .f = ~label_last_exon(input_gtf_2[input_gtf_2$transcript_id == .x, ]), .progress = TRUE, .options = future_options(globals = c("input_gtf_2", "label_first_last_exon"))) %>% rbindlist %>% as_tibble
+output_gtf <- future_map(.x = list_unique_transcript.ids, .f = ~label_first_last_exon(input_gtf_2[input_gtf_2$transcript_id == .x, ]), .progress = TRUE, .options = future_options(globals = c("input_gtf_2", "label_first_last_exon"))) %>% rbindlist %>% as_tibble
 
 return(output_gtf)
 
@@ -119,13 +120,13 @@ return(output_gtf)
 
 # END add_first.last.exon_info() ####
 
-# tibble_ref_gtf_subset.transcript_id_with_first.last.exon <- tibble_ref_gtf %>% add_first.last.exon_info
+# MAIN EXECUTION ##
 
-tibble_reconstructed_gtf_subset.transcript_id_with_first.last.exon <- tibble_alltimepoints_reconstructed_gtf %>% add_first.last.exon_info
+tibble_gtf_subset.transcript_id_with_first.last.exon <- tibble_gtf %>% add_first.last.exon_info
 
 ## EXPORT # 
 # rtracklayer::export(tibble_ref_gtf_subset.transcript_id_with_first.last.exon, con = paste(output_dir, "Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf", sep = ""), format = "gtf")
 
-rtracklayer::export(tibble_reconstructed_gtf_subset.transcript_id_with_first.last.exon, con = paste(output_dir, "alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last.gtf", sep = ""), format = "gtf")
+rtracklayer::export(tibble_gtf_subset.transcript_id_with_first.last.exon, con = paste(output_dir, "alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf", sep = ""), format = "gtf")
 
 q("no")

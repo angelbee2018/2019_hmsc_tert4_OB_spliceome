@@ -598,11 +598,11 @@ cat("there are", which(is.na(wide_tibble_of_psisigma_results_allcomparisons_fina
 write.table(x = wide_tibble_of_psisigma_results_allcomparisons_final, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_results.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # write all unique genes as background
-all_psi.sigma_genes_genesymbol <- wide_tibble_of_psisigma_results_allcomparisons_final$matched_gene_names %>% unique
-write.table(x = all_psi.sigma_genes_genesymbol, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_genesymbol.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+vec_all_psi.sigma_genes_genesymbol <- wide_tibble_of_psisigma_results_allcomparisons_final$matched_gene_names %>% unique
+write.table(x = vec_all_psi.sigma_genes_genesymbol, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_genesymbol.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 # convert to ENSG
-all_psi.sigma_genes_ENSG <- getBM(filters = "external_gene_name", values = all_psi.sigma_genes_genesymbol, attributes = "ensembl_gene_id", mart = ensembl_mart)
-write.table(x = all_psi.sigma_genes_ENSG, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_ENSG.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+vec_all_psi.sigma_genes_ENSG <- getBM(filters = "external_gene_name", values = vec_all_psi.sigma_genes_genesymbol, attributes = "ensembl_gene_id", mart = ensembl_mart)
+write.table(x = vec_all_psi.sigma_genes_ENSG, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_ENSG.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 ```
 
@@ -642,7 +642,7 @@ tibble_differential_exon_coords <- wide_tibble_of_psisigma_results_allcomparison
 write.table(x = tibble_differential_exon_coords[, c("splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% setNames(c("splicemode", "chr", "start", "end", "strand")) %>% unique, file = paste(R_processing_results_dir, "table_of_all_differential_exons_coords_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_differential_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # also write table of differential information for 12d vs. ud.
-tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & abs(dpsi) >= 10)
+tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & abs(dpsi) >= dpsi_cutoff)
 
 write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing_results_dir, "table_of_differential_results_12d_vs_ud_only_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_differential_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 

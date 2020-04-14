@@ -30,7 +30,7 @@ library(svglite)
 library(scales)
 library(furrr)
 options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
-plan(multicore)
+plan(multiprocess)
 memory.limit(100000)
 
 library(biomaRt)
@@ -40,13 +40,15 @@ library(GOstats)
 library(PFAM.db)
 library(bc3net)
 
+library(ComplexHeatmap)
+
 library(ggdendro)
 library(data.table)
 library(Rfast)
 
 
-# results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
-results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+# results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
 
 results_directory_figures <- paste(results_dir, "figures/", sep="")
 
@@ -54,14 +56,14 @@ if(! dir.exists(results_directory_figures) ) {
      dir.create(results_directory_figures, recursive = TRUE)}
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-# tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
 
-tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
 
-# UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
-UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+# UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 ```
 
@@ -517,7 +519,7 @@ tibble_of_mapped_protein_positions_to_list_of_domains_PTMs <- function(list_of_m
                                          "mobidblite" = c("ensembl_peptide_id", "mobidblite", "mobidblite_start", "mobidblite_end"))
   
   # search biomart
-  list_biomart_result_per_attribute <- future_map(.x = list_of_attributes_to_retrieve, .f = ~getBM(filters = "ensembl_peptide_id", values =  vec_all_ENSP_ids %>% unique, attributes = .x, mart = ensemblmart), .progress = TRUE, .options = future_options(globals = c("vec_all_ENSP_ids")))
+  list_biomart_result_per_attribute <- future_map(.x = list_of_attributes_to_retrieve, .f = ~getBM(filters = "ensembl_peptide_id", values =  vec_all_ENSP_ids %>% unique, attributes = .x, mart = ensemblmart), .progress = TRUE, .options = future_options(globals = c("vec_all_ENSP_ids", "getBM", "ensemblmart")))
   
   # remove na values from biomart result
   list_biomart_result_per_attribute_processed <- purrr::map(.x = list_biomart_result_per_attribute, .f = function(.x) {
@@ -543,7 +545,7 @@ tibble_of_mapped_protein_positions_to_list_of_domains_PTMs <- function(list_of_m
   # ALL DOMAIN ANNOTATIONS FROM BIOMART ARE FINISHED HERE ######
   
   # get ENSP to uniprot entry mapping
-  table_ENSP_to_uniprot_entry_mapping <- getBM(filters = "ensembl_peptide_id", values = vec_all_ENSP_ids, attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% setNames(c("ensembl_peptide_id", "uniprotkb_entry")) %>% 
+  table_ENSP_to_uniprot_entry_mapping <- biomaRt::getBM(filters = "ensembl_peptide_id", values = vec_all_ENSP_ids, attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% setNames(c("ensembl_peptide_id", "uniprotkb_entry")) %>% 
   (# remove NA/blank rows
     function(x) {
       
@@ -764,11 +766,13 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
   
   # DEBUG ###
   # tibble_queryisoforms_chr_strand_start_end <- all_plausible_diff_junctions_chr_strand_start_end
-  # gtf_table <- tibble_ref_gtf_simplifiedlist_queryisoforms_overlapping_annotations_tibbles
+  # gtf_table <- tibble_ref_gtf_simplified
   # ensemblmart <- ensembl_mart
   ###########
     
   message("Now mapping the specified AS coords to transcript- and protein-relative coords")
+  
+  gtf_table <- gtf_table
   list_queryisoforms_overlapping_annotations_tibbles <- tibble_queryisoforms_chr_strand_start_end %>% map_genome_coordinate_to_transcriptandprotein(., gtf_table = gtf_table, mode = "AS region") 
   
   # set level 1 list names as the AS_event_ID
@@ -813,7 +817,7 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
   mapped_aminoacid_positions <- purrr::discard(.x = mapped_aminoacid_positions, .p = ~length(.x) == 0)
   
   # retrieve all the domain and PTM annotations
-  conciding_domains_PTMs <- tibble_of_mapped_protein_positions_to_list_of_domains_PTMs(mapped_aminoacid_positions, ensemblmart)
+  coinciding_domains_PTMs <- tibble_of_mapped_protein_positions_to_list_of_domains_PTMs(mapped_aminoacid_positions, ensemblmart)
   
   # summarise protein and transcript-level analyses
   ## for the transcript level, only extract the "type" and "transcript_biotype" columns
@@ -822,11 +826,11 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
   tibble_transcript_level_results <- purrr::map2(.x = list_of_tibbles_transcript_level_results, .y = names(list_of_tibbles_transcript_level_results), .f = ~add_column(.x, "AS_event_ID" = .y, .before = 1)) %>% rbindlist %>% as_tibble
   
   ## for the protein/domain etc. level, extract and collapse OR convert to logical indicating the presence/absence of a feature.
-  list_of_tibbles_protein_level_results <- purrr::map2(.x = conciding_domains_PTMs, .y = names(conciding_domains_PTMs), .f = function(.x, .y) {
+  list_of_tibbles_protein_level_results <- purrr::map2(.x = coinciding_domains_PTMs, .y = names(coinciding_domains_PTMs), .f = function(.x, .y) {
     
     # DEBUG ###
-    # .x <- conciding_domains_PTMs[[1]]
-    # .y <- names(conciding_domains_PTMs) %>% .[[1]]
+    # .x <- coinciding_domains_PTMs[[1]]
+    # .y <- names(coinciding_domains_PTMs) %>% .[[1]]
     ###########
     
     list_L2 <- .x
@@ -933,50 +937,6 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
 }
 
 # END tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain
-
-# function to un-nest the results table and remove all the duplicates so you can see everything at a glance
-
-simplify_consequence_table <- function(consequence_table, ensemblmart) {
-  
-  transcript_feature_tibble <- purrr::map(consequence_table$overlapping_annotated_regions, ~paste(.x$type, .x$exon_number %>% str_replace_na(., replacement = "")) %>% unique %>% mixedsort) %>% plyr::ldply(., rbind) %>% t
-  
-  colnames(transcript_feature_tibble) <- transcript_feature_tibble[1 , ] 
-  transcript_feature_tibble <- transcript_feature_tibble[-1, ] %>% as_tibble
-  
-  domain_PTM_list_flattened <- consequence_table$conciding_domains_and_PTMs %>% purrr::flatten(.) %>% purrr::flatten(.)
-  
-  domain_info_positions <- which(names(domain_PTM_list_flattened) == "domains")
-  
-  PTM_info_positions <- which(names(domain_PTM_list_flattened) == "PTMs")
-  
-  if (domain_info_positions %>% length != 0) {
-    
-    domain_PTM_list_flattened_2 <- purrr::modify_at(.x = domain_PTM_list_flattened, .at = domain_info_positions, .f = ~purrr::map(.x, .f = ~.x[names(.x) != "range"]) %>% purrr::reduce(., bind_rows))
-  
-  domains_tibble <- purrr::reduce(domain_PTM_list_flattened_2[domain_info_positions], bind_rows)
-  
-  domains_tibble_2 <- dplyr::left_join(domains_tibble, getBM(filters = "ensembl_peptide_id", values = domains_tibble$ensembl_peptide_id, attributes = c("ensembl_peptide_id", "external_gene_name"), mart = ensemblmart), by = "ensembl_peptide_id")
-    
-  } else {
-    
-    domains_tibble_2 <- NULL
-    
-  }
-
-  if (PTM_info_positions %>% length != 0) {
-    
-    PTMs_tibble <- purrr::reduce(domain_PTM_list_flattened_2[PTM_info_positions], bind_rows)
-  } else {
-    
-    PTMs_tibble <- NULL
-    
-  }
-  
-  return(list("transcript features" = transcript_feature_tibble, "protein domains" = domains_tibble_2, "PTMs" = PTMs_tibble))
-  
-}
-
-# END simplify_consequence_table
 
 ```
 
@@ -2666,7 +2626,8 @@ write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, f
 
 library(rtracklayer)
 
-tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
 
 tibble_ref_gtf_simplified <- tibble_ref_gtf %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
 
@@ -2676,11 +2637,15 @@ tibble_ref_gtf_simplified <- tibble_ref_gtf_simplified %>% mutate_if(is.factor, 
 
 # import dbPTM info
 # Z:/dbPTM_download/extract/allPTM_human.txt
-dbPTM_allhuman_annotations <- read.delim("/media/Ubuntu/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# dbPTM_allhuman_annotations <- read.delim("/media/Ubuntu/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
 
 # import PhosphoSitePlus info
 # Z:/phosphositeplus_phosphosites_human.tab
-phosphosite_allhuman_phosphosites <- read.delim("/media/Ubuntu/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# phosphosite_allhuman_phosphosites <- read.delim("/media/Ubuntu/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+phosphosite_allhuman_phosphosites <- read.delim("Z:/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
 # change the residue position column
 phosphosite_allhuman_phosphosites[, "modified_residue_position"] <- gsub(x = phosphosite_allhuman_phosphosites$modified_residue_position, pattern = "^([A-Z])([0-9]{1,5})(.*)", replacement = "\\2")
 
@@ -2765,7 +2730,7 @@ ggplot(tibble_interpro_id_tally_per_ASeventID %>% head(90), aes(x = reorder(inte
   ylab("Number of hits") +
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica-Normal")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
  ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
  ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
 
@@ -2780,8 +2745,6 @@ message("total number of unique junction structures overlapping a disordered reg
 message("total number of unique junction structures overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 message("total number of unique junction structures overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 message("total number of unique junction structures overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-
-# phenotype_isoforms_consequence_simplified <- phenotype_isoforms_consequence %>% simplify_consequence_table(., ensembl_mart)
 
 ```
 
@@ -4046,79 +4009,192 @@ ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_jun
 
 ## frequency distribution of no. junctions detected with NMD/first exon/last exon
 
-incl. NMD, first/last exon.
+incl. NMD, first/last junction.
 
 ```{r}
 
-# category means splicemode + NMD status + first/last exon
+# ALL JUNCTIONS
+# category means splicemode + NMD status + first/last junction
 # also clean up the splicemode column
-tibble_exons_per_category_all <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_all = n())
+tibble_junctions_per_category_all <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_all = n())
 
-all_exons_count <- tibble_exons_per_category_all$no_exons_all %>% sum(na.rm = TRUE)
-number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$NMD_or_not == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
-number_first_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$first_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
-number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$last_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+all_junctions_count <- tibble_junctions_per_category_all$no_junctions_all %>% sum(na.rm = TRUE)
+number_NMD_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$any_NMD == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
+number_first_junction_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$any_first_exon == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
+number_last_junction_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$any_last_exon == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_all_exons*100/all_exons_count, "% NMD exons overall.")
-message("There are ", number_first_exon_all_exons*100/all_exons_count, "% first exons overall.")
-message("There are ", number_last_exon_all_exons*100/all_exons_count, "% last exons overall.")
+message("There are ", number_NMD_all_junctions*100/all_junctions_count, "% NMD junctions overall.")
+message("There are ", number_first_junction_all_junctions*100/all_junctions_count, "% first junctions overall.")
+message("There are ", number_last_junction_all_junctions*100/all_junctions_count, "% last junctions overall.")
 
-tibble_exons_per_category_constitutive <- wide_tibble_of_psisigma_results_allcomparisons_constitutive %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_constitutive = n())
+# CONSTITUTIVE JUNCTIONS
+tibble_junctions_per_category_constitutive <- PSI_levels_timeseries_constitutive_OB_wide %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_constitutive = n())
 
-constitutive_exons_count <- tibble_exons_per_category_constitutive$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$NMD_or_not == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_first_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$first_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$last_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+constitutive_junctions_count <- tibble_junctions_per_category_constitutive$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_NMD_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_first_junction_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$any_first_exon == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_last_junction_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$any_last_exon == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_constitutive_exons*100/constitutive_exons_count, "% NMD exons constitutive.")
-message("There are ", number_first_exon_constitutive_exons*100/constitutive_exons_count, "% first exons constitutive.")
-message("There are ", number_last_exon_constitutive_exons*100/constitutive_exons_count, "% last exons constitutive.")
+message("There are ", number_NMD_constitutive_junctions*100/constitutive_junctions_count, "% NMD junctions constitutive.")
+message("There are ", number_first_junction_constitutive_junctions*100/constitutive_junctions_count, "% first junctions constitutive.")
+message("There are ", number_last_junction_constitutive_junctions*100/constitutive_junctions_count, "% last junctions constitutive.")
 
-tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_differential = n())
+# DIFFERENTIAL JUNCTIONS
+tibble_junctions_per_category_differential <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_differential = n())
 
-differential_exons_count <- tibble_exons_per_category_differential$no_exons_differential %>% sum(na.rm = TRUE)
-number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$NMD_or_not == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
-number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$first_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
-number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$last_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+differential_junctions_count <- tibble_junctions_per_category_differential$no_junctions_differential %>% sum(na.rm = TRUE)
+number_NMD_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_NMD == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
+number_first_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_first_exon == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
+number_last_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_last_exon == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_differential_exons*100/differential_exons_count, "% NMD exons differential.")
-message("There are ", number_first_exon_differential_exons*100/differential_exons_count, "% first exons differential.")
-message("There are ", number_last_exon_differential_exons*100/differential_exons_count, "% last exons differential.")
+message("There are ", number_NMD_differential_junctions*100/differential_junctions_count, "% NMD exons differential.")
+message("There are ", number_first_exon_differential_junctions*100/differential_junctions_count, "% first exons differential.")
+message("There are ", number_last_exon_differential_junctions*100/differential_junctions_count, "% last exons differential.")
 
-tibble_exons_per_category_summary <- list(tibble_exons_per_category_all, tibble_exons_per_category_constitutive, tibble_exons_per_category_differential) %>% purrr::reduce(dplyr::full_join)
+# DIFFERENTIAL JUNCTIONS (PLAUSIBLE)
+tibble_junctions_per_category_differential_plausible <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_differential_plausible = n())
+
+differential_plausible_junctions_count <- tibble_junctions_per_category_differential_plausible$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+number_NMD_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_NMD == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+number_first_exon_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_first_exon == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+number_last_exon_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_last_exon == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+
+message("There are ", number_NMD_differential_plausible_junctions*100/differential_plausible_junctions_count, "% NMD exons differential (plausible).")
+message("There are ", number_first_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% first exons differential (plausible).")
+message("There are ", number_last_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% last exons differential (plausible).")
+
+# COMBINE ALL THE TABLES FOR PLOTTING
+tibble_junctions_per_category_summary <- list(tibble_junctions_per_category_all, tibble_junctions_per_category_constitutive, tibble_junctions_per_category_differential, tibble_junctions_per_category_differential_plausible) %>% purrr::reduce(dplyr::full_join)
 
 # melt the sample
-long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "NMD_or_not", "first_exon", "last_exon"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
+long_tibble_junctions_per_category_summary <- reshape2::melt(tibble_junctions_per_category_summary, id.vars = c("splicemode", "any_NMD", "any_first_exon", "any_last_exon"), variable.name = "sample", value.name = "number_of_junctions_per_category") %>% as_tibble %>% 
   # add the overall counts for each splicemode
-  dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_exons_per_splicemode" = sum(number_of_exons_per_category %>% na.omit))
+  dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_junctions_per_splicemode" = sum(number_of_junctions_per_category %>% na.omit))
 
-# melt the category
-long_tibble_exons_per_category_summary_2 <- reshape2::melt(long_tibble_exons_per_category_summary, id.vars = c("splicemode", "sample", "number_of_exons_per_category", "number_of_exons_per_splicemode"), variable.name = "NMD_first_last_exon", value.name = "NMD_first_last_exon_value") %>% as_tibble %>% 
+# melt the category (splicemode + NMD+ first + last exon)
+long_tibble_junctions_per_category_summary_2 <- reshape2::melt(long_tibble_junctions_per_category_summary, id.vars = c("splicemode", "sample", "number_of_junctions_per_category", "number_of_junctions_per_splicemode"), variable.name = "NMD_first_last_exon", value.name = "NMD_first_last_exon_value") %>% as_tibble %>% 
   # add the overall counts for each unique category
-  dplyr::group_by(splicemode, sample, NMD_first_last_exon, NMD_first_last_exon_value) %>% dplyr::mutate("number_of_exons_per_category" = sum(number_of_exons_per_category %>% na.omit)) %>% unique %>%
+  dplyr::group_by(splicemode, sample, NMD_first_last_exon, NMD_first_last_exon_value) %>% dplyr::mutate("number_of_junctions_per_category" = sum(number_of_junctions_per_category %>% na.omit)) %>% unique %>%
   # add the percentage for each category/splicemode
-  dplyr::mutate("percentage_exons_per_category" = number_of_exons_per_category*100/number_of_exons_per_splicemode)
+  dplyr::mutate("percentage_junctions_per_category" = number_of_junctions_per_category*100/number_of_junctions_per_splicemode)
 
-max_number_of_exons_per_splicemode <- max(long_tibble_exons_per_category_summary_2$number_of_exons_per_splicemode)
-max_percentage_exons_per_category <- max(long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ] %>% .$percentage_exons_per_category %>% na.omit)
-max_number_of_exons_per_splicemode_for_plot <- max_number_of_exons_per_splicemode + 2000
+max_number_of_junctions_per_splicemode <- max(long_tibble_junctions_per_category_summary_2$number_of_junctions_per_splicemode)
+max_percentage_junctions_per_category <- max(long_tibble_junctions_per_category_summary_2[long_tibble_junctions_per_category_summary_2$NMD_first_last_exon_value == TRUE, ] %>% .$percentage_junctions_per_category %>% na.omit)
+max_number_of_junctions_per_splicemode_for_plot <- max_number_of_junctions_per_splicemode
 
 # ggplot
 ggplot() + 
-  geom_col(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_exons_per_splicemode, x = splicemode)) +
-  facet_wrap(~sample, scales = "free", labeller = labeller(sample = c(no_exons_all = "All exons", no_exons_constitutive = "Constitutive", no_exons_differential = "Differential"))) +
-  geom_label(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_exons_per_splicemode, y = number_of_exons_per_splicemode, x = splicemode), position = position_identity()) +
-  geom_jitter(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode_for_plot / max_percentage_exons_per_category , shape = NMD_first_last_exon), width = 0.1, height = 0) +
-  ggtitle(paste("Frequency distribution of exons per category 
-                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  geom_col(data = long_tibble_junctions_per_category_summary_2[, c("splicemode", "sample", "number_of_junctions_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_junctions_per_splicemode, x = splicemode)) +
+  facet_wrap(~sample, scales = "free", labeller = labeller(sample = c(no_junctions_all = "All junctions", no_junctions_constitutive = "Constitutive", no_junctions_differential = "Differential", no_junctions_differential_plausible = "Differential (plausible)"))) +
+  geom_label(data = long_tibble_junctions_per_category_summary_2[, c("splicemode", "sample", "number_of_junctions_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_junctions_per_splicemode, y = number_of_junctions_per_splicemode, x = splicemode), position = position_identity()) +
+  geom_jitter(data = long_tibble_junctions_per_category_summary_2[long_tibble_junctions_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_junctions_per_category * max_number_of_junctions_per_splicemode_for_plot / max_percentage_junctions_per_category, shape = NMD_first_last_exon), width = 0.1, height = 0) +
+  ggtitle(paste("Frequency distribution of junctions per category 
+                ", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, sep = "")) +
   xlab("Splicemode") +
-  scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
-  scale_shape_manual(name = "Category", limits = c("NMD_or_not", "first_exon", "last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
+  scale_y_continuous(name = "Number of junctions", limits = c(0, max_number_of_junctions_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_junctions_per_category/max_number_of_junctions_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
+  scale_shape_manual(name = "Category", limits = c("any_NMD", "any_first_exon", "any_last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm") 
+  ggsave(filename = paste(results_directory_figures, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 30, units = "cm") +
+  ggsave(filename = paste(results_directory_figures, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 30, units = "cm") 
+
+# upset plot
+## all junctions
+df <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_alljunctions.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
+
+## all constitutive
+df <- PSI_levels_timeseries_constitutive_OB_wide %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
+
+## all differential
+df <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
+
+## differential (plausible)
+df <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential_plausible.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
 
 ```
 

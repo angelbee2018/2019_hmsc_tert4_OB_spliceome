@@ -341,7 +341,7 @@ differential_junction_table <- read.delim(paste(differential_junction_table_path
 
 wide_table_of_all_detailed_tables_diffonly <- dplyr::semi_join(wide_table_of_all_detailed_tables, differential_junction_table, by = c("AS_event_ID", "splicemode"))
 
-AS_junction.IDs <- tibble("junction_ID" = wide_table_of_all_detailed_tables_diffonly$AS_structure_ID %>% gsub(x = ., pattern = "(5|3)_(.*)", replacement = "\\2"))
+AS_junction.IDs <- tibble("junction_ID" = wide_table_of_all_detailed_tables_diffonly$AS_structure_ID %>% gsub(x = ., pattern = "^(5_|3_|.*-)(.*)", replacement = "\\2"))
 
 AS_junction_IDs_split <- AS_junction.IDs$junction_ID %>% gsub(x = ., pattern = "Junction_", replacement = "") %>% strsplit(., split = "_")
 

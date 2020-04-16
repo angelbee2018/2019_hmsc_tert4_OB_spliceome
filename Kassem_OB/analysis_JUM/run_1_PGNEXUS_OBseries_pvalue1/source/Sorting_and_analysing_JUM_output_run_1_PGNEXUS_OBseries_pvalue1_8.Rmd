@@ -14,8 +14,9 @@ output: pdf_document
 library(tidyverse)
 library(gtools)
 library(extrafont)
-loadfonts(device="win")
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# font_import(paths = "~/.local/share/fonts/")
+loadfonts(device = "pdf")
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
 library(genefilter)
@@ -27,12 +28,19 @@ library(genefilter)
 # library(lattice)
 library(svglite)
 library(scales)
+library(furrr)
+options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
+plan(multiprocess)
+memory.limit(100000)
 
 library(biomaRt)
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
 library(systemPipeR)
 library(GOstats)
 library(PFAM.db)
 library(bc3net)
+
+library(ComplexHeatmap)
 
 library(ggdendro)
 library(data.table)
@@ -40,16 +48,187 @@ library(Rfast)
 
 
 results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+# results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
 
 results_directory_figures <- paste(results_dir, "figures/", sep="")
 
 if(! dir.exists(results_directory_figures) ) {
      dir.create(results_directory_figures, recursive = TRUE)}
 
+# import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
+tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+
+# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+
+UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+# UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 ```
 
 ## defining functions
+
+```{r}
+
+# FUNCTION to extract the information from matched GTF entries.
+# input: a list containing ref + recon GTF entries, a single element of a list of all the matches for each exon.
+# things to annotate: gene name, strand, all exons are NMD in the reference GTF, first/last/only exon in reference or recon. GTF
+# this function appends to the original table before GTF entry match.
+
+annotate_differential_exon <- function(list_matched_ref_recon_gtf, original_tibble) {
+  
+  # print(paste("now processing junction number", index))
+  
+  # DEBUG ######
+  
+  # list_matched_ref_recon_gtf <- list_gtf_matching_exon_entries[[1]]
+  
+  ##############
+  
+  # gene name
+  matched_gene_names <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    matched_gene_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$gene_name %>% unique, collapse = ",")
+    
+  }
+  
+  # transcript name (ref)
+  matched_ref_transcript_names <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    matched_ref_transcript_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$transcript_id %>% unique, collapse = ",")
+    
+  }
+  
+  # transcript name (recon)
+  matched_recon_transcript_names <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    matched_recon_transcript_names <- paste(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$transcript_id %>% unique, collapse = ",")
+    
+  }
+  
+  # NMD - reference
+  NMD_reference <- FALSE
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    if (all(list_matched_ref_recon_gtf[["reference_gtf_match"]]$transcript_biotype == "nonsense_mediated_decay")) {
+      
+      NMD_reference <- TRUE 
+      
+    }
+    
+  }
+  
+  # NMD - recon
+  NMD_recon <- FALSE
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    if (all(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$NMD_candidate == TRUE)) {
+      
+      NMD_recon <- TRUE 
+      
+    }
+    
+  } 
+  
+  # first/last/only exon - reference and recon
+  first_or_last_exon_reference <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    first_or_last_exon_reference_temp <- list_matched_ref_recon_gtf[["reference_gtf_match"]]$first_or_last_exon %>% unique 
+    
+    if (all(is.na(first_or_last_exon_reference_temp)) != TRUE) {
+      
+      first_or_last_exon_reference <- first_or_last_exon_reference_temp %>% na.omit %>% paste(collapse = ",")
+      
+    }
+    
+  }
+  
+  first_or_last_exon_recon <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    first_or_last_exon_recon_temp <- list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$first_or_last_exon %>% unique 
+    
+    if (all(is.na(first_or_last_exon_recon_temp)) != TRUE) {
+      
+      first_or_last_exon_recon <- first_or_last_exon_recon_temp %>% na.omit %>% paste(collapse = ",")
+      
+    }
+    
+  }
+  
+  return(purrr::splice(original_tibble, 
+              "matched_gene_names" = matched_gene_names,
+              "matched_ref_transcript_names" = matched_ref_transcript_names,
+              "matched_recon_transcript_names" = matched_recon_transcript_names,
+              "NMD_reference" = NMD_reference,
+              "NMD_recon" = NMD_recon,
+              "first_or_last_exon_reference" = first_or_last_exon_reference,
+              "first_or_last_exon_recon" = first_or_last_exon_recon
+              ))
+  
+}
+
+```
+
+```{r}
+
+# FUNCTION TO EXTRACT TRANSCRIPTS WITH JUNCTION-FLANKING EXONS.
+# NOTE: to be used with purrr
+# input: spliceregion_list: a list containing details of ONE junction: $chr, $start, $end, $strand
+# tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
+# index: loop progress marker to be used with imap
+
+extract_junction.flanking.exons_JUM <- function(spliceregion_list, tibble_gtf_table) {
+  
+  # DEBUG ###################
+
+  # spliceregion_list <- UNION_junc_coor_table_array.tree[[50]]
+  # tibble_gtf_table <- tibble_ref_gtf
+  # tibble_gtf_table <- tibble_recon_gtf
+  # index <- 50
+
+  ###########################
+
+  # print(paste("now processing junction number", index))
+  
+if (spliceregion_list$strand == "." | spliceregion_list$strand == 0 | spliceregion_list$strand == "*") {
+    
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 2) & .$end >= ((spliceregion_list$start %>% as.numeric) - 2), ] %>% .[!(.$start <= ((spliceregion_list$end %>% as.numeric) - 2) & .$end >= ((spliceregion_list$start %>% as.numeric) + 2)), ] %>% .[.$type == "exon", ]
+    
+  } else if (spliceregion_list$strand == "+" | spliceregion_list$strand == "-") {
+    
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$chr %>% trimws, ] %>% .[.$strand == spliceregion_list$strand %>% trimws, ] %>% .[.$start <= ((spliceregion_list$end %>% as.numeric) + 2) & .$end >= ((spliceregion_list$start %>% as.numeric) - 2), ] %>% .[!(.$start <= ((spliceregion_list$end %>% as.numeric) - 2) & .$end >= ((spliceregion_list$start %>% as.numeric) + 2)), ] %>% .[.$type == "exon", ]
+    
+  } else {
+    
+    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
+    
+  }
+  
+  list_of_junction_associated_transcripts <- tibble_gtf_subset_flanking_exons$transcript_id %>% unique %>% array_tree %>% flatten
+  
+  # make a list for each transcript that directly flanks a junction.
+  # then filter so that there are only a) exon PAIRS which b) are directly connected in the mature (spliced) transcript
+  
+  list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% as.numeric)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% as.numeric) - (.x[1, "exon_number"] %>% paste %>% as.numeric)) == 1)
+  
+  return(list_of_tibbles_flanking_exon_gtf.entries_per_transcript)
+  
+}
+
+```
 
 ```{r}
 
@@ -104,6 +283,10 @@ bc3net_benjamini_correction <- function(raw_bc3net_table)
   
 }
 
+```
+
+```{r}
+
 # bc3net::enrichment() does not show captured genes for each family enriched, so we have to add it in. but in doing so, i want to avoid a purrr within a purrr
 
 # this function selects genes from the background in each family which are ONLY input genes.
@@ -115,6 +298,10 @@ filtering_genehits_from_background_catalogue <- function(catalogue, genehit_vect
   return(filtered_catalogue)
   
 }
+
+```
+
+```{r}
 
 # THIS TABLE WILL SPLIT THE IN-CELL CONCATENATED/DELIMITED OUTPUT FOR EACH SUMMARY TABLE FOR EACH SPLICEMODE
 
@@ -185,26 +372,36 @@ return(summary_table_onesplicemode_split)
 
 }
 
-
 # END split_JUM_output_table
+
+```
+
+```{r}
 
 # function to convert the isoform_ID from JUM and splicemode of isoforms of interest into chr, strand, start and end co-ordinates that ensembldb can read.
 # input tibble structure: MUST CONTAIN: gene "Gene", JUM isoform ID "AS_event_ID" and "splicemode"
 
 JUM_ASeventID_and_splicemode_to_chr_strand_start_end <- function(tibble_of_isoforms_to_be_consequence_assessed) {
   
+  # as long as there is the AS_event_ID, then we are fine.
+  
   # subset A3SS_events, filter out the isoform of interest from the master A3SS_events table and then return all 4 co-ordinates
+  # for A3SS, we consider the entire differential area.
   if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A3SS_events",] %>% nrow != 0) {
     
   A3SS_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A3SS_events", c("Gene", "AS_event_ID")]
   A3SS_subset <- dplyr::inner_join(A3SS_summary_table, A3SS_subset, by = c("Gene", "AS_event_ID")) %>% .[, c("Gene", "AS_event_ID", "common_5_SS_coor", "A3SS_coordinates")]
-  A3SS_subset <- cbind(A3SS_subset, chr = gsub(x = A3SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% cbind(., strand = gsub(x = A3SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2")) %>% cbind(., start = gsub(x = A3SS_subset$A3SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\1")) %>% cbind(., end = gsub(x = A3SS_subset$A3SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\3"))
+  A3SS_subset <- cbind(A3SS_subset, chr = gsub(x = A3SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% 
+    cbind(., strand = gsub(x = A3SS_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2")) %>% 
+    cbind(., start = gsub(x = A3SS_subset$A3SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\1")) %>% 
+    cbind(., end = gsub(x = A3SS_subset$A3SS_coordinates, pattern = "([0-9]{1,10})(.*{0,1});([0-9]{1,10})", replacement = "\\3"))
   A3SS_subset <- A3SS_subset[, c("Gene", "AS_event_ID", "chr", "strand", "start", "end")] %>% as_tibble
   A3SS_subset[, "splicemode"] <- "A3SS_events"
   
   }
 
   # subset A5SS_events
+  # for A5SS, we consider the entire differential area.
   if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A5SS_events",] %>% nrow != 0) {
     
   A5SS_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "A5SS_events", c("Gene", "AS_event_ID")]
@@ -216,6 +413,7 @@ JUM_ASeventID_and_splicemode_to_chr_strand_start_end <- function(tibble_of_isofo
   }
 
   # subset cassette
+  # for cassette, we consider the cassette region.
   if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "cassette_exon_events",] %>% nrow != 0) {
     
   cassette_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "cassette_exon_events", c("Gene", "AS_event_ID")]
@@ -229,6 +427,7 @@ JUM_ASeventID_and_splicemode_to_chr_strand_start_end <- function(tibble_of_isofo
   }
 
   # subset MXE events
+  # for MXE, we consider the entire differential area.
   if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "MXE_events",] %>% nrow != 0) {
     
     MXE_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "MXE_events", c("Gene", "isoform_ID")]
@@ -293,139 +492,112 @@ JUM_ASeventID_and_splicemode_to_chr_strand_start_end <- function(tibble_of_isofo
 
 # END JUM_ASeventID_and_splicemode_to_chr_strand_start_end
 
+```
+
+```{r}
+
 # this will take the result of genomic-to-protein mapping (i.e. ENSP ids) and feed it through biomart. The result is a list of protein domain accessions/ids that overlap (AT THE MOMENT FULL OVERLAP ONLY) with the query interval
-# NOTE: THIS FUNCTION ONLY ACTS ON A SINGLE TIBBLE. MUST BE USED AS PART OF PURRR::MAP FUNCTION TO PROCESS THE WHOLE LIST OF PROTEIN POSITION MAPPING RESULTS
+# expected input: a list of lists. max level = 2.
 # NOTE2: COLUMNS EXPECTED: $1 (ENSP) "names", $2 "start", $3 "width", $4 "end"
 
-tibble_of_mapped_protein_positions_to_list_of_domains_PTMs <- function(tibble_of_mapped_proteinID, ensemblmart) {
+tibble_of_mapped_protein_positions_to_list_of_domains_PTMs <- function(list_of_mapped_proteinID, ensemblmart) {
   
-input_ranges <- purrr::map2(.x = tibble_of_mapped_proteinID$start, .y = tibble_of_mapped_proteinID$end, .f = ~.x:.y %>% unlist) %>% unlist %>% unique
-
-# interpro
-interpro_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "interpro", "interpro_start", "interpro_end"), mart = ensemblmart) %>% array_tree
-
-if (any(interpro_list %>% unlist %>% is.na) == FALSE) {
+  # DEBUG ###
+  # list_of_mapped_proteinID <- mapped_aminoacid_positions
+  ###########
   
-  interpro_list <- purrr::map(.x = interpro_list, .f = ~append(.x, values = list(range = .x$interpro_start:.x$interpro_end)))
-
-} else {
+  # extract all query ENSP ids
+  vec_all_ENSP_ids <- list_of_mapped_proteinID %>% flatten %>% rbindlist %>% .$names
   
-   interpro_list <- "" 
+  # create a list of attributes to retrieve from biomart. we will loop thru this.
+  list_of_attributes_to_retrieve <- list("interpro" = c("ensembl_peptide_id", "interpro", "interpro_start", "interpro_end"),
+                                         "ncoils" = c("ensembl_peptide_id", "ncoils_start", "ncoils_end"),
+                                         "seg" = c("ensembl_peptide_id", "seg_start", "seg_end"),
+                                         "signalp" = c("ensembl_peptide_id", "signalp_start", "signalp_end"),
+                                         "tmhmm" = c("ensembl_peptide_id", "tmhmm_start", "tmhmm_end"),
+                                         "sifts" = c("ensembl_peptide_id", "sifts_import", "sifts_import_start", "sifts_import_end"),
+                                         "mobidblite" = c("ensembl_peptide_id", "mobidblite", "mobidblite_start", "mobidblite_end"))
   
-  }
-
-# coiled coils
-ncoils_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "ncoils_start", "ncoils_end"), mart = ensemblmart) %>% array_tree
-
-if (any(ncoils_list %>% unlist %>% is.na) == FALSE) {
+  # search biomart
+  list_biomart_result_per_attribute <- future_map(.x = list_of_attributes_to_retrieve, .f = ~getBM(filters = "ensembl_peptide_id", values =  vec_all_ENSP_ids %>% unique, attributes = .x, mart = ensemblmart), .progress = TRUE, .options = future_options(globals = c("vec_all_ENSP_ids", "getBM", "ensemblmart")))
   
-  ncoils_list <- purrr::map(.x = ncoils_list, .f = ~append(.x, values = list(range = .x$ncoils_start:.x$ncoils_end, ncoils = "ncoils")))
-  
-} else {
-  
-   ncoils_list <- "" 
-  
-  }
-
-# low complexity
-seg_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "seg_start", "seg_end"), mart = ensemblmart) %>% array_tree
-
-if (any(seg_list %>% unlist %>% is.na) == FALSE) {
-  
-  seg_list <- purrr::map(.x = seg_list, .f = ~append(.x, values = list(range = .x$seg_start:.x$seg_end, seg = "seg")))
-  
-} else {
-  
-   seg_list <- "" 
-  
-  }
-
-# signal peptide cleavage site
-signalp_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "signalp_start", "signalp_end"), mart = ensemblmart) %>% array_tree
-
-if (any(signalp_list %>% unlist %>% is.na) == FALSE) {
-  
-  signalp_list <- purrr::map(.x = signalp_list, .f = ~append(.x, values = list(range = .x$signalp_start:.x$signalp_end, signalp = "signalp")))
-  
-} else {
-  
-   signalp_list <- "" 
-  
-  }
-
-# transmembrane helices
-tmhmm_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "tmhmm_start", "tmhmm_end"), mart = ensemblmart) %>% array_tree 
-
-if (any(tmhmm_list %>% unlist %>% is.na) == FALSE) {
-  
-  tmhmm_list <- purrr::map(.x = tmhmm_list, .f = ~append(.x, values = list(range = .x$tmhmm_start:.x$tmhmm_end, tmhmm = "tmhmm")))
-  
-} else {
-  
-   tmhmm_list <- "" 
-  
-  }
-
-#PDB-ENSP mappings
-sifts_import_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "sifts_import", "sifts_import_start", "sifts_import_end"), mart = ensemblmart) %>% array_tree 
-
-if (any(sifts_import_list %>% unlist %>% is.na) == FALSE) {
-  
-  sifts_import_list <-  purrr::map(.x = sifts_import_list, .f = ~append(.x, values = list(range = .x$sifts_import_start:.x$sifts_import_end)))
-  
-} else {
-  
-   sifts_import_list <- "" 
-  
-  }
-
-# mobidblite (prediction of long intrinsically disordered regions) mappings
-mobidblite_list <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "mobidblite", "mobidblite_start", "mobidblite_end"), mart = ensemblmart) %>% array_tree 
-
-if (any(mobidblite_list %>% unlist %>% is.na) == FALSE) {
-  
-  mobidblite_list <-  purrr::map(.x = mobidblite_list, .f = ~append(.x, values = list(range = .x$mobidblite_start:.x$mobidblite_end)))
-  
-} else {
-  
-   mobidblite_list <- "" 
-  
-  }
-
-all_domains_from_protein_tibble <- list(interpro = interpro_list, 
-                                        ncoils = ncoils_list, 
-                                        seg = seg_list, 
-                                        signalp = signalp_list, 
-                                        tmhmm = tmhmm_list, 
-                                        sifts = sifts_import_list, 
-                                        mobidblite = mobidblite_list) %>% purrr::discard(.x = ., ~any(.x == ""))
-
-# ALL DOMAIN ANNOTATIONS FROM BIOMART ARE FINISHED HERE
-
-all_domains_PTMs_from_protein_tibble_filtered <- keep(all_domains_from_protein_tibble %>% flatten, ~(intersect(.x$range, input_ranges) %>% length) != 0) %>% list(domains = .)
-
-# COINCIDING PTMS
-if (tibble_of_mapped_proteinID$names %>% length != 0) {
-  
-  column_uniprotkb_entry_IDs <- getBM(filters = "ensembl_peptide_id", values = tibble_of_mapped_proteinID$names, attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% na.omit %>% setNames(c("protein_stable_ID", "uniprotkb_entry"))
-  
-  if (column_uniprotkb_entry_IDs %>% nrow != 0) {
+  # remove na values from biomart result
+  list_biomart_result_per_attribute_processed <- purrr::map(.x = list_biomart_result_per_attribute, .f = function(.x) {
     
-    table_all_PTMs_for_query_peptide <- dplyr::semi_join(dbPTM_allhuman_annotations, column_uniprotkb_entry_IDs, by = "uniprotkb_entry")
+    # DEBUG ###
+    # .x <- list_biomart_result_per_attribute[[1]]
+    ###########
     
-    table_coinciding_PTMs <- table_all_PTMs_for_query_peptide[table_all_PTMs_for_query_peptide$modified_residue_position == intersect(table_all_PTMs_for_query_peptide$modified_residue_position %>% as.numeric, input_ranges %>% as.numeric), ]
+    tibble_of_single_attribute <- .x %>% as_tibble
     
-    if (table_coinciding_PTMs %>% nrow != 0) {
+    # fetch na or blank row indices
+    row.indices_na_values <- tibble_of_single_attribute %>% apply(MARGIN = 1, FUN = function(X) {any(is.na(X) == TRUE | X == "")}) %>% which
+    tibble_of_single_attribute <- tibble_of_single_attribute[-row.indices_na_values, ]
+    
+    # rename columns start and end to be generic
+    colnames(tibble_of_single_attribute)[grep(x = colnames(tibble_of_single_attribute), pattern = "start")] <- "start"
+    colnames(tibble_of_single_attribute)[grep(x = colnames(tibble_of_single_attribute), pattern = "end")] <- "end"
+    
+    return(tibble_of_single_attribute)
+    
+  } )
+
+  # ALL DOMAIN ANNOTATIONS FROM BIOMART ARE FINISHED HERE ######
+  
+  # get ENSP to uniprot entry mapping
+  table_ENSP_to_uniprot_entry_mapping <- biomaRt::getBM(filters = "ensembl_peptide_id", values = vec_all_ENSP_ids, attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% setNames(c("ensembl_peptide_id", "uniprotkb_entry")) %>% 
+  (# remove NA/blank rows
+    function(x) {
       
-      all_domains_PTMs_from_protein_tibble_filtered <- append(all_domains_PTMs_from_protein_tibble_filtered, list(PTMs = table_coinciding_PTMs))
+      # debug ###
+      # x <- table_ENSP_to_uniprot_entry_mapping
+      ###########
       
-    }
-    
-  }
+      row.indices_na_or_blank_values <- x %>% apply(MARGIN = 1, FUN = function(X) {any(is.na(X) | X == "")} ) %>% which
+      
+      table <- x[-row.indices_na_or_blank_values, ]
+      
+      return(table)
+      
+    } )
   
-}
+  # for each query interval associated with an ENSP id, extract overlapping biomart result entries.
+  list_extracted_overlapping_biomart_results <- future_map(.x = list_of_mapped_proteinID, .f = 
+                                                             ~purrr::map(.x = .x, .f = 
+                                                                           function(.x) {
+                                                                             
+                                                                             # DEBUG ###
+                                                                             # .x <- list_of_mapped_proteinID[[1]][[1]]
+                                                                             ###########
+                                                                             
+                                                                             query_ENSP <- .x$names
+                                                                             query_start <- .x$start
+                                                                             query_end <- .x$end
+                                                                             list_of_mapped_proteinID
+                                                                             matching_tibble_entries_biomart <- purrr::map(.x = list_biomart_result_per_attribute_processed, 
+                                                                                                                   .f = ~.x[.x$ensembl_peptide_id == query_ENSP & 
+                                                                                                                              .x$start < query_end &
+                                                                                                                              .x$end > query_start, ])
+                                                                             
+                                                                             # retrieve equivalent UniProt entry name 
+                                                                             vec_uniprot_entry_IDs <- table_ENSP_to_uniprot_entry_mapping[table_ENSP_to_uniprot_entry_mapping$ensembl_peptide_id == query_ENSP, ] %>% .$uniprotkb_entry %>% unique %>% tibble::enframe(name = NULL, value = "uniprotkb_entry")
+                                                                             # get overlapping dbPTM entries ###
+                                                                             tibble_matching_entries_dbPTM <- dplyr::semi_join(dbPTM_allhuman_annotations, vec_uniprot_entry_IDs, by = "uniprotkb_entry")
+                                                                             tibble_matching_entries_dbPTM <- tibble_matching_entries_dbPTM[tibble_matching_entries_dbPTM$modified_residue_position %in% (query_start:query_end) %>% which, ]
+                                                                             # get overlapping phosphositeplus entries ###
+                                                                             tibble_matching_entries_phosphositeplus <- dplyr::semi_join(phosphosite_allhuman_phosphosites, vec_uniprot_entry_IDs, by = "uniprotkb_entry")
+                                                                             tibble_matching_entries_phosphositeplus <- tibble_matching_entries_phosphositeplus[tibble_matching_entries_phosphositeplus$modified_residue_position %in% (query_start:query_end) %>% which, ]
+                                                                             
+                                                                             matching_tibble_entries_all <- purrr::splice(list("ensembl_peptide_id" = query_ENSP), 
+                                                                                                                          matching_tibble_entries_biomart, 
+                                                                                                                          "dbPTM" = tibble_matching_entries_dbPTM,
+                                                                                                                          "phosphositeplus" = tibble_matching_entries_phosphositeplus)
+                                                                             
+                                                                             return(matching_tibble_entries_all)
+                                                                             
+                                                                           } ), .progress = TRUE, .options = future_options(globals = c("list_biomart_result_per_attribute_processed", "table_ENSP_to_uniprot_entry_mapping", "dbPTM_allhuman_annotations", "phosphosite_allhuman_phosphosites")))
 
-return(all_domains_PTMs_from_protein_tibble_filtered)
+return(list_extracted_overlapping_biomart_results)
 
 }
 
@@ -435,7 +607,7 @@ return(all_domains_PTMs_from_protein_tibble_filtered)
 # in the case of missing start/end, it's simple. we use the fact that always start > end.
 # we will use the closest number between start and end which actually lies in the CDS region as a proxy for the missing value.
 match_query_startend_with_vectors_of_CDSpositions <- function(vector_of_sorted_CDSpositions, ENSP_id, input_query_start, input_query_end) {
-  # 
+  
   # # case if none missing
   # if (intersect(vector_of_sorted_CDSpositions, input_query_start) %>% length == 1 & intersect(vector_of_sorted_CDSpositions, input_query_end) %>% length == 1) {
   # 
@@ -451,6 +623,16 @@ match_query_startend_with_vectors_of_CDSpositions <- function(vector_of_sorted_C
   # # case if input end missing
   # } else if (intersect(vector_of_sorted_CDSpositions, input_query_start) %>% length == 1 & intersect(vector_of_sorted_CDSpositions, input_query_end) %>% length == 0) {
 
+  # DEBUG ###
+  # vector_of_sorted_CDSpositions <- list_overlapping_protein_CDS_positions_tibbles[[2]][[2]]
+  # gtf_table <- tibble_ref_gtf_simplified
+  # ensemblmart <- ensembl_mart
+  # ENSP_id <- list_overlapping_protein_CDS_exons_tibbles[[2]][[1]]$protein_id %>% unique
+  # input_query_start <- 37022080
+  # input_query_end <- 37023044
+  # tibble_queryisoforms_chr_strand_start_end
+  ###########
+  
     proxy_query_start <- min(vector_of_sorted_CDSpositions[which(input_query_start <= vector_of_sorted_CDSpositions & vector_of_sorted_CDSpositions <= input_query_end)])
     proxy_query_end <- max(vector_of_sorted_CDSpositions[which(input_query_start <= vector_of_sorted_CDSpositions & vector_of_sorted_CDSpositions <= input_query_end)])
 
@@ -484,17 +666,30 @@ match_query_startend_with_vectors_of_CDSpositions <- function(vector_of_sorted_C
 # BED file mode is for annotating a BED file (especially from CLIP-SEQ/RIP-seq/parclip) 
 # target level is the filter for the "type" in gtf table. one of: "gene", "transcript", "exon", "CDS", "start_codon", "stop_codon", "five_prime_utr", "three_prime_utr", "Selenocysteine"
 
-map_genome_coordinate_to_transcriptandprotein <- function(chr_strand_start_end_tibble, mode, targetlevel) {
+map_genome_coordinate_to_transcriptandprotein <- function(chr_strand_start_end_tibble, gtf_table, mode, targetlevel = NULL) {
+  
+  # DEBUG ###
+  # chr_strand_start_end_tibble <- tibble_queryisoforms_chr_strand_start_end
+  # gtf_table <- tibble_ref_gtf_simplified
+  # mode = "AS region"
+  ###########
   
   if (mode == "AS region") {
   
-  list_of_query_AS_event_ID <- chr_strand_start_end_tibble$AS_event_ID %>% as.list
+  list_of_query_AS_event_ID <- chr_strand_start_end_tibble$AS_event_ID %>% array_tree
 
-list_of_all_overlapping_annotations <- purrr::map(.x = list_of_query_AS_event_ID, .f = ~gtf_table[
-  (gtf_table$chr == chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "chr"] %>% lapply(as.character)) &
-    (gtf_table$strand == chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "strand"] %>% lapply(as.character)), ] %>% 
-    .[(.$start < chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "end"] %>% as.numeric) & 
-        (.$end > chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "start"] %>% as.numeric), ])
+list_of_all_overlapping_annotations <- future_imap(.x = list_of_query_AS_event_ID, .f = function(.x, .y) {
+  
+  # message("Now processing entry number: ", .y)
+  
+  overlapping_gtf_entries <- gtf_table[(gtf_table$chr == chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "chr"] %>% unique %>% paste %>% as.character) &
+    (gtf_table$strand == chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "strand"] %>% unique %>% paste %>% as.character), ] %>% 
+    .[(.$start < chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "end"] %>% unique %>% paste %>% as.numeric) & 
+        (.$end > chr_strand_start_end_tibble[chr_strand_start_end_tibble$AS_event_ID == .x, "start"] %>% unique %>% paste %>% as.numeric), ]
+  
+  return(overlapping_gtf_entries)
+  
+}, .progress = TRUE, .options = future_options(globals = c("gtf_table", "chr_strand_start_end_tibble")))
 
 names(list_of_all_overlapping_annotations) <- chr_strand_start_end_tibble$Gene
 
@@ -569,88 +764,284 @@ sort_tibble_according_to_strand <- function(tibble_to_be_sorted) {
 
 tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- function(tibble_queryisoforms_chr_strand_start_end, gtf_table, ensemblmart) {
   
-list_queryisoforms_overlapping_annotations_tibbles <- tibble_queryisoforms_chr_strand_start_end %>% map_genome_coordinate_to_transcriptandprotein(., mode = "AS region", targetlevel = "") %>% purrr::modify_depth(., 4, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 3, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 2, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 1, ~purrr::compact(.x), .ragged = TRUE)
-
-list_overlapping_protein_CDS_exons_tibbles <- purrr::map(.x = list_queryisoforms_overlapping_annotations_tibbles, .f = ~.x$protein_id %>% na.omit %>% unique %>% as.list %>% purrr::map(.x = ., .f = ~gtf_table[gtf_table$protein_id == .x & gtf_table$type == "CDS", ] %>% .[apply(X = ., MARGIN = 1, FUN = function(X) {all(is.na(X)) == FALSE}), ]))
-
-list_overlapping_protein_CDS_positions_tibbles <- purrr::map_depth(.x = list_overlapping_protein_CDS_exons_tibbles, .depth = 2, .f = ~sort_tibble_according_to_strand(.x))
-
-# list_overlapping_protein_CDS_positions_tibbles <- purrr::modify_if(.x = list_overlapping_protein_CDS_exons_tibbles, .p = ~length(.x) != 0, .f = ~purrr::modify_if(.x = .x, .p = ~.x$strand %>% lapply(as.character) %>% unique %>% paste == "+", .f = ~purrr::map2(.x = .$start, .y = .$end, .f = ~.x:.y) %>% unlist %>% unique %>% sort(., decreasing = FALSE)))
-# list_overlapping_protein_CDS_positions_tibbles <- purrr::modify_if(.x = list_overlapping_protein_CDS_positions_tibbles, .p = ~length(.x) != 0, .f = ~purrr::modify_if(.x = .x, .p = ~.x$strand %>% lapply(as.character) %>% unique %>% paste == "-", .f = ~purrr::map2(.x = .$start, .y = .$end, .f = ~.x:.y) %>% unlist %>% unique %>% sort(., decreasing = TRUE)))
-
-# we now generate a table of mapped protein relative coordinates for each genomic start and end nested inside each gene enrichment query.
-# provided functions: 
-# 1. list_overlapping_protein_CDS_positions_tibbles: list of genes corresponding to isoform enriched > list of vectors of genomic positions of CDS for each ENSP, 
-# 2. 1:length(list_overlapping_protein_CDS_positions_tibbles) %>% as.list: level 1 indices, 
-# 3. list_overlapping_protein_CDS_exons_tibbles: list of genes corresponding to isoform enriched > list of subsets of GTF table for each unique ENSP caught by query range. used for ENSP id mapping 
-# NOTE: width < 0 if the ORF is on the - strand
-mapped_aminoacid_positions <- purrr::pmap(.l = list(list_overlapping_protein_CDS_positions_tibbles, 
-                                             1:length(list_overlapping_protein_CDS_positions_tibbles) %>% as.list,
-                                             list_overlapping_protein_CDS_exons_tibbles), .f = ~purrr::pmap(
-  .l = list(..1, rep(..2, times = length(..1)) %>% as.list, ..3), 
-  .f = ~match_query_startend_with_vectors_of_CDSpositions(..1, paste(..3$protein_id %>% unique), paste(tibble_queryisoforms_chr_strand_start_end[..2, "start"]) %>% as.numeric, paste(tibble_queryisoforms_chr_strand_start_end[..2, "end"]) %>% as.numeric)
-      ))
-
-# FINALLY! PROTEIN DOMAIN MATCHING!
-
-# get rid of empty genes with no match
-mapped_aminoacid_positions <- purrr::discard(.x = mapped_aminoacid_positions, .p = ~length(.x) == 0)
-
-conciding_domains_PTMs <- map_depth(.x = mapped_aminoacid_positions, .depth = 2, .f = ~tibble_of_mapped_protein_positions_to_list_of_domains_PTMs(.x, ensemblmart)) %>% purrr::modify_depth(., 4, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 3, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 2, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 1, ~purrr::compact(.x), .ragged = TRUE)
-
-return(list(overlapping_annotated_regions = list_queryisoforms_overlapping_annotations_tibbles, conciding_domains_and_PTMs = conciding_domains_PTMs) %>% purrr::modify_depth(., 4, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 3, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 2, ~purrr::compact(.x), .ragged = TRUE) %>% purrr::modify_depth(., 1, ~purrr::compact(.x), .ragged = TRUE))
+  # DEBUG ###
+  # tibble_queryisoforms_chr_strand_start_end <- all_plausible_diff_junctions_chr_strand_start_end
+  # gtf_table <- tibble_ref_gtf_simplified
+  # ensemblmart <- ensembl_mart
+  ###########
+    
+  message("Now mapping the specified AS coords to transcript- and protein-relative coords")
+  
+  gtf_table <- gtf_table
+  list_queryisoforms_overlapping_annotations_tibbles <- tibble_queryisoforms_chr_strand_start_end %>% map_genome_coordinate_to_transcriptandprotein(., gtf_table = gtf_table, mode = "AS region") 
+  
+  # set level 1 list names as the AS_event_ID
+  names(list_queryisoforms_overlapping_annotations_tibbles) <- tibble_queryisoforms_chr_strand_start_end$AS_event_ID
+  
+  message("Extract the individual CDS regions of each protein overlapping the AS regions")
+  list_overlapping_protein_CDS_exons_tibbles <- future_map(.x = list_queryisoforms_overlapping_annotations_tibbles, .f = ~.x$protein_id %>% na.omit %>% unique %>% as.list %>% purrr::map(.x = ., .f = ~gtf_table[gtf_table$protein_id == .x & gtf_table$type == "CDS", ] %>% .[apply(X = ., MARGIN = 1, FUN = function(X) {all(is.na(X)) == FALSE}), ]), .progress = TRUE, .options = future_options(globals = c("gtf_table")))
+  
+  message("Extract the individual genome-relative CDS nucleotide positions")
+  list_overlapping_protein_CDS_positions_tibbles <- purrr::map_depth(.x = list_overlapping_protein_CDS_exons_tibbles, .depth = 2, .f = ~sort_tibble_according_to_strand(.x))
+  
+  message("Now generate a table of sorted protein relative coordinates for each genomic start and end associated with each unique AS region.")
+  # provided functions: 
+  # 1. list_overlapping_protein_CDS_positions_tibbles: list of genes corresponding to isoform enriched > list of vectors of genomic positions of CDS for each ENSP, 
+  # 2. 1:length(list_overlapping_protein_CDS_positions_tibbles) %>% as.list: level 1 indices, 
+  # 3. list_overlapping_protein_CDS_exons_tibbles: list of genes corresponding to isoform enriched > list of subsets of GTF table for each unique ENSP caught by query range. used for ENSP id mapping 
+  # NOTE: width < 0 if the ORF is on the - strand
+  mapped_aminoacid_positions <- purrr::pmap(.l = list("A" = list_overlapping_protein_CDS_positions_tibbles, 
+                                                      "B" = 1:length(list_overlapping_protein_CDS_positions_tibbles) %>% array_tree,
+                                                      "C" = list_overlapping_protein_CDS_exons_tibbles), .f = function(A, B, C) {
+                                                        
+                                                        level_one_index <- B
+                                                        
+                                                        message("now processing entry number: ", level_one_index)
+                                                        
+                                                        purrr::map2(.x = A, .y = C, .f = function(.x, .y) {
+                                                          
+                                                          # print(paste(".x = ", .x %>% head))
+                                                          # print(paste(.y))
+                                                          
+                                                          match_query_startend_with_vectors_of_CDSpositions(vector_of_sorted_CDSpositions = .x,
+                                                                                                            ENSP_id = paste(.y$protein_id %>% unique),
+                                                                                                            input_query_start = paste(tibble_queryisoforms_chr_strand_start_end[level_one_index, "start"]) %>% as.numeric,
+                                                                                                            input_query_end = paste(tibble_queryisoforms_chr_strand_start_end[level_one_index, "end"]) %>% as.numeric)
+                                                          
+                                                          } )
+                                                        } )
+  
+  # FINALLY! PROTEIN DOMAIN MATCHING!
+  
+  # get rid of empty genes with no match
+  mapped_aminoacid_positions <- purrr::discard(.x = mapped_aminoacid_positions, .p = ~length(.x) == 0)
+  
+  # retrieve all the domain and PTM annotations
+  coinciding_domains_PTMs <- tibble_of_mapped_protein_positions_to_list_of_domains_PTMs(mapped_aminoacid_positions, ensemblmart)
+  
+  # summarise protein and transcript-level analyses
+  ## for the transcript level, only extract the "type" and "transcript_biotype" columns
+  list_of_tibbles_transcript_level_results <- list_queryisoforms_overlapping_annotations_tibbles %>% purrr::map(~.x[, c("type", "transcript_biotype")] %>% unique)
+  ## add in the AS_event_ID from the level 1 list and rbind
+  tibble_transcript_level_results <- purrr::map2(.x = list_of_tibbles_transcript_level_results, .y = names(list_of_tibbles_transcript_level_results), .f = ~add_column(.x, "AS_event_ID" = .y, .before = 1)) %>% rbindlist %>% as_tibble
+  
+  ## for the protein/domain etc. level, extract and collapse OR convert to logical indicating the presence/absence of a feature.
+  list_of_tibbles_protein_level_results <- purrr::map2(.x = coinciding_domains_PTMs, .y = names(coinciding_domains_PTMs), .f = function(.x, .y) {
+    
+    # DEBUG ###
+    # .x <- coinciding_domains_PTMs[[1]]
+    # .y <- names(coinciding_domains_PTMs) %>% .[[1]]
+    ###########
+    
+    list_L2 <- .x
+    L1_id <- .y
+    
+    # convert ncoils, seg, signalp, tmhmm, mobidblite to logical.
+    list_L2_processed <- purrr::map(.x = list_L2, .f = ~purrr::modify_at(.x = .x, .at = c("ncoils", "seg", "signalp", "tmhmm", "mobidblite"), .f = function(.x) {
+      
+      if (nrow(.x) == 0) {
+        
+        return(FALSE)
+        
+      } else if (nrow(.x) != 0) {
+        
+        return(TRUE)
+        
+      }
+      
+      return(annotation_exists)
+      
+    } ))
+    
+    # collapse interpro annotation
+    list_L2_processed <- purrr::map(.x = list_L2_processed, .f = ~purrr::modify_at(.x = .x, .at = c("interpro"), .f = function(.x) {
+      
+      if (nrow(.x) == 0) {
+        
+        return(FALSE)
+        
+      } else if (nrow(.x) != 0) {
+        
+        return(paste(.x$interpro, collapse = ";"))
+        
+      }
+      
+    } ))
+    
+    # collapse sifts annotation
+    list_L2_processed <- purrr::map(.x = list_L2_processed, .f = ~purrr::modify_at(.x = .x, .at = c("sifts"), .f = function(.x) {
+      
+      if (nrow(.x) == 0) {
+        
+        return(FALSE)
+        
+      } else if (nrow(.x) != 0) {
+        
+        return(paste(.x$sifts_import, collapse = ";"))
+        
+      }
+      
+    } ))
+    
+    # collapse dbPTM annotation
+    list_L2_processed <- purrr::map(.x = list_L2_processed, .f = ~purrr::modify_at(.x = .x, .at = c("dbPTM"), .f = function(.x) {
+      
+      if (nrow(.x) == 0) {
+        
+        return(tibble("dbPTM_uniprotkb_entry" = NA,
+                      "dbPTM_modified_residue_position" = NA,
+                      "dbPTM_PTM_type" = NA))
+        
+      } else if (nrow(.x) != 0) {
+        
+        return(tibble("dbPTM_uniprotkb_entry" = paste(.x$uniprotkb_entry, collapse = ";"),
+                      "dbPTM_modified_residue_position" = paste(.x$modified_residue_position, collapse = ";"),
+                      "dbPTM_PTM_type" = paste(.x$PTM_type, collapse = ";")))
+        
+      }
+      
+    } ))
+    
+    # collapse phosphositeplus annotation
+    list_L2_processed <- purrr::map(.x = list_L2_processed, .f = ~purrr::modify_at(.x = .x, .at = c("phosphositeplus"), .f = function(.x) {
+      
+      if (nrow(.x) == 0) {
+        
+        return(tibble("phosphositeplus_uniprotkb_entry" = NA,
+                      "phosphositeplus_modified_residue_position" = NA))
+        
+      } else if (nrow(.x) != 0) {
+        
+        return(tibble("phosphositeplus_uniprotkb_entry" = paste(.x$uniprotkb_entry, collapse = ";"),
+                      "phosphositeplus_modified_residue_position" = paste(.x$modified_residue_position, collapse = ";")))
+        
+      }
+      
+    } ))
+    
+    # splice in the level 1 list name (in this case, it's AS_event_ID)
+    list_L2_final <- purrr::map(.x = list_L2_processed, .f = ~purrr::splice(list("AS_event_ID" = L1_id), 
+                                                                            .x))
+    
+    return(list_L2_final)
+    
+  })
+  ## flatten, tibblise within each element then rbind. 
+  tibble_protein_level_results <- list_of_tibbles_protein_level_results %>% flatten 
+  names(tibble_protein_level_results) <- NULL
+  tibble_protein_level_results <- tibble_protein_level_results %>% purrr::map(~flatten(.x) %>% as_tibble) %>% rbindlist %>% as_tibble
+  
+  return(list("transcript_level_results" = tibble_transcript_level_results,
+              "protein_level_results" = tibble_protein_level_results))
 
 }
 
 # END tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain
 
-# function to un-nest the results table and remove all the duplicates so you can see everything at a glance
+```
 
-simplify_consequence_table <- function(consequence_table, ensemblmart) {
-  
-  transcript_feature_tibble <- purrr::map(consequence_table$overlapping_annotated_regions, ~paste(.x$type, .x$exon_number %>% str_replace_na(., replacement = "")) %>% unique %>% mixedsort) %>% plyr::ldply(., rbind) %>% t
-  
-  colnames(transcript_feature_tibble) <- transcript_feature_tibble[1 , ] 
-  transcript_feature_tibble <- transcript_feature_tibble[-1, ] %>% as_tibble
-  
-  domain_PTM_list_flattened <- consequence_table$conciding_domains_and_PTMs %>% purrr::flatten(.) %>% purrr::flatten(.)
-  
-  domain_info_positions <- which(names(domain_PTM_list_flattened) == "domains")
-  
-  PTM_info_positions <- which(names(domain_PTM_list_flattened) == "PTMs")
-  
-  if (domain_info_positions %>% length != 0) {
-    
-    domain_PTM_list_flattened_2 <- purrr::modify_at(.x = domain_PTM_list_flattened, .at = domain_info_positions, .f = ~purrr::map(.x, .f = ~.x[names(.x) != "range"]) %>% purrr::reduce(., bind_rows))
-  
-  domains_tibble <- purrr::reduce(domain_PTM_list_flattened_2[domain_info_positions], bind_rows)
-  
-  domains_tibble_2 <- dplyr::left_join(domains_tibble, getBM(filters = "ensembl_peptide_id", values = domains_tibble$ensembl_peptide_id, attributes = c("ensembl_peptide_id", "external_gene_name"), mart = ensemblmart), by = "ensembl_peptide_id")
-    
-  } else {
-    
-    domains_tibble_2 <- NULL
-    
-  }
+# Match all separate junctions to the reference and recon annotation
 
-  if (PTM_info_positions %>% length != 0) {
-    
-    PTMs_tibble <- purrr::reduce(domain_PTM_list_flattened_2[PTM_info_positions], bind_rows)
-  } else {
-    
-    PTMs_tibble <- NULL
-    
-  }
-  
-  return(list("transcript features" = transcript_feature_tibble, "protein domains" = domains_tibble_2, "PTMs" = PTMs_tibble))
-  
-}
+We do this so that we can get NMD and and first/last exon info
 
-# END simplify_consequence_table
+## import union_junc_coor table
+
+```{r eval=FALSE, include=FALSE}
+
+UNION_junc_coor_table <- read.delim(paste(UNION_junc_coor_path), sep = "\t", stringsAsFactors = FALSE, col.names = c("chr", "start", "end", "strand", "junction_ID")) %>% as_tibble
 
 ```
 
-# read all the final tables into environment
+## annotate with reference and recon GTF info
+
+```{r eval=FALSE, include=FALSE}
+
+# remove all whitespace
+UNION_junc_coor_table_array.tree <- UNION_junc_coor_table %>% array_tree %>% future_map(~purrr::map(.x = .x, .depth = 2, .f = ~trimws(.x)), .progress = TRUE, .options = future_options(globals = FALSE))
+
+# get entries of junction-flanking exon matches
+list_gtf_matching_exon_entries <- future_map(.x = UNION_junc_coor_table_array.tree, .f = ~splice(.x, list(
+  "reference_gtf_match" = extract_junction.flanking.exons_JUM(.x, tibble_ref_gtf) %>% rbindlist, 
+  "reconstructed_gtf_match" =  extract_junction.flanking.exons_JUM(.x, tibble_recon_gtf) %>% rbindlist)), 
+  .progress = TRUE, .options = future_options(globals = c("extract_junction.flanking.exons_JUM", "tibble_ref_gtf", "tibble_recon_gtf", "data.table")))
+
+list_gtf_matching_exon_entries_extracted <- purrr::map2(.x = list_gtf_matching_exon_entries, .y = UNION_junc_coor_table_array.tree, .f = ~annotate_differential_exon(.x, .y) %>% as_tibble)
+
+tibble_gtf_matching_exon_entries_extracted <- list_gtf_matching_exon_entries_extracted %>% rbindlist %>% as_tibble
+
+# write table 
+write.table(x = tibble_gtf_matching_exon_entries_extracted, file = paste(results_directory_figures, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+```{r}
+
+tibble_gtf_matching_exon_entries_extracted <- read.delim(paste(results_directory_figures, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+
+```
+
+## import the detailed tables and process them
+
+only the detailed tables can link each AS_event_ID to their contributing junctions.
+
+```{r eval=FALSE, include=FALSE}
+
+list_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree %>% flatten
+
+list_of_AS_events <- c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events") %>% array_tree %>% flatten
+
+# read tables into environment
+
+list_of_detailed_tables <- future_map(.x = list_of_timepoint_comparisons_final, .f = ~purrr::map2(.x = .x, .y = list_of_AS_events, .f = ~read.delim(file = paste(results_dir, "final_JUM_output_", .x, "/", list.files(path = paste(results_dir, "final_JUM_output_", .x, "/", sep = ""), pattern = paste("(.)", .y, "(.*)detailed.txt", sep = "")), sep = ""), na.strings = c("NONE", "NA", "INF", "Inf") , sep = "\t", stringsAsFactors = FALSE) %>% as_tibble %>% add_column(., "splicemode" = .y)) %>% 
+                                        set_names(list_of_AS_events), .progress = TRUE, .options = future_options(globals = c("list_of_AS_events", "results_dir", "tibble"))) %>% set_names(list_of_timepoint_comparisons_final)
+
+# bind rows for each comparison
+
+list_of_detailed_tables_2 <- purrr::map(.x = list_of_detailed_tables, .f = ~rbindlist(.x))
+
+# rename the colnames to be not comparison-specific - we will add a comparison column later on
+
+list_of_detailed_tables_3 <- purrr::map2(.x = list_of_detailed_tables_2, .y = list_of_timepoint_comparisons_final, .f = ~setNames(., c("Gene", "AS_event_ID", "AS_structure_ID", "sub_junction_ID", "sub-junction_dispersion_estimate", "LRT_statistic-full_vs_reduced", "LRT_p_value-full_vs_reduced", "BH_adjusted_p-values", "logCPM_1", "logCPM_2", "fitting_parameter_log2fold_change_2_from_1", "sub_junction_chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand", "raw_count.1", "raw_count.2", "raw_count.3", "raw_count.4", "raw_count.5", "raw_count.6", "percentage_usage.1", "percentage_usage.2", "percentage_usage.3", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "deltaPSI", "splicemode")) %>% add_column(., "comparison" = .y)) 
+
+wide_tibble_of_all_detailed_tables_with_na <- list_of_detailed_tables_3 %>% rbindlist %>% as_tibble
+
+# remove rows where gene = gene
+wide_tibble_of_all_detailed_tables_with_na <- wide_tibble_of_all_detailed_tables_with_na[-which(wide_tibble_of_all_detailed_tables_with_na$Gene == "Gene"), ]
+
+# add column of contributing junctions
+## first remove the leading marker
+vector_AS.structure.ID.processed <- gsub(wide_tibble_of_all_detailed_tables_with_na$AS_structure_ID, pattern = "^(5_|3_|.*-)(.*)", replacement = "\\2")
+## then split the string by "Junction_"
+list_AS.structure.ID.processed <- vector_AS.structure.ID.processed %>% gsub(x = ., pattern = "Junction_", replacement = "") %>% strsplit(., split = "_")
+## then add the "Junction_" string back into the original table of all detailed tables
+unlist_AS.structure.ID.processed <- future_map(.x = list_AS.structure.ID.processed, .f = ~paste("Junction_", .x, sep = "") %>% paste(collapse = ","), .progress = TRUE, .options = future_options(globals = FALSE)) %>% unlist
+wide_tibble_of_all_detailed_tables_with_na <- wide_tibble_of_all_detailed_tables_with_na %>% add_column("contributing_junctions" = unlist_AS.structure.ID.processed, .after = "AS_structure_ID")
+
+```
+
+## match each AS_event_ID to the reference NMD/first_last annotation
+
+```{r}{r eval=FALSE, include=FALSE}
+
+# split the contributing junction column by comma
+list_contributing_junctions <- strsplit(wide_tibble_of_all_detailed_tables_with_na$contributing_junctions, split = ",")
+
+# match each disassembled junction structure against the reference annotation of junctions.
+## set names for matching
+list_of_tibblised_contributing_junctions <- future_map(.x = list_contributing_junctions, .f = ~tibble::enframe(.x, value = "junction_ID", name = NULL), .progress = TRUE, .options = future_options(globals = c("tibble")))
+## do a dplyr left join on each disassembled junction with the annotation
+list_of_contributing_junctions_joined_to_annotation <- future_map(.x = list_of_tibblised_contributing_junctions, .f = ~dplyr::left_join(.x, tibble_gtf_matching_exon_entries_extracted, by = "junction_ID"), .progress = TRUE, .options = future_options(globals = c("tibble_gtf_matching_exon_entries_extracted"), packages = "dplyr"))
+
+# append the AS_event_id to each entry
+list_of_AS.event.ID_joined_to_annotation <- future_map2(.x = list_of_contributing_junctions_joined_to_annotation, .y = wide_tibble_of_all_detailed_tables_with_na$AS_event_ID, .f = ~add_column(.x, "AS_event_ID" = .y, .before = 1), .progress = TRUE, .options = future_options(globals = c("tibble")))
+# tibblise and save
+tibble_of_AS.event.ID_joined_to_annotation <- list_of_AS.event.ID_joined_to_annotation %>% rbindlist %>% as_tibble
+
+write.table(x = tibble_of_AS.event.ID_joined_to_annotation, file = paste(results_directory_figures, "tibble_of_AS.event.ID_joined_to_annotation.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+# read all the simplified tables into environment
 
 ```{r}
 
@@ -1039,13 +1430,203 @@ wide_table_all_splicemodes_split_with_na <- type_convert(wide_table_all_splicemo
 wide_table_all_splicemodes_split_with_na[, "isoform_ID"] <- paste(wide_table_all_splicemodes_split_with_na[, "splicemode"], wide_table_all_splicemodes_split_with_na[, "AS_event_ID"], wide_table_all_splicemodes_split_with_na[, "isoform_number"], sep = "_")
 
 # write table 
-write.table(x = wide_table_all_splicemodes_split_with_na, file = paste(results_directory_figures, "wide_table_of_", nrow(wide_table_all_splicemodes_split_with_na), "_junctions_dPSI_all.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_all_splicemodes_split_with_na, file = paste(results_directory_figures, "wide_table_of_all_JUM_results_", nrow(wide_table_all_splicemodes_split_with_na), "_entries_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# write all unique genes as background
+vec_all_JUM_genes_genesymbol <- wide_table_all_splicemodes_split_with_na$Gene %>% unique
+write.table(x = vec_all_JUM_genes_genesymbol, file = paste(results_dir, "table_of_all_JUM_genes_genesymbol.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+# convert to ENSG
+vec_all_JUM_genes_ENSG <- getBM(filters = "external_gene_name", values = vec_all_JUM_genes_genesymbol, attributes = "ensembl_gene_id", mart = ensembl_mart)
+write.table(x = vec_all_JUM_genes_ENSG, file = paste(results_dir, "table_of_all_JUM_genes_ENSG.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 ```
 
-# DRAWING SOMS TO ANALYSE TIME SERIES DATA
+## append the annotation information (NMD, first/last exon... etc)
 
-## Filtering for dPSI and q/pvalue
+```{r}
+
+# read the table of annotation
+tibble_of_AS.event.ID_joined_to_annotation <- read.delim(paste(results_directory_figures, "tibble_of_AS.event.ID_joined_to_annotation.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+
+# extract the row indices of IR event entries from the wide_table_all_splicemodes_split_with_na - treatment is more complicated.
+row.indices_IR_events <- which(wide_table_all_splicemodes_split_with_na$splicemode == "intron_retention")
+
+```
+
+### NON-IR ENTRIES
+
+```{r}
+
+# for non-IR event entries, treatment is simple. we just match with the annotation. if any contributing junction has an attribute, then we will say there is attribute for the whole AS_event_id.
+## array tree-ify the AS_event_IDs for looping
+as.event.id_array.tree_not.IR <- wide_table_all_splicemodes_split_with_na[-row.indices_IR_events, ] %>% .$AS_event_ID %>% unique %>% array_tree
+## look up the annotation tibble for each AS_event_ID, summarise.
+list_as.event.id_with_summarised_annotation_not.IR <- future_map(.x = as.event.id_array.tree_not.IR, .f = function(.x) {
+  
+  # DEBUG ###
+  # .x <- as.event.id_array.tree_not.IR[[3]]
+  ###########
+  
+  subset_tibble_annotation <- tibble_of_AS.event.ID_joined_to_annotation[tibble_of_AS.event.ID_joined_to_annotation$AS_event_ID == .x, ] %>% unique
+  
+  summarised_tibble_annotation <- tibble("AS_event_ID" = .x, 
+                                         "contributing_junction_IDs" = subset_tibble_annotation$junction_ID %>% paste(collapse = ";"),
+                                         "chr" = subset_tibble_annotation$chr %>% paste(collapse = ";"),
+                                         "start" = subset_tibble_annotation$start %>% paste(collapse = ";"),
+                                         "end" = subset_tibble_annotation$end %>% paste(collapse = ";"),
+                                         "strand" = subset_tibble_annotation$strand %>% paste(collapse = ";"),
+                                         "matched_gene_names" = subset_tibble_annotation$matched_gene_names %>% paste(collapse = ";"),
+                                         "matched_ref_transcript_names" = subset_tibble_annotation$matched_ref_transcript_names %>% paste(collapse = ";"),
+                                         "matched_recon_transcript_names" = subset_tibble_annotation$matched_recon_transcript_names %>% paste(collapse = ";"),
+                                         "NMD_reference" = subset_tibble_annotation$NMD_reference %>% paste(collapse = ";"),
+                                         "NMD_recon" = subset_tibble_annotation$NMD_recon %>% paste(collapse = ";"),
+                                         "any_NMD" = any(c(grep(x = subset_tibble_annotation$NMD_reference, pattern = "TRUE") %>% na.omit,
+                                                           grep(x = subset_tibble_annotation$NMD_recon, pattern = "TRUE") %>% na.omit)),
+                                         "first_or_last_exon_reference" = subset_tibble_annotation$first_or_last_exon_reference %>% paste(collapse = ";"),
+                                         "first_or_last_exon_recon" = subset_tibble_annotation$first_or_last_exon_recon %>% paste(collapse = ";"),
+                                         "any_first_exon" = any(c(grep(x = subset_tibble_annotation$first_or_last_exon_reference, pattern = "first_exon") %>% na.omit, 
+                                                                  grep(x = subset_tibble_annotation$first_or_last_exon_recon, pattern = "first_exon") %>% na.omit)),
+                                         "any_last_exon" = any(c(grep(x = subset_tibble_annotation$first_or_last_exon_reference, pattern = "last_exon") %>% na.omit, 
+                                                                  grep(x = subset_tibble_annotation$first_or_last_exon_recon, pattern = "last_exon") %>% na.omit))
+                                         )
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble_of_AS.event.ID_joined_to_annotation", "tibble")))
+
+tibble_as.event.id_with_summarised_annotation_not.IR <- list_as.event.id_with_summarised_annotation_not.IR %>% rbindlist %>% as_tibble
+
+```
+
+### IR ENTRIES
+
+```{r}
+
+# for IR event entries, complicated. First retrieve the matched/recon transcripts. then find transcripts with overlapping exons.
+# These IR-spanning transcripts must have at least ONE start/end coord/gene name in common with the junction-matched transcripts.
+# return their corresponding annotations.
+# NOTE: it seems like JUM only associates one junction ID with each IR event (which makes sense). However, my small sample size of 52 IR junctions isn't enough to fully conclude this is the case.
+## array tree-ify the AS_event_IDs for looping
+as.event.id_array.tree_IR <- wide_table_all_splicemodes_split_with_na[row.indices_IR_events, ] %>% .$AS_event_ID %>% unique %>% array_tree
+
+## look up the annotation tibble for each AS_event_ID, summarise.
+list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_array.tree_IR, .f = function(.x, .y) {
+  
+  message("now processing entry number: ", .y)
+  
+  # DEBUG ###
+  # .x <- as.event.id_array.tree_IR[[5]]
+  # tibble_ref_gtf <- tibble_ref_gtf
+  # tibble_recon_gtf <- tibble_recon_gtf
+  ###########
+  
+  tibble_ref_gtf <<- tibble_ref_gtf
+  tibble_recon_gtf <<- tibble_recon_gtf
+  
+  subset_tibble_annotation <- tibble_of_AS.event.ID_joined_to_annotation[tibble_of_AS.event.ID_joined_to_annotation$AS_event_ID == .x, ] %>% unique
+  
+  chr <- subset_tibble_annotation$chr %>% paste
+  start <- subset_tibble_annotation$start %>% paste
+  end <- subset_tibble_annotation$end %>% paste
+  strand <- subset_tibble_annotation$strand %>% paste
+  vec_ref_transcripts_matched_to_junction <- subset_tibble_annotation$matched_ref_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
+  vec_recon_transcripts_matched_to_junction <- subset_tibble_annotation$matched_recon_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
+  
+  # check reference annotation - but only if the junction was matched to reference in the first place.
+  if (all(is.na(vec_ref_transcripts_matched_to_junction)) != TRUE) {
+    
+    # match IR region to reference
+    tibble_ref_gtf_subset_IR_overlap <- tibble_ref_gtf[tibble_ref_gtf$seqnames == chr %>% trimws, ] %>% .[.$strand == strand %>% trimws, ] %>% .[.$start <= ((start %>% as.numeric) - 2) & .$end >= ((end %>% as.numeric) + 2), ] %>% .[.$type == "exon", ]
+  
+    # get all the entries which matched to the junction
+    tibble_ref_gtf_subset_junction_matching_entries <- dplyr::semi_join(tibble_ref_gtf[tibble_ref_gtf$type == "exon", ], vec_ref_transcripts_matched_to_junction, by = "transcript_id")
+    
+    # extract all the start coords of the junction-matched entries
+    vector_junction_matched_start_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "start"]
+    # find which IR matched entry has any same start coord
+    tibble_ref_gtf_subset_IR_overlap_start.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_start_coords)
+    
+    # extract all the end coords of the junction-matched entries
+    vector_junction_matched_end_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "end"]
+    # find which IR matched entry has any same end coord
+    tibble_ref_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_end_coords)
+    
+    # extract all the gene names of the junction-matched entries
+    vector_junction_matched_gene_names <- tibble_ref_gtf_subset_junction_matching_entries[, "gene_name"]
+    # find which IR matched entry has any same end coord
+    tibble_ref_gtf_subset_IR_overlap_gene.name.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_gene_names)
+    
+    tibble_all_confirmed_IR_entries_ref <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
+                                            tibble_ref_gtf_subset_IR_overlap_end.matched,
+                                            tibble_ref_gtf_subset_IR_overlap_gene.name.matched) %>% purrr::reduce(dplyr::union)
+    
+  }
+  
+  # check recon annotation - but only if the junction was matched to recon in the first place.
+  if (all(is.na(vec_recon_transcripts_matched_to_junction)) != TRUE) {
+    
+    # match IR region to recon GTF
+    tibble_recon_gtf_subset_IR_overlap <- tibble_recon_gtf[tibble_recon_gtf$seqnames == chr %>% trimws, ] %>% .[.$strand == strand %>% trimws, ] %>% .[.$start <= ((start %>% as.numeric) - 2) & .$end >= ((end %>% as.numeric) + 2), ] %>% .[.$type == "exon", ]
+  
+    # get all the entries which matched to the junction
+    tibble_recon_gtf_subset_junction_matching_entries <- dplyr::semi_join(tibble_recon_gtf[tibble_recon_gtf$type == "exon", ], vec_recon_transcripts_matched_to_junction, by = "transcript_id")
+    
+    # extract all the start coords of the junction-matched entries
+    vector_junction_matched_start_coords <- tibble_recon_gtf_subset_junction_matching_entries[, "start"]
+    # find which IR matched entry has any same start coord
+    tibble_recon_gtf_subset_IR_overlap_start.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_start_coords)
+    
+    # extract all the end coords of the junction-matched entries
+    vector_junction_matched_end_coords <- tibble_recon_gtf_subset_junction_matching_entries[, "end"]
+    # find which IR matched entry has any same end coord
+    tibble_recon_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_end_coords)
+    
+    tibble_all_confirmed_IR_entries_recon <- list(tibble_recon_gtf_subset_IR_overlap_start.matched, 
+                                            tibble_recon_gtf_subset_IR_overlap_end.matched) %>% purrr::reduce(dplyr::union)
+    
+  }
+  
+  # we now have enough info. to write up the final summary
+  summarised_tibble_annotation <- tibble("AS_event_ID" = .x, 
+                                         "contributing_junction_IDs" = subset_tibble_annotation$junction_ID %>% paste(collapse = ";"),
+                                         "chr" = subset_tibble_annotation$chr %>% paste(collapse = ";"),
+                                         "start" = subset_tibble_annotation$start %>% paste(collapse = ";"),
+                                         "end" = subset_tibble_annotation$end %>% paste(collapse = ";"),
+                                         "strand" = subset_tibble_annotation$strand %>% paste(collapse = ";"),
+                                         "matched_gene_names" = subset_tibble_annotation$matched_gene_names %>% paste(collapse = ";"),
+                                         "matched_ref_transcript_names" = subset_tibble_annotation$matched_ref_transcript_names %>% paste(collapse = ";"),
+                                         "matched_recon_transcript_names" = subset_tibble_annotation$matched_recon_transcript_names %>% paste(collapse = ";"),
+                                         "NMD_reference" = any(tibble_all_confirmed_IR_entries_ref$transcript_biotype == "nonsense_mediated_decay"),
+                                         "NMD_recon" = all(tibble_all_confirmed_IR_entries_recon$NMD_candidate == TRUE),
+                                         "first_or_last_exon_reference" = subset_tibble_annotation$first_or_last_exon_reference %>% paste(collapse = ";"),
+                                         "first_or_last_exon_recon" = subset_tibble_annotation$first_or_last_exon_recon %>% paste(collapse = ";"),
+                                         "any_first_exon" = any(c(grep(x = subset_tibble_annotation$first_or_last_exon_reference, pattern = "first_exon") %>% na.omit, 
+                                                                  grep(x = subset_tibble_annotation$first_or_last_exon_recon, pattern = "first_exon") %>% na.omit)),
+                                         "any_last_exon" = any(c(grep(x = subset_tibble_annotation$first_or_last_exon_reference, pattern = "last_exon") %>% na.omit, 
+                                                                  grep(x = subset_tibble_annotation$first_or_last_exon_recon, pattern = "last_exon") %>% na.omit))
+                                         ) %>% add_column("any_NMD" = any(c(grep(x = .$NMD_reference, pattern = "TRUE") %>% na.omit,
+                                                           grep(x = .$NMD_recon, pattern = "TRUE") %>% na.omit)), .after = "NMD_recon")
+  
+  return(summarised_tibble_annotation)
+  
+})
+
+tibble_as.event.id_with_summarised_annotation_IR <- list_as.event.id_with_summarised_annotation_IR %>% rbindlist %>% as_tibble
+
+```
+
+### combine non-IR and IR entries, append and save
+
+```{r}
+
+tibble_as.event.id_with_summarised_annotation_all <- rbind(tibble_as.event.id_with_summarised_annotation_not.IR, tibble_as.event.id_with_summarised_annotation_IR)
+
+wide_table_all_splicemodes_split_with_na_with_ref_annot <- dplyr::left_join(wide_table_all_splicemodes_split_with_na, tibble_as.event.id_with_summarised_annotation_all, by = "AS_event_ID")
+
+# write table 
+write.table(x = wide_table_all_splicemodes_split_with_na_with_ref_annot, file = paste(results_directory_figures, "wide_table_of_all_JUM_results_", nrow(wide_table_all_splicemodes_split_with_na_with_ref_annot), "_entries_with_na_annotated.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+# Filter for dPSI and q/pvalue
 
 NOTE: P/QVALUE AND DPSI FILTERING OCCURS HERE
 
@@ -1061,7 +1642,9 @@ Our trick is to use only the "deltaPSI_BM_MSC_to_OB_[something]d-BM_MSC_to_ud" c
 
 ```{r}
 
-PSI_levels_timeseries_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na %>% as.data.frame
+wide_table_all_splicemodes_split_with_na_with_ref_annot <- read.delim(paste(results_directory_figures, "wide_table_of_all_JUM_results_", 37264, "_entries_with_na_annotated.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE)
+
+PSI_levels_timeseries_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% as.data.frame
 
 ```
 
@@ -1159,19 +1742,24 @@ qpvalue_cutoff <- 0.01
 vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "deltaPSI")
 vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = p_or_q_value)
 
-# filtering for dPSI cutoff
-PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% as.numeric) > dPSI_cutoff)}) == TRUE, ]
-
 # filtering for FDR/pvalue
-PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% as.numeric < qpvalue_cutoff)}) == TRUE, ]
+PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% as.numeric <= qpvalue_cutoff)}) == TRUE, ]
 
-# PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, grep(colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = p_or_q_value)], 1, function(x){any(x<0.05)}) == TRUE, ]
+# filtering for dPSI cutoff
+PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% as.numeric) >= dPSI_cutoff)}) == TRUE, ]
+
+# also write table of differential information for 12d vs. ud.
+PSI_levels_timeseries_OB_wide_with_na_ud.12d.only <- PSI_levels_timeseries_OB_wide_with_na[PSI_levels_timeseries_OB_wide_with_na$deltaPSI_BM_MSC_to_OB_12d.BM_MSC_to_OB_ud %>% as.numeric %>% abs >= dPSI_cutoff, ]
+# write table
+write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_ud.vs.12d.only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# export associated gene set
+write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit, file = paste(results_directory_figures, "geneset_", length(PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_ud.vs.12d.only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 # further subsetting into ud-only comparisons
 
 ##  OB #####
 
-PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", colnames(PSI_levels_timeseries_OB_wide_with_na)[grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_OB_ud)")])]
+PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", "contributing_junction_IDs", "chr", "start", "end", "strand", "matched_gene_names", "matched_ref_transcript_names", "matched_recon_transcript_names", "any_NMD", "any_first_exon", "any_last_exon", colnames(PSI_levels_timeseries_OB_wide_with_na)[grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_OB_ud)")])]
 
 colnames(PSI_levels_timeseries_OB_wide_with_na) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
 
@@ -1184,12 +1772,16 @@ PSI_levels_timeseries_OB_wide_with_na <- cbind(PSI_levels_timeseries_OB_wide_wit
 
 PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_na.rows, ]
 
+# reorder cols to match chronological order
+PSI_levels_timeseries_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(-OBseries_timepoints), PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(OBseries_timepoints))
+
 print(paste("There are", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
 
-write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_OB_wide_with_na), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# export associated gene set
+write.table(x = PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit, file = paste(results_directory_figures, "geneset_", length( PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_anysig.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 # remove ALL na to produce the timeseries-ready table
-
 PSI_levels_timeseries_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, OBseries_timepoints], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
 
 PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_with_na_na.rows, ]
@@ -1198,31 +1790,32 @@ row.names(PSI_levels_timeseries_OB_wide) <- NULL
 
 print(paste("There are", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
 
-write.table(x = PSI_levels_timeseries_OB_wide, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
+
 
 ### create table of constitutive junctions as well
 
 ```{r}
 
-PSI_levels_timeseries_constitutive_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na %>% as.data.frame
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% as.data.frame
 
 # define col indices
 vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "deltaPSI")
 vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = p_or_q_value)
 
 # filtering for dPSI cutoff
-PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% as.numeric) < dPSI_cutoff)}) == TRUE, ]
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_dpsi.col.nums], 1, function(x){all(abs(x %>% as.numeric) < dPSI_cutoff)}) == TRUE, ]
 
 # filtering for FDR/pvalue
-PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% as.numeric > qpvalue_cutoff)}) == TRUE, ]
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_PSI_levels_timeseries_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){all(x %>% as.numeric > qpvalue_cutoff)}) == TRUE, ]
 
 # further subsetting into ud-only comparisons
 
 ##  OB #####
 
-PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na)[grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_OB_ud)")])]
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", "contributing_junction_IDs", "chr", "start", "end", "strand", "matched_gene_names", "matched_ref_transcript_names", "matched_recon_transcript_names", "any_NMD", "any_first_exon", "any_last_exon", colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na)[grep(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_OB_ud)")])]
 
 colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na) <- gsub(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
 
@@ -1234,6 +1827,9 @@ PSI_levels_timeseries_constitutive_OB_wide_na.rows <- apply(PSI_levels_timeserie
 PSI_levels_timeseries_constitutive_OB_wide_with_na <- cbind(PSI_levels_timeseries_constitutive_OB_wide_with_na, MSC = 0)
 
 PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[-PSI_levels_timeseries_constitutive_OB_wide_na.rows, ]
+
+# reorder cols to match chronological order
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::select(-OBseries_timepoints), PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::select(OBseries_timepoints))
 
 print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide_with_na$AS_event_ID %>% unique), "unique CONSTITUTIVE junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
 
@@ -1249,9 +1845,11 @@ row.names(PSI_levels_timeseries_constitutive_OB_wide) <- NULL
 
 print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide$AS_event_ID %>% unique), "unique CONSTITUTIVE junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
 
-write.table(x = PSI_levels_timeseries_constitutive_OB_wide, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_OB_wide), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_constitutive_OB_wide, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_constitutive_OB_wide$AS_event_ID %>% unique), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
+
+# DRAWING SOMS TO ANALYSE TIME SERIES DATA
 
 ## construction of a 5x5 SOM
 
@@ -1266,7 +1864,7 @@ number_of_som_clusters <- OB_xdim * OB_ydim
 
 # OB series #####
 
-som_5_by_5_OBseries_table  <- PSI_levels_timeseries_OB_wide[, c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")]
+som_5_by_5_OBseries_table  <- PSI_levels_timeseries_OB_wide[, OBseries_timepoints]
 
 som_5_by_5_OBseries_table <- som_5_by_5_OBseries_table %>% genescale(m = ., axis = 1, method = "Z")
 
@@ -1327,10 +1925,10 @@ ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = s
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1423,9 +2021,9 @@ ggplot(OB_anysig_GOtest_all_topten, aes(x = reorder(Term, Padj), y = SampleMatch
   ylab("Number of genes in GO term") +
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
 
 
 write.table(x = OB_anysig_GOtest_all_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
@@ -1510,10 +2108,10 @@ purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_top
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2, .y = names(list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2), .f = ~write.table(x = .x, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2, .y = names(list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2), .f = ~write.table(x = .x, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -1885,8 +2483,8 @@ ggplot(OB_anysig_family_enrichment_topten, aes(x = reorder(TermID, padj), y = ge
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 write.table(x = OB_anysig_family_enrichment_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
   
@@ -2011,10 +2609,10 @@ ggplot(wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, aes(x = re
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
-write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2028,19 +2626,33 @@ write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, f
 
 library(rtracklayer)
 
-gtf_table <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
 
-gtf_table <- dplyr::select(gtf_table, -source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
+tibble_ref_gtf_simplified <- tibble_ref_gtf %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
 
-colnames(gtf_table) <- c("chr", "start", "end", "width", "strand", "type", "phase", "gene_id", "gene_name", "gene_biotype", "transcript_id", "transcript_name", "transcript_biotype", "exon_number", "exon_id", "protein_id") 
+colnames(tibble_ref_gtf_simplified) <- c("chr", "start", "end", "width", "strand", "type", "phase", "gene_id", "gene_name", "gene_biotype", "transcript_id", "transcript_name", "transcript_biotype", "exon_number", "exon_id", "protein_id") 
 
-gtf_table <- gtf_table %>% mutate_if(is.factor, as.character) %>% as_tibble
+tibble_ref_gtf_simplified <- tibble_ref_gtf_simplified %>% mutate_if(is.factor, as.character)
 
+# import dbPTM info
+# Z:/dbPTM_download/extract/allPTM_human.txt
+# dbPTM_allhuman_annotations <- read.delim("/media/Ubuntu/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-# 
-# testuniprotID <- getBM(filters = "ensembl_peptide_id", values = SNF2_enriched_isoforms_consequence$overlapping_annotated_regions$ATRX$protein_id %>% na.omit %>% unique, attributes = "uniprotsptrembl", mart = ensembl_mart) %>% setNames("uniprotkb_entry")
-# 
-# test2 <- semi_join(dbPTM_allhuman_annotations, testuniprotID, by = "uniprotkb_entry")
+
+
+# import PhosphoSitePlus info
+# Z:/phosphositeplus_phosphosites_human.tab
+# phosphosite_allhuman_phosphosites <- read.delim("/media/Ubuntu/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+phosphosite_allhuman_phosphosites <- read.delim("Z:/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+# change the residue position column
+phosphosite_allhuman_phosphosites[, "modified_residue_position"] <- gsub(x = phosphosite_allhuman_phosphosites$modified_residue_position, pattern = "^([A-Z])([0-9]{1,5})(.*)", replacement = "\\2")
+
+# remove rows where phosphosite is NA
+row.indices_phosphosite.is.na <- which(is.na(phosphosite_allhuman_phosphosites$modified_residue_position))
+
+phosphosite_allhuman_phosphosites <- phosphosite_allhuman_phosphosites[-row.indices_phosphosite.is.na, ]
 
 ```
 
@@ -2048,62 +2660,91 @@ dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human
 
 ```{r eval=FALSE, include=FALSE}
 
-# select mirror
-
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
-
-# sometimes, JUM seems to call novel splice junctions that are DIRECTLY adjacent to annotated regions but do not overlap. if we expand the genomic coordinates by 1 on each side, we can capture these regions too.
+# sometimes, JUM seems to call novel splice junctions that are slightly off by at most 2 nt. If we expand the genomic coordinates by 2 on each side, we can correct for this.
 
 enable_greedy_genome_coordinates <- function(tibble_chr_strand_start_end) {
   
-  tibble_chr_strand_start_end[, "start"] <- tibble_chr_strand_start_end$start - 1
-  tibble_chr_strand_start_end[, "end"] <- tibble_chr_strand_start_end$end + 1
+  tibble_chr_strand_start_end[, "start"] <- tibble_chr_strand_start_end$start - 2
+  tibble_chr_strand_start_end[, "end"] <- tibble_chr_strand_start_end$end + 2
   
   return(tibble_chr_strand_start_end)
   
 }
 
-# list_of_highest_PSI_isoforms_per_timepoint_OBseries_lookuptable <- list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID %>% purrr::map(as_tibble)
+# all plausible differential junctions
+all_plausible_diff_junctions_chr_strand_start_end <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% unique %>% enable_greedy_genome_coordinates
 
-# all kinases
-kinase_isoforms <- dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, vector_protein_kinases, by = "Gene") %>% as_tibble
-  
-kinase_isoforms_chr_strand_start_end <- kinase_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% unique
+message("total number of unique junction structures queried: ", all_plausible_diff_junctions_chr_strand_start_end$AS_event_ID %>% unique %>% length)
 
-kinase_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(kinase_isoforms_chr_strand_start_end, gtf_table, ensembl_mart)
+all_plausible_diff_junctions_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(all_plausible_diff_junctions_chr_strand_start_end, gtf_table = tibble_ref_gtf_simplified, ensembl_mart)
 
-kinase_isoforms_consequence_simplified <- kinase_isoforms_consequence %>% simplify_consequence_table(., ensembl_mart)
+tibble_all_plausible_diff_transcript_level_results <- all_plausible_diff_junctions_consequence$transcript_level_results
 
-# all RBPs
+tibble_transcript_level_summary_count <- tibble_all_plausible_diff_transcript_level_results %>% dplyr::group_by(AS_event_ID) %>% 
+  dplyr::summarise(number_protein_coding = any(transcript_biotype == "protein_coding"),
+                   number_lncrna = any(transcript_biotype == "lncRNA"),
+                   number_micrna = any(transcript_biotype == "miRNA"),
+                   number_three_prime_utr = any(type == "three_prime_utr"),
+                   number_five_prime_utr = any(type == "five_prime_utr"),
+                   number_CDS = any(type == "CDS"))
 
-RBP_isoforms <- tibble(Gene = c("SRSF2", "SRSF3", "MBNL2", "HNRNPDL", "SNRPA1", "SRRM2", "SRPK2", "RBM41")) %>% dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, ., by = "Gene") %>% as_tibble %>% mutate_if(is.factor, as.character)
+message("total number of unique differential junction structures with any sort of transcript-level annotation: ", nrow(tibble_transcript_level_summary_count))
 
-RBP_isoforms_chr_strand_start_end <- RBP_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% unique
+message("percent of differential junction structures overlapping a protein coding transcript: ", length(which(tibble_transcript_level_summary_count$number_protein_coding == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
+message("percent of differential junction structures overlapping an lncRNA transcript: ", length(which(tibble_transcript_level_summary_count$number_lncrna == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
+message("percent of differential junction structures overlapping a miRNA transcript: ", length(which(tibble_transcript_level_summary_count$number_micrna == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
 
-RBP_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(RBP_isoforms_chr_strand_start_end[3, ], gtf_table, ensembl_mart)
+message("percent of differential junction structures overlapping a 3' UTR region: ", length(which(tibble_transcript_level_summary_count$number_three_prime_utr == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
+message("percent of differential junction structures overlapping a 5' UTR region: ", length(which(tibble_transcript_level_summary_count$number_five_prime_utr == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
+message("percent of differential junction structures overlapping a CDS region: ", length(which(tibble_transcript_level_summary_count$number_CDS == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
 
-RBP_isoforms_consequence_simplified <- RBP_isoforms_consequence %>% simplify_consequence_table(., ensembl_mart)
+tibble_all_plausible_diff_protein_level_results <- all_plausible_diff_junctions_consequence$protein_level_results
 
-# all major regulator isoforms
+unique_interpro_ids <- tibble_all_plausible_diff_protein_level_results$interpro %>% .[tibble_all_plausible_diff_protein_level_results$interpro != "FALSE"]  %>% strsplit(split = ";") %>% unlist %>% unique
 
-major_regulator_isoforms <- tibble(Gene = c("RUNX2", "MACF1", "POLB", "DDX5", "DROSHA", "FBXO5", "FBXL19", "FBXW2", "NFYA", "ATXN2L", "ZBTB7A", "ABI1", "ACTR5", "TARID")) %>% dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, ., by = "Gene") %>% as_tibble %>% mutate_if(is.factor, as.character)
+tibble_protein_level_summary_count <- tibble_all_plausible_diff_protein_level_results %>% dplyr::group_by(AS_event_ID) %>% 
+  dplyr::summarise(overlaps_interpro_domain = any(interpro != "FALSE"),
+                   unique_interpro_ids = interpro %>% strsplit(split = ";") %>% unlist %>% unique %>% .[. != "FALSE"] %>% paste(collapse = ";"),
+                   overlaps_LCR = any(seg != "FALSE"),
+                   overlaps_disordered_region = any(mobidblite != "FALSE"),
+                   overlaps_ncoils = any(ncoils != "FALSE"),
+                   overlaps_signalp = any(signalp != "FALSE"),
+                   overlaps_tmhmm = any(tmhmm != "FALSE"))
 
-major_regulator_isoforms_chr_strand_start_end <- major_regulator_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% unique
+vector_unique_interpro_ids <- tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort
 
-major_regulator_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(major_regulator_isoforms_chr_strand_start_end, gtf_table, ensembl_mart)
+# create tally of each unique instance of interpro ID per AS_event_ID
+tibble_interpro_id_tally_per_ASeventID <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% .[order(.$tally), ] %>% dplyr::arrange(desc(tally))
+# fetch descriptions of interpro ID
+tibble_interpro_ID_to_description_mapping <- getBM(filters = "interpro", values = tibble_interpro_id_tally_per_ASeventID$interpro_id, attributes = c("interpro", "interpro_description"), mart = ensembl_mart) %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
+# add column for plotting
+tibble_interpro_ID_to_description_mapping <- tibble_interpro_ID_to_description_mapping %>% add_column("interpro_identifier" = paste(tibble_interpro_ID_to_description_mapping$interpro_description, " (", tibble_interpro_ID_to_description_mapping$interpro_id, ")", sep = ""))
+# tibble join
+tibble_interpro_id_tally_per_ASeventID <- dplyr::right_join(tibble_interpro_ID_to_description_mapping, tibble_interpro_id_tally_per_ASeventID, by = "interpro_id")
+# plot
+ggplot(tibble_interpro_id_tally_per_ASeventID %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
+  geom_col(fill = "dodgerblue2") +
+  ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of differential junctions", dPSI_cutoff, "and any sig", p_or_q_value, qpvalue_cutoff, "encompassing", nrow(tibble_protein_level_summary_count), "PLAUSIBLE junctions")) +
+  xlab("Interpro identifier") +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Number of hits") +
+  # coord_cartesian(ylim = c(0, 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
 
-major_regulator_isoforms_consequence_simplified <- major_regulator_isoforms_consequence %>% simplify_consequence_table(., ensembl_mart)
+write.table(x = tibble_interpro_id_tally_per_ASeventID, file = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-# phenotype isoforms
+message("total number of unique junction structures with any sort of protein-level annotation: ", nrow(tibble_protein_level_summary_count), " (", nrow(tibble_protein_level_summary_count)*100/nrow(tibble_transcript_level_summary_count), "% of those which have any transcript annotation)")
 
-phenotype_isoforms <- tibble(Gene = c("ATP2B4", "ATP2B1", "LIME1", "CACNA2D1", "VPS13D", "WNK1", "ILK", "GOLGA4", "GOLGB1", "ITGAE")) %>% dplyr::semi_join(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, ., by = "Gene") %>% as_tibble %>% mutate_if(is.factor, as.character)
+message("total percent of unique junction structures overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
-phenotype_isoforms_chr_strand_start_end <- phenotype_isoforms %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end %>% unique
-
-phenotype_isoforms_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(phenotype_isoforms_chr_strand_start_end, gtf_table, ensembl_mart)
-
-phenotype_isoforms_consequence_simplified <- phenotype_isoforms_consequence %>% simplify_consequence_table(., ensembl_mart)
-
+message("total percent of unique junction structures overlapping a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique junction structures overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique junction structures overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique junction structures overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique junction structures overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
 ```
 
@@ -2353,15 +2994,14 @@ ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, aes(x = tim
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
 kinases only
-
 
 ```{r}
 
@@ -2378,14 +3018,13 @@ ggplot(dplyr::semi_join(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plaus
   ylab("Normalised PSI Level") +
   # guides(colour = FALSE) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(dplyr::semi_join(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, vector_protein_kinases, by = "Gene") %>% .$isoform_ID), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength_kinases.pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(dplyr::semi_join(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, vector_protein_kinases, by = "Gene") %>% .$isoform_ID), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength_kinases.svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(dplyr::semi_join(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, vector_protein_kinases, by = "Gene") %>% .$isoform_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength_kinases.pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(dplyr::semi_join(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, vector_protein_kinases, by = "Gene") %>% .$isoform_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength_kinases.svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(dplyr::semi_join(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, vector_protein_kinases, by = "Gene") %>% .$isoform_ID), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength_kinases.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(dplyr::semi_join(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible, vector_protein_kinases, by = "Gene") %>% .$isoform_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength_kinases.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
-
 
 speckles only
 
@@ -2514,10 +3153,10 @@ purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_AS_
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_AS_plausible_topten_2, .y = names(list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_AS_plausible_topten_2), .f = ~write.table(x = .x, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_AS_plausible_topten_2, .y = names(list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_AS_plausible_topten_2), .f = ~write.table(x = .x, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -2554,10 +3193,10 @@ ggplot(wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten_AS_plausibl
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
-write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2984,10 +3623,10 @@ ggplot(wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_pla
   ylab("Number of genes enriched amongst RBP target genes") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 60)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
-write.table(x = wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 
 ```
@@ -3208,6 +3847,38 @@ ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
 
 ## frequency distribution of no. junctions structures detected/gene
 
+### all junctions
+
+```{r}
+
+avg_junctions_per_gene_all <- (wide_table_all_splicemodes_split_with_na$AS_event_ID %>% unique %>% length)/(wide_table_all_splicemodes_split_with_na$Gene %>% unique %>% length)
+
+print(paste("There are", avg_junctions_per_gene_all, "unique junction structures overall without considering plausible AS length"))
+
+junctions_per_gene_all_freq <- wide_table_all_splicemodes_split_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(Gene) %>% summarise(no_junctions = n())
+
+junctions_per_gene_all_freq_2 <- junctions_per_gene_all_freq %>% group_by(no_junctions) %>% summarise(numberofgeneswithjunctionnumber = n())
+
+# ggplot
+
+ggplot(junctions_per_gene_all_freq_2) + 
+  geom_col(aes(y = numberofgeneswithjunctionnumber, x = no_junctions)) +
+  geom_text(data = junctions_per_gene_all_freq_2, aes(label = numberofgeneswithjunctionnumber, y = numberofgeneswithjunctionnumber + 20, x = no_junctions), position = position_nudge(y = 50)) +
+  ggtitle(paste("frequency distribution of ALL junctions per gene 
+                ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
+  # scale_x_continuous(trans = "log2") +
+  xlim(c(0, 20)) +
+  xlab("number of junctions/gene") +
+  ylab("number of genes") +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_all_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_all_junctions_per_gene_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+
+print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_per_gene_all_freq_2[1, 2]/junctions_per_gene_all_freq_2[2, 2]))
+
+```
+
 ### all constitutive junctions
 
 ```{r}
@@ -3302,10 +3973,7 @@ print(paste("Ratio of number of 1 isoform genes : 2 isoform genes =", junctions_
 
 ```
 
-
 ## frequency distribution of no. events detected per category
-
-### all junctions
 
 ```{r}
 
@@ -3320,7 +3988,6 @@ junctions_per_category_summary_2 <- add_column(junctions_per_category_summary, "
 long_junctions_per_category_summary_2 <- reshape2::melt(junctions_per_category_summary_2, id.vars = "splicemode")
 
 long_junctions_per_category_summary_3 <- add_column(long_junctions_per_category_summary_2, "value_numeric" = gsub(x = long_junctions_per_category_summary_2$value, pattern = " %", replacement = "") %>% as.numeric)
-
 
 # ggplot
 
@@ -3340,16 +4007,194 @@ ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_jun
 
 ```
 
-## plot the gene expr against the no. junctions detected
+## frequency distribution of no. junctions detected with NMD/first exon/last exon
+
+incl. NMD, first/last junction.
 
 ```{r}
 
-# logCPM_OBseries_allgenes_dir <- "//VBOXSVR/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/analysis_RSEM_local/run_1_original/R_processing_results/edgeR_allgenes_logCPM.txt"
-# 
-# GLM_edgeR_logCPM_allgenes <- read_delim(paste(logCPM_OBseries_allgenes_dir), delim = "\t")
+# ALL JUNCTIONS
+# category means splicemode + NMD status + first/last junction
+# also clean up the splicemode column
+tibble_junctions_per_category_all <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_all = n())
 
+all_junctions_count <- tibble_junctions_per_category_all$no_junctions_all %>% sum(na.rm = TRUE)
+number_NMD_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$any_NMD == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
+number_first_junction_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$any_first_exon == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
+number_last_junction_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$any_last_exon == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
 
+message("There are ", number_NMD_all_junctions*100/all_junctions_count, "% NMD junctions overall.")
+message("There are ", number_first_junction_all_junctions*100/all_junctions_count, "% first junctions overall.")
+message("There are ", number_last_junction_all_junctions*100/all_junctions_count, "% last junctions overall.")
 
+# CONSTITUTIVE JUNCTIONS
+tibble_junctions_per_category_constitutive <- PSI_levels_timeseries_constitutive_OB_wide %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_constitutive = n())
+
+constitutive_junctions_count <- tibble_junctions_per_category_constitutive$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_NMD_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_first_junction_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$any_first_exon == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_last_junction_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$any_last_exon == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
+
+message("There are ", number_NMD_constitutive_junctions*100/constitutive_junctions_count, "% NMD junctions constitutive.")
+message("There are ", number_first_junction_constitutive_junctions*100/constitutive_junctions_count, "% first junctions constitutive.")
+message("There are ", number_last_junction_constitutive_junctions*100/constitutive_junctions_count, "% last junctions constitutive.")
+
+# DIFFERENTIAL JUNCTIONS
+tibble_junctions_per_category_differential <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_differential = n())
+
+differential_junctions_count <- tibble_junctions_per_category_differential$no_junctions_differential %>% sum(na.rm = TRUE)
+number_NMD_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_NMD == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
+number_first_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_first_exon == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
+number_last_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_last_exon == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
+
+message("There are ", number_NMD_differential_junctions*100/differential_junctions_count, "% NMD exons differential.")
+message("There are ", number_first_exon_differential_junctions*100/differential_junctions_count, "% first exons differential.")
+message("There are ", number_last_exon_differential_junctions*100/differential_junctions_count, "% last exons differential.")
+
+# DIFFERENTIAL JUNCTIONS (PLAUSIBLE)
+tibble_junctions_per_category_differential_plausible <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_differential_plausible = n())
+
+differential_plausible_junctions_count <- tibble_junctions_per_category_differential_plausible$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+number_NMD_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_NMD == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+number_first_exon_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_first_exon == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+number_last_exon_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_last_exon == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
+
+message("There are ", number_NMD_differential_plausible_junctions*100/differential_plausible_junctions_count, "% NMD exons differential (plausible).")
+message("There are ", number_first_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% first exons differential (plausible).")
+message("There are ", number_last_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% last exons differential (plausible).")
+
+# COMBINE ALL THE TABLES FOR PLOTTING
+tibble_junctions_per_category_summary <- list(tibble_junctions_per_category_all, tibble_junctions_per_category_constitutive, tibble_junctions_per_category_differential, tibble_junctions_per_category_differential_plausible) %>% purrr::reduce(dplyr::full_join)
+
+# melt the sample
+long_tibble_junctions_per_category_summary <- reshape2::melt(tibble_junctions_per_category_summary, id.vars = c("splicemode", "any_NMD", "any_first_exon", "any_last_exon"), variable.name = "sample", value.name = "number_of_junctions_per_category") %>% as_tibble %>% 
+  # add the overall counts for each splicemode
+  dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_junctions_per_splicemode" = sum(number_of_junctions_per_category %>% na.omit))
+
+# melt the category (splicemode + NMD+ first + last exon)
+long_tibble_junctions_per_category_summary_2 <- reshape2::melt(long_tibble_junctions_per_category_summary, id.vars = c("splicemode", "sample", "number_of_junctions_per_category", "number_of_junctions_per_splicemode"), variable.name = "NMD_first_last_exon", value.name = "NMD_first_last_exon_value") %>% as_tibble %>% 
+  # add the overall counts for each unique category
+  dplyr::group_by(splicemode, sample, NMD_first_last_exon, NMD_first_last_exon_value) %>% dplyr::mutate("number_of_junctions_per_category" = sum(number_of_junctions_per_category %>% na.omit)) %>% unique %>%
+  # add the percentage for each category/splicemode
+  dplyr::mutate("percentage_junctions_per_category" = number_of_junctions_per_category*100/number_of_junctions_per_splicemode)
+
+max_number_of_junctions_per_splicemode <- max(long_tibble_junctions_per_category_summary_2$number_of_junctions_per_splicemode)
+max_percentage_junctions_per_category <- max(long_tibble_junctions_per_category_summary_2[long_tibble_junctions_per_category_summary_2$NMD_first_last_exon_value == TRUE, ] %>% .$percentage_junctions_per_category %>% na.omit)
+max_number_of_junctions_per_splicemode_for_plot <- max_number_of_junctions_per_splicemode
+
+# ggplot
+ggplot() + 
+  geom_col(data = long_tibble_junctions_per_category_summary_2[, c("splicemode", "sample", "number_of_junctions_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_junctions_per_splicemode, x = splicemode)) +
+  facet_wrap(~sample, scales = "free", labeller = labeller(sample = c(no_junctions_all = "All junctions", no_junctions_constitutive = "Constitutive", no_junctions_differential = "Differential", no_junctions_differential_plausible = "Differential (plausible)"))) +
+  geom_label(data = long_tibble_junctions_per_category_summary_2[, c("splicemode", "sample", "number_of_junctions_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_junctions_per_splicemode, y = number_of_junctions_per_splicemode, x = splicemode), position = position_identity()) +
+  geom_jitter(data = long_tibble_junctions_per_category_summary_2[long_tibble_junctions_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_junctions_per_category * max_number_of_junctions_per_splicemode_for_plot / max_percentage_junctions_per_category, shape = NMD_first_last_exon), width = 0.1, height = 0) +
+  ggtitle(paste("Frequency distribution of junctions per category 
+                ", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, sep = "")) +
+  xlab("Splicemode") +
+  scale_y_continuous(name = "Number of junctions", limits = c(0, max_number_of_junctions_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_junctions_per_category/max_number_of_junctions_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
+  scale_shape_manual(name = "Category", limits = c("any_NMD", "any_first_exon", "any_last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_directory_figures, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 30, units = "cm") +
+  ggsave(filename = paste(results_directory_figures, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 30, units = "cm") 
+
+# upset plot
+## all junctions
+df <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_alljunctions.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
+
+## all constitutive
+df <- PSI_levels_timeseries_constitutive_OB_wide %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
+
+## all differential
+df <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
+
+## differential (plausible)
+df <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+
+df[is.na(df)] = FALSE
+
+upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential_plausible.pdf", sep = ""), height = 4, width = 10)
+
+ComplexHeatmap::UpSet(upset_combs, 
+                      comb_order = order(-comb_size(upset_combs)), 
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
+                                                                     "any_first_exon" = "Junction ontology",
+                                                                     "any_last_exon" = "Junction ontology",
+                                                                     "A3SS_events" = "Splicemode",
+                                                                     "A5SS_events" = "Splicemode",
+                                                                     "cassette_exon_events" = "Splicemode",
+                                                                     "composite_events" = "Splicemode",
+                                                                     "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                      col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
+                                                      ))
+
+dev.off()
 
 ```
 
@@ -3463,7 +4308,7 @@ wide_tibble_absolute.ud.PSI <- wide_tibble_of_all_detailed_tables_12d.ud.only_4[
 ```{r}
 
 # append the absolute PSI at timepoint ud
-wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table <- dplyr::left_join(PSI_levels_timeseries_OB_wide %>% type_convert, wide_tibble_absolute.ud.PSI %>% type_convert, by = c("AS_event_ID", "splicemode", "12d")) %>% as_tibble
+wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table <- dplyr::left_join(PSI_levels_timeseries_OB_wide_with_na %>% type_convert, wide_tibble_absolute.ud.PSI %>% type_convert, by = c("AS_event_ID", "splicemode", "12d")) %>% as_tibble
 
 tibble_OBseries_absolute_PSI_levels_timeseries <- wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table
 
@@ -3546,8 +4391,54 @@ list_of_tibbles_OBseries_absolute_PSI_levels_timeseries_junction.switched <- lis
 
 tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched <- list_of_tibbles_OBseries_absolute_PSI_levels_timeseries_junction.switched %>% rbindlist %>% as_tibble
 
-# by definition, candidate switched junctions do not have NA
+# by definition, junctions that go from NA to not NA are switched
 write.table(x = tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched, file = paste(results_directory_figures, "wide_table_of_",  nrow(tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched), "_switched.junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+## Use the NA values in junction switching to determine average expression of NA
+
+we can use this info to determine if values are missing at random or left-censored.
+
+### fetch row indices which have at least one NA
+
+```{r}
+
+# get row indices of the final junction switching table while have at least one NA
+
+row.indices_junc.switch.table_any.na <- tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched[, OBseries_timepoints] %>% apply(MARGIN = 1, FUN = function(X) {
+  
+  return(any(is.na(X)) == TRUE)
+  
+} )
+
+row.indices_junc.switch.table_any.na <- which(row.indices_junc.switch.table_any.na == TRUE)
+
+```
+
+### extract AS_event_ID of na, join onto the wide tibble of detailed tables
+
+```{r}
+
+tibble_AS_event_ID_which_have_na <- tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched[row.indices_junc.switch.table_any.na, ] %>% .$AS_event_ID %>% unique %>% tibble::enframe(value = "AS_event_ID")
+
+# join to get all the values with na
+wide_tibble_of_all_detailed_tables_with_na <- dplyr::semi_join(wide_tibble_of_all_detailed_tables, tibble_AS_event_ID_which_have_na, by = "AS_event_ID") %>% type_convert
+
+# join to get all the values with no na
+wide_tibble_of_all_detailed_tables_with_no_na <- dplyr::anti_join(wide_tibble_of_all_detailed_tables, tibble_AS_event_ID_which_have_na, by = "AS_event_ID") %>% type_convert
+
+```
+
+### plot distributions
+
+```{r}
+
+plot(density(bw = 0.01, c(wide_tibble_of_all_detailed_tables_with_na$logCPM_1 %>% na.omit, wide_tibble_of_all_detailed_tables_with_na[wide_tibble_of_all_detailed_tables_with_na$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud", ] %>% .$logCPM_2 %>% na.omit)), main = "junction logCPM counts for junction structures with missing values")
+
+plot(density(bw = 0.01, c(wide_tibble_of_all_detailed_tables_with_no_na$logCPM_1 %>% na.omit, wide_tibble_of_all_detailed_tables_with_no_na[wide_tibble_of_all_detailed_tables_with_no_na$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud", ] %>% .$logCPM_2 %>% na.omit)), main = "junction logCPM counts for junction structures with no missing values")
+
+plot(density(bw = 0.01, c(wide_tibble_of_all_detailed_tables %>% type_convert %>% .$logCPM_1 %>% na.omit, wide_tibble_of_all_detailed_tables[wide_tibble_of_all_detailed_tables$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud", ] %>% type_convert %>% .$logCPM_2 %>% na.omit)), main = "junction logCPM counts for all junction structures")
 
 ```
 

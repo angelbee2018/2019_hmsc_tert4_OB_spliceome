@@ -1,0 +1,472 @@
+---
+title: "Multiomic Synthesis - Phospho-proteo-spliceome project"
+author: "Angel Liang"
+date: "16/04/2020"
+output: html_document
+---
+
+# Set the running environment
+
+## Packages and directories
+
+```{r}
+
+library(tidyverse)
+library(gtools)
+library(extrafont)
+# font_import(paths = "~/.local/share/fonts/")
+loadfonts(device = "pdf")
+windowsFonts("Helvetica" = windowsFont("Helvetica"))
+library(RColorBrewer)
+
+library(genefilter)
+
+library(ggplot2)
+library(kohonen)
+library(genefilter)
+# library(gplots)
+# library(lattice)
+library(svglite)
+library(scales)
+library(furrr)
+options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
+plan(multiprocess)
+memory.limit(100000)
+
+library(crayon)
+
+# library(biomaRt)
+# ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
+# library(systemPipeR)
+# library(GOstats)
+# library(PFAM.db)
+# library(bc3net)
+
+# library(ComplexHeatmap)
+
+# library(ggdendro)
+# library(data.table)
+# library(Rfast)
+
+
+results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/multiomic_synthesis/results/"
+# results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/multiomic_synthesis/results/"
+
+# results_directory_figures <- paste(results_dir, "figures/", sep="")
+# 
+# if(! dir.exists(results_directory_figures) ) {
+#      dir.create(results_directory_figures, recursive = TRUE)}
+
+# import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
+# tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+
+# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+
+# tibble_ref_gtf_with_NMD_flagged <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E2.gtf") %>% as_tibble
+tibble_ref_gtf_with_NMD_flagged_E2 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E2.gtf") %>% as_tibble
+tibble_ref_gtf_with_NMD_flagged_E3 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E3.gtf") %>% as_tibble
+tibble_ref_gtf_with_NMD_flagged_E4 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E4.gtf") %>% as_tibble
+tibble_ref_gtf_with_NMD_flagged_E5 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E5.gtf") %>% as_tibble
+
+UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+# UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+
+```
+
+## define functions
+
+### FUNCTION TO CONVERT JUM AS_EVENT_ID TO CHR STRAND START END
+
+- will drop non-unique entries
+- f: tibble => tibble
+
+```{r}
+
+JUM_AS.event.ID_to_chr_strand_start_end <- function(tibble) {
+  
+  vec_AS.event.ID_unique <- tibble$AS_event_ID %>% unique
+  
+  vec_chr <- gsub(x = vec_AS.event.ID_unique, pattern = "^([^_]+)_(\\+|\\-)_([0-9]{1,10})(.*)_([0-9]{1,10})$", replacement = "\\1")
+  vec_strand <- gsub(x = vec_AS.event.ID_unique, pattern = "^([^_]+)_(\\+|\\-)_([0-9]{1,10})(.*)_([0-9]{1,10})$", replacement = "\\2")
+  vec_start <- gsub(x = vec_AS.event.ID_unique, pattern = "^([^_]+)_(\\+|\\-)_([0-9]{1,10})(.*)_([0-9]{1,10})$", replacement = "\\3")
+  vec_end <- gsub(x = vec_AS.event.ID_unique, pattern = "^([^_]+)_(\\+|\\-)_([0-9]{1,10})(.*)_([0-9]{1,10})$", replacement = "\\5")
+  
+  vec_identifier <- paste(vec_chr, ":", vec_start, "-", vec_end, ":", vec_strand, sep = "")
+  
+  return(tibble("identifier" = vec_identifier,
+                "chr" = vec_chr,
+                "strand" = vec_strand,
+                "start" = vec_start,
+                "end" = vec_end))
+  
+}
+
+```
+
+### FUNCTION TO CONVERT PSI-SIGMA DIFF_EXON_COORDS TO CHR STRAND START END
+
+- will drop non-unique entries
+- f: tibble => tibble
+
+```{r}
+
+PSIsigma_diff.exon.coords_to_chr_strand_start_end <- function(tibble) {
+  
+  vec_diff.exon.coords <- tibble$diff_exon_coords
+  
+  vec_chr <- gsub(x = vec_diff.exon.coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})$", replacement = "\\1")
+  vec_strand <- tibble$matched_strand
+  vec_start <- gsub(x = vec_diff.exon.coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})$", replacement = "\\2")
+  vec_end <- gsub(x = vec_diff.exon.coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})$", replacement = "\\3")
+  
+  vec_identifier <- paste(vec_chr, ":", vec_start, "-", vec_end, ":", vec_strand, sep = "")
+    
+  return(tibble("identifier" = vec_identifier,
+                "chr" = vec_chr,
+                "strand" = vec_strand,
+                "start" = vec_start,
+                "end" = vec_end) %>% unique)
+  
+}
+
+```
+
+### FUNCTION TO CHANGE THE NAME OF ONE COLUMN WITH EXACT MATCH
+
+```{r}
+
+rename_column_exact <- function(input_tibble, target_column, output_colname) {
+  
+  output_tibble <- input_tibble
+  
+  colnames(output_tibble)[which(colnames(output_tibble) == target_column)] <- output_colname
+  
+  return(output_tibble)
+  
+}
+
+```
+
+# Comparison between JUM and PSI-Sigma
+
+## Calculate the number of junction/exons found in common
+
+### Import tables
+
+```{r}
+
+# JUM ###
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_JUM_all_junctions_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+# PSI-Sigma ###
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+```
+
+### Calculate intersections
+
+STRATEGY: use one table to look up other table. one-directional evidence is required and sufficient for intersection.
+
+#### create generic function to do this job.
+
+```{r}
+
+calculate_intersections_from_chr_strand_start_end <- function(tibble_1, tibble_2, tibble_1_tolerance_left, tibble_1_tolerance_right) {
+  
+  # DEBUG ###
+  # tibble_1 <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na
+  # tibble_2 <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na
+  # tibble_1_tolerance_left <- 2
+  # tibble_1_tolerance_right <- 2
+  ###########
+  
+  # list-ify tibble_1
+  list_tibble_1_array.tree <- tibble_1 %>% array_tree
+  # set L1 names as identifier names
+  names(list_tibble_1_array.tree) <- tibble_1$identifier
+  
+  # match each element of tibble_1 to tibble_2 and see if there is a valid subset found.
+  list_tibble_1_to_2_matches <- future_map(.x = list_tibble_1_array.tree, .f = function(.x) {
+    
+    # DEBUG ###
+    # .x <- list_tibble_1_array.tree[[3]]
+    ###########
+    
+    subset <- tibble_2[tibble_2$chr == .x$chr %>% paste %>% trimws, ] %>% 
+      .[.$strand == .x$strand %>% paste %>% trimws, ] %>% 
+      .[(.$start < (.x$end %>% paste %>% trimws %>% as.numeric) + tibble_1_tolerance_right) & (.$end > (.x$start %>% paste %>% trimws %>% as.numeric) - tibble_1_tolerance_left), ]
+    
+    if (nrow(subset) == 0) {
+      return("no_overlap")
+    } else {
+      return(subset)
+    }
+    
+  }, .progress = TRUE, .options = future_options(globals = c("tibble_2")))
+  
+  # extract the list indices which had valid overlap
+  vector_list.indices_with_valid_overlap <- list_tibble_1_to_2_matches %>% purrr::map(~all(.x == "no_overlap") == FALSE) %>% unlist %>% which
+  # return aggregate number of overlap
+  number_of_entries_with_valid_overlap <- vector_list.indices_with_valid_overlap %>% length
+  # return summary list of matching table entries
+  list_overlapped_table_entries <- future_imap(.x = list_tibble_1_to_2_matches[vector_list.indices_with_valid_overlap], .f = ~list("tibble_1_entry" = tibble_1[tibble_1$identifier == .y, ],
+                                                                                                                                   "tibble_2_entry" = .x), .progress = TRUE, .options = future_options(globals = c("tibble_1")))
+  
+  return(list("number_of_entries_tibble_1" = nrow(tibble_1),
+              "number_of_entries_tibble_2" = nrow(tibble_2),
+              "number_of_common_entries" = number_of_entries_with_valid_overlap,
+              "detailed_result" = list_overlapped_table_entries))
+  
+}
+
+```
+
+#### run the intersections
+
+```{r}
+
+# JUM differential/dpsi0.15/qvalue0.01/with_na vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM differential/dpsi0.15/qvalue0.01/with_na (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# JUM differential/dpsi0.15/qvalue0.01/with_na vs. PSIsigma all exons/with_na
+JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_all_exons_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM differential/dpsi0.15/qvalue0.01/with_na (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na$number_of_common_entries, "\n"))
+
+# JUM all junctions/with_na vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_JUM_all_junctions_with_na%>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# JUM all junctions/with_na vs. PSIsigma all exons/with_na
+JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_JUM_all_junctions_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end, 
+                                                    tibble_PSIsigma_all_exons_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_common_entries, "\n"))
+
+```
+
+#### repeat the intersections with only genes in common
+
+```{r}
+
+# JUM differential/dpsi0.15/qvalue0.01/with_na vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes <-
+  calculate_intersections_from_chr_strand_start_end(dplyr::semi_join(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% rename_column_exact(target_column = "matched_gene_names", output_colname = "Gene"), by = "Gene") %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    dplyr::semi_join(tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::select(-matched_gene_names) %>% rename_column_exact(target_column = "Gene", output_colname = "matched_gene_names"), by = "matched_gene_names") %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM differential/dpsi0.15/qvalue0.01/with_na (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_common_entries, "\n"))
+
+# JUM differential/dpsi0.15/qvalue0.01/with_na vs. PSIsigma all exons/with_na
+JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na_common.genes <-
+  calculate_intersections_from_chr_strand_start_end(dplyr::semi_join(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na, tibble_PSIsigma_all_exons_with_na %>% rename_column_exact(target_column = "matched_gene_names", output_colname = "Gene"), by = "Gene") %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    dplyr::semi_join(tibble_PSIsigma_all_exons_with_na, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::select(-matched_gene_names) %>% rename_column_exact(target_column = "Gene", output_colname = "matched_gene_names"), by = "matched_gene_names") %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM differential/dpsi0.15/qvalue0.01/with_na (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_common_entries, "\n"))
+
+# JUM all junctions/with_na vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes <-
+  calculate_intersections_from_chr_strand_start_end(dplyr::semi_join(tibble_JUM_all_junctions_with_na, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% rename_column_exact(target_column = "matched_gene_names", output_colname = "Gene"), by = "Gene") %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    dplyr::semi_join(tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na, tibble_JUM_all_junctions_with_na %>% rename_column_exact(target_column = "Gene", output_colname = "matched_gene_names"), by = "matched_gene_names") %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_common_entries, "\n"))
+
+# JUM all junctions/with_na vs. PSIsigma all exons/with_na
+JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes <-
+  calculate_intersections_from_chr_strand_start_end(dplyr::semi_join(tibble_JUM_all_junctions_with_na, tibble_PSIsigma_all_exons_with_na %>% rename_column_exact(target_column = "matched_gene_names", output_colname = "Gene"), by = "Gene") %>% JUM_AS.event.ID_to_chr_strand_start_end, 
+                                                    dplyr::semi_join(tibble_PSIsigma_all_exons_with_na, tibble_JUM_all_junctions_with_na %>% rename_column_exact(target_column = "Gene", output_colname = "matched_gene_names"), by = "matched_gene_names") %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_common_entries, "\n"))
+
+```
+
+## determine the genes in common per enrichment
+
+### import tables
+
+```{r}
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented GO terms for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented families for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_GOterms_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_PFAM_families_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+```
+
+### FUNCTION TO LOOK FOR OVERLAPS IN EACH GO-TERM BETWEEN TWO TABLES (GOhyperGall)
+
+```{r}
+
+extract_common_GOTerms_GOhyperGall <- function(tibble_1, tibble_2) {
+  
+  # DEBUG ###
+  # tibble_1 <- tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO
+  # tibble_2 <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO
+  ###########
+  
+  # rename column names in preparation for table joining
+  ## columns which are the exceptions: GOID, NodeSize, Term, Ont
+  colnames(tibble_1)[c(3, 4, 5, 8)] <- paste(colnames(tibble_1)[c(3, 4, 5, 8)], "_1", sep = "")
+  colnames(tibble_2)[c(3, 4, 5, 8)] <- paste(colnames(tibble_2)[c(3, 4, 5, 8)], "_2", sep = "")
+  
+  # full join by ID columns
+  joined_tibble <- dplyr::full_join(tibble_1, tibble_2, by = c("GOID", "NodeSize", "Term", "Ont"))
+  # remove NA resulting from join
+  ## get row indices of NA, where enrichment is present in only one but not both tibbles
+  row.indices_of_na <- c(which(is.na(joined_tibble$SampleKeys_1)), which(is.na(joined_tibble$SampleKeys_2)))
+  if (length(row.indices_of_na) != 0) {
+    
+    joined_tibble <- joined_tibble[-row.indices_of_na, ]
+    
+  }
+  
+  # calculate intersections
+  joined_tibble_with_intersections <- joined_tibble %>% 
+    add_column("genes_in_common" = purrr::map2(.x = joined_tibble$SampleKeys_1, .y = joined_tibble$SampleKeys_2, 
+                                               .f = ~dplyr::intersect(.x %>% strsplit(split = " ") %>% unlist, 
+                                                                      .y %>% strsplit(split = " ") %>% unlist) %>% paste(collapse = " ")) %>% unlist) %>%
+    add_column("genes_in_common_count" = .$genes_in_common %>% purrr::map(~strsplit(.x, split = " ") %>% unlist %>% length) %>% unlist)
+  
+  # finally sort the tibble by the number of genes in common
+  joined_tibble_with_intersections_sorted <- joined_tibble_with_intersections %>% dplyr::arrange(desc(genes_in_common_count))
+  
+  return(joined_tibble_with_intersections_sorted)
+  
+}
+
+```
+
+### FUNCTION TO LOOK FOR OVERLAPS IN EACH ENRICHMENT BETWEEN TWO TABLES (bc3net::enrichment())
+
+```{r}
+
+extract_common_GOTerms_bc3net <- function(tibble_1, tibble_2) {
+  
+  # DEBUG ###
+  # tibble_1 <- tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO
+  # tibble_2 <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO
+  ###########
+  
+  # rename column names in preparation for table joining
+  ## columns which are the exceptions: c("TermID", "all")
+  colnames(tibble_1)[c(2, 3, 4, 5, 6)] <- paste(colnames(tibble_1)[c(2, 3, 4, 5, 6)], "_1", sep = "")
+  colnames(tibble_2)[c(2, 3, 4, 5, 6)] <- paste(colnames(tibble_2)[c(2, 3, 4, 5, 6)], "_2", sep = "")
+  
+  # full join by ID columns
+  joined_tibble <- dplyr::full_join(tibble_1, tibble_2, by = c("TermID"))
+  # remove NA resulting from join
+  ## get row indices of NA, where enrichment is present in only one but not both tibbles
+  row.indices_of_na <- c(which(is.na(joined_tibble$genes_contained_1)), which(is.na(joined_tibble$genes_contained_2)))
+  if (length(row.indices_of_na) != 0) {
+    
+    joined_tibble <- joined_tibble[-row.indices_of_na, ]
+    
+  }
+  
+    # calculate intersections
+  joined_tibble_with_intersections <- joined_tibble %>% 
+    add_column("genes_in_common" = purrr::map2(.x = joined_tibble$genes_contained_1, .y = joined_tibble$genes_contained_2, 
+                                               .f = ~dplyr::intersect(.x %>% strsplit(split = " ") %>% unlist, 
+                                                                      .y %>% strsplit(split = " ") %>% unlist) %>% paste(collapse = " ")) %>% unlist) %>%
+    add_column("genes_in_common_count" = .$genes_in_common %>% purrr::map(~strsplit(.x, split = " ") %>% unlist %>% length) %>% unlist)
+  
+  # finally sort the tibble by the number of genes in common
+  joined_tibble_with_intersections_sorted <- joined_tibble_with_intersections %>% dplyr::arrange(desc(genes_in_common_count))
+  
+  return(joined_tibble_with_intersections_sorted)
+  
+}
+
+```
+
+### calculate intersections
+
+```{r}
+
+tibble_GOTerm_intersection_tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO_vs_tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <-
+  extract_common_GOTerms_GOhyperGall(tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO, 
+                                     tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO)
+
+write.table(tibble_GOTerm_intersection_tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO_vs_tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO, 
+            paste(results_dir, "intersection_GOTerm_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_vs_tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+tibble_PFAM_intersection_tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM_vs_tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <-
+  extract_common_GOTerms_bc3net(tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM, 
+                                tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM)
+
+write.table(tibble_PFAM_intersection_tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM_vs_tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM, 
+            paste(results_dir, "intersection_PFAM_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+```
+
+# benchmark performance of NMD flagger
+
+comparisons are done at the level of transcripts.
+
+```{r}
+
+tibble_ref_gtf_with_NMD_flagged_unique_transcripts <- tibble_ref_gtf_with_NMD_flagged_E2 %>% .[-which(is.na(.$transcript_id)), c("transcript_id", "seqnames", "strand", "start", "end", "transcript_biotype", "NMD_candidate")] %>% dplyr::distinct(transcript_id, .keep_all = TRUE) %>% add_column("identifier" = paste(.$seqnames, ":", .$start, "-", .$end, sep = ""))
+
+# get row indices of those transcripts with ref. annotated NMD
+row.indices_ref_NMD <- which(tibble_ref_gtf_with_NMD_flagged_unique_transcripts$transcript_biotype == "nonsense_mediated_decay")
+
+# get row indices of those transcripts flagged as NMD
+row.indices_flagged_NMD <- grep(x = tibble_ref_gtf_with_NMD_flagged_unique_transcripts$NMD_candidate, pattern = "TRUE")
+
+message("number of reference transcripts with reference NMD annotation: ", row.indices_ref_NMD %>% length, " (", (row.indices_ref_NMD %>% length * 100 / tibble_ref_gtf_with_NMD_flagged_unique_transcripts %>% nrow), "%)")
+message("number of reference transcripts flagged as NMD: ", row.indices_flagged_NMD %>% length, " (", (row.indices_flagged_NMD %>% length * 100 / tibble_ref_gtf_with_NMD_flagged_unique_transcripts %>% nrow), "%)")
+message("number of transcripts flagged as NMD in common with annotation: ", intersect(row.indices_ref_NMD, row.indices_flagged_NMD) %>% length)
+message("jaccard: ", (intersect(row.indices_ref_NMD, row.indices_flagged_NMD) %>% length)/(union(row.indices_ref_NMD, row.indices_flagged_NMD) %>% length))
+
+# ggplot of the transcript_biotype of NMD candidates
+
+## neat descending order of x-axis
+tibble_frequency_distribution <- tibble_ref_gtf_with_NMD_flagged_unique_transcripts %>% 
+  dplyr::filter(NMD_candidate == "TRUE") %>% 
+  dplyr::group_by(transcript_biotype) %>% 
+  dplyr::summarise("count_per_transcript_biotype" = n()) %>% 
+  dplyr::arrange(desc(count_per_transcript_biotype))
+
+message("percent protein_coding of total: ", (tibble_frequency_distribution[tibble_frequency_distribution$transcript_biotype == "protein_coding", "count_per_transcript_biotype"] %>% paste %>% as.numeric)*100/sum(tibble_frequency_distribution$count_per_transcript_biotype), "%")
+
+x_axis_order <- tibble_frequency_distribution %>% .$transcript_biotype %>% unique
+
+ggplot(data = tibble_ref_gtf_with_NMD_flagged_unique_transcripts[tibble_ref_gtf_with_NMD_flagged_unique_transcripts$NMD_candidate == "TRUE", ]) +
+  geom_bar(mapping = aes(x = transcript_biotype, y = ..count..)) +
+  geom_label(stat = "count", aes(x = transcript_biotype, label = ..count..)) +
+  scale_x_discrete(breaks = x_axis_order, limits = x_axis_order) +
+  ggtitle("Common Ensembl transcript_biotype annotations associated with flagged NMD transcripts
+          (minimum 5 exons)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_dir, "frequency_of_ensembl_transcript_biotype_flagged_as_NMD_E5.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+  ggsave(filename = paste(results_dir, "frequency_of_ensembl_transcript_biotype_flagged_as_NMD_E5.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
+
+```
+

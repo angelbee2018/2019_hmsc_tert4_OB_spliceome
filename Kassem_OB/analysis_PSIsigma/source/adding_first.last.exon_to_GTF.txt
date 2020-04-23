@@ -35,36 +35,39 @@ tibble_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% type
 
 temp_number <- 1
 
-first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% .[temp_number]
+first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
 
-while (tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "+" | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "." | tibble_gtf[tibble_gtf$transcript_id, "strand"] %>% unlist %>% unique == "*") {
-
-temp_number <- temp_number + 1
-
+while (reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
+       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
+       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
+       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
+  
+  temp_number <- temp_number + 1
+  
+  first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+  
 }
 
-first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% .[temp_number]
-
 # the test condition
-max_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% max
-max_exon_start_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id & tibble_gtf$exon_number == max_test, "start"] %>% paste
-min_exon_start_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id & tibble_gtf$exon_number == 1, "start"] %>% paste
+max_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
+max_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
+min_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
 
 exon_order <- NULL
 
 # if the exon 1 comes before the max exon, then the exon order is always increasing
 if (min_exon_start_test < max_exon_start_test) {
-
+  
   exon_order <- "increasing"
-
-# if the exon 1 cones after the max exon, then the exon order is stranded.
+  
+  # if the exon 1 cones after the max exon, then the exon order is stranded.
 } else if (min_exon_start_test > max_exon_start_test) {
-
+  
   exon_order <- "stranded"
-
+  
 }
 
-# FUNCTION TO LABEL THE LAST EXON OF A SUBSET GTF (DESCRIBING A SINGLE TRANSCRIPT) WITH "last_exon"
+# FUNCTION TO LABEL THE FIRST AND LAST EXON OF A SUBSET GTF (DESCRIBING A SINGLE TRANSCRIPT) WITH "first_exon" or "last_exon"
 
 label_first_last_exon <- function(tibble_gtf_subset_by_transcript_id) {
   

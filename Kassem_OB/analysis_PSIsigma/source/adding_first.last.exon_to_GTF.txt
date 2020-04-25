@@ -35,23 +35,23 @@ tibble_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% type
 
 temp_number <- 1
 
-first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
 
-while (reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
-       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
-       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
-       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
+while (tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
+       tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
+       tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
+       tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
   
   temp_number <- temp_number + 1
   
-  first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+  first_transcript_id <- tibble_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
   
 }
 
 # the test condition
-max_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
-max_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
-min_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
+max_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
+max_exon_start_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id & tibble_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
+min_exon_start_test <- tibble_gtf[tibble_gtf$transcript_id == first_transcript_id & tibble_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
 
 exon_order <- NULL
 

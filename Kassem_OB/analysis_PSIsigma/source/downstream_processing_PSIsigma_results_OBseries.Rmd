@@ -87,11 +87,11 @@ vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_
 # vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 ```
 
@@ -189,6 +189,15 @@ annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
     
   }
   
+  # transcript name (ref)
+  matched_ref_transcript_names <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    matched_ref_transcript_names <- paste(list_matched_ref_recon_gtf[["reference_gtf_match"]]$transcript_id %>% unique, collapse = ",")
+    
+  }
+  
   # transcript name (recon)
   matched_recon_transcript_names <- NA
   
@@ -274,12 +283,15 @@ annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
     
   }
   
-  return(list("event_region_coords" = list_matched_ref_recon_gtf$event_region_coords,
-              "diff_exon_coords" = list_matched_ref_recon_gtf$diff_exon_coords,
+  return(list("diff_exon_coords" = list_matched_ref_recon_gtf$diff_exon_coords,
               "splicemode" = list_matched_ref_recon_gtf$splicemode,
               "matched_gene_names" = matched_gene_names,
+              "matched_ref_transcript_names" = matched_ref_transcript_names,
               "matched_recon_transcript_names" = matched_recon_transcript_names,
               "matched_strand" = matched_strand,
+              "diff_exon_chr" = list_matched_ref_recon_gtf$diff_exon_chr,
+              "diff_exon_start" = list_matched_ref_recon_gtf$diff_exon_start,
+              "diff_exon_end" = list_matched_ref_recon_gtf$diff_exon_end,
               "NMD_reference" = NMD_reference,
               "NMD_recon" = NMD_recon,
               "first_or_last_exon_reference" = first_or_last_exon_reference,
@@ -891,7 +903,7 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
 
 list_of_comparisons_final <- vector_of_comparisons_final %>% array_tree
 
-list_of_psisigma_result_tibbles_raw <- future_map(.x = list_of_comparisons_final, .f = ~read.delim(paste(psisigma_results_dir, .x, "/", .x, "_r5_ir3.sorted.txt", sep = "")) %>% as_tibble, .progress = TRUE)
+list_of_psisigma_result_tibbles_raw <- future_map(.x = list_of_comparisons_final, .f = ~read.delim(paste(psisigma_results_dir, .x, "/", .x, "_r5_ir3.sorted.txt", sep = "")) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble")))
 
 ```
 
@@ -922,9 +934,9 @@ vector_col.index_absolute.psi.comparison.1 <- grep(x = colnames(wide_tibble_of_p
 vector_col.index_absolute.psi.comparison.2 <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_processed), pattern = "comparison.2_absolute.psi")
 
 ## sort each compartment of 3 columns each
-wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.1] <- future_apply(X = wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.1], MARGIN = 1, FUN = function(X) {sort(X, na.last = TRUE)}) %>% t %>% as_tibble
+wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.1] <- future_apply(X = wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.1], MARGIN = 1, FUN = function(X) {sort(X, na.last = TRUE)}, future.globals = FALSE) %>% t %>% as_tibble
 
-wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.2] <- future_apply(X = wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.2], MARGIN = 1, FUN = function(X) {sort(X, na.last = TRUE)}) %>% t %>% as_tibble
+wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.2] <- future_apply(X = wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.2], MARGIN = 1, FUN = function(X) {sort(X, na.last = TRUE)}, future.globals = FALSE) %>% t %>% as_tibble
 
 # remove all special characters from the splicemode column
 wide_tibble_of_psisigma_results_allcomparisons_processed[, "splicemode"] <- gsub(x = wide_tibble_of_psisigma_results_allcomparisons_processed$splicemode, pattern = "(.*)overlapping(.*)", replacement = "IR_overlapping_region")
@@ -945,7 +957,7 @@ NOTE: the reference GTF must have already had first/last/only exon info appended
 
 ```{r}
 
-wide_tibble_of_all_unique_exon_coords <- wide_tibble_of_psisigma_results_allcomparisons_processed[, c("event_region_coords", "splicemode", "diff_exon_coords", "diff_exon_chr", "diff_exon_start", "diff_exon_end")] %>% unique
+wide_tibble_of_all_unique_exon_coords <- wide_tibble_of_psisigma_results_allcomparisons_processed[, c("splicemode", "diff_exon_coords", "diff_exon_chr", "diff_exon_start", "diff_exon_end")] %>% unique
 
 # split exon co-ords by whether it's IR or not
 wide_tibble_of_all_unique_exon_coords_array.tree_IR <- wide_tibble_of_all_unique_exon_coords[grep(x = wide_tibble_of_all_unique_exon_coords$splicemode, pattern = "IR"), ] %>% array_tree
@@ -955,52 +967,236 @@ wide_tibble_of_all_unique_exon_coords_array.tree_not_IR <- wide_tibble_of_all_un
 list_ref_matching_exon_entries_IR <- future_imap(.x = wide_tibble_of_all_unique_exon_coords_array.tree_IR, .f = ~list(
   "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf, .y), 
   "reconstructed_gtf_match" = extract_junction.flanking.exons(.x, tibble_recon_gtf, .y), 
-  "event_region_coords" = .x$event_region_coords, 
   "diff_exon_coords" = .x$diff_exon_coords,
+  "diff_exon_chr" = .x$diff_exon_chr,
+  "diff_exon_start" = .x$diff_exon_start,
+  "diff_exon_end" = .x$diff_exon_end,
   "splicemode" = .x$splicemode), 
-  .progress = TRUE, globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_junction.flanking.exons"))
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_junction.flanking.exons")))
 
-list_ref_matching_exon_entries_IR <- future_imap(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble)
+list_ref_matching_exon_entries_IR_annotated <- future_imap(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_differential_exon", "as_tibble")))
 
 # for non-IR events, match exons.
 list_ref_matching_exon_entries_not_IR <- future_imap(.x = wide_tibble_of_all_unique_exon_coords_array.tree_not_IR, .f = ~list(
   "reference_gtf_match" = extract_overlapping.exons(.x, tibble_ref_gtf, .y), 
   "reconstructed_gtf_match" = extract_overlapping.exons(.x, tibble_recon_gtf, .y), 
-  "event_region_coords" = .x$event_region_coords, 
   "diff_exon_coords" = .x$diff_exon_coords,
+  "diff_exon_chr" = .x$diff_exon_chr,
+  "diff_exon_start" = .x$diff_exon_start,
+  "diff_exon_end" = .x$diff_exon_end,
   "splicemode" = .x$splicemode), 
-  .progress = TRUE, globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_overlapping.exons"))
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_overlapping.exons")))
 
-list_ref_matching_exon_entries_not_IR <- future_imap(.x = list_ref_matching_exon_entries_not_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble)
+list_ref_matching_exon_entries_not_IR_annotated <- future_imap(.x = list_ref_matching_exon_entries_not_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_differential_exon", "as_tibble")))
 
-tibble_ref_matching_exon_entries_all <- dplyr::bind_rows(list_ref_matching_exon_entries_IR %>% rbindlist, list_ref_matching_exon_entries_not_IR %>% rbindlist) %>% as_tibble
+tibble_ref_matching_exon_entries_all <- dplyr::bind_rows(list_ref_matching_exon_entries_IR_annotated %>% rbindlist, list_ref_matching_exon_entries_not_IR_annotated %>% rbindlist) %>% as_tibble
 
 write.table(tibble_ref_matching_exon_entries_all, file = paste(R_processing_results_dir, "table_all_exons_reference_match_info.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 ```
 
-### label the reference info. with the processed result tables.
+#### SUMMARISE NON-IR ENTRIES (SIMPLE)
+
+Summarise for first/last exon, NMD.
+
+behaviour: if annotation appears in at least ONE match in either reference or recon, then TRUE (union)
 
 ```{r}
 
-tibble_ref_matching_exon_entries_all <- read.delim(file = paste(R_processing_results_dir, "table_all_exons_reference_match_info.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# read the table of annotation
+tibble_ref_matching_exon_entries_all <- read.delim(file = paste(R_processing_results_dir, "table_all_exons_reference_match_info.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE) %>% type_convert %>% as_tibble
 
-wide_tibble_of_psisigma_results_allcomparisons_final <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_processed, tibble_ref_matching_exon_entries_all, by = c("event_region_coords", "diff_exon_coords", "splicemode"))
+# extract the row indices of IR event entries from the tibble_ref_matching_exon_entries_all
+row.indices_IR_events <- grep(x = tibble_ref_matching_exon_entries_all$splicemode, pattern = "IR")
 
-# create column of definitive NMD or not, and definitive first/last exon
-wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final %>% add_column(., "NMD_or_not" = FALSE, "first_exon" = FALSE, "last_exon" = FALSE)
+# subset exon annotation table for non IR events
+tibble_ref_matching_exon_entries_all_not.IR <- tibble_ref_matching_exon_entries_all[-row.indices_IR_events, ]
 
-wide_tibble_of_psisigma_results_allcomparisons_final[union(which(wide_tibble_of_psisigma_results_allcomparisons_final$NMD_reference == TRUE), 
-                                                               which(wide_tibble_of_psisigma_results_allcomparisons_final$NMD_recon == TRUE)), "NMD_or_not"] <- TRUE
+# summarise annotation
+## initialise columns
+tibble_ref_matching_exon_entries_all_not.IR_summarised <- tibble_ref_matching_exon_entries_all_not.IR %>% 
+  add_column("any_first_exon" = FALSE,
+             "any_last_exon" = FALSE,
+             "any_NMD" = FALSE)
+
+tibble_ref_matching_exon_entries_all_not.IR_summarised[union(grep(x = tibble_ref_matching_exon_entries_all_not.IR_summarised$first_or_last_exon_reference, pattern = "first_exon"),
+                                                               grep(x = tibble_ref_matching_exon_entries_all_not.IR_summarised$first_or_last_exon_recon, pattern = "first_exon")), "any_first_exon"] <- TRUE
+
+tibble_ref_matching_exon_entries_all_not.IR_summarised[union(grep(x = tibble_ref_matching_exon_entries_all_not.IR_summarised$first_or_last_exon_reference, pattern = "last_exon"),
+                                                               grep(x = tibble_ref_matching_exon_entries_all_not.IR_summarised$first_or_last_exon_recon, pattern = "last_exon")), "any_last_exon"] <- TRUE
+
+tibble_ref_matching_exon_entries_all_not.IR_summarised[which(tibble_ref_matching_exon_entries_all_not.IR_summarised$NMD_reference == TRUE | tibble_ref_matching_exon_entries_all_not.IR_summarised$NMD_recon == TRUE), "any_NMD"] <- TRUE
+
+```
+
+#### REANNOTATE AND SUMMARISE IR ENTRIES (COMPLICATED)
+
+```{r}
+
+# re-match the IR events to the reference annotation
+# for IR event entries, complicated. First retrieve the matched/recon transcripts. then find transcripts with overlapping exons.
+# These IR-spanning transcripts must have at least ONE start/end coord/gene name in common with the junction-matched transcripts.
+# return their corresponding annotations.
+# NOTE: it seems like JUM only associates one junction ID with each IR event (which makes sense). However, my small sample size of 52 IR junctions isn't enough to fully conclude this is the case.
+## array tree-ify the AS_event_IDs for looping
+list_ref_matching_exon_entries_all_array.tree_IR <- tibble_ref_matching_exon_entries_all[row.indices_IR_events, ] %>% array_tree
+
+## look up the annotation tibble for each AS_event_ID, summarise.
+list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x = list_ref_matching_exon_entries_all_array.tree_IR, .f = function(.x, .y) {
   
-wide_tibble_of_psisigma_results_allcomparisons_final[union(grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "first_exon"), 
-                                                           grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "first_exon")), "first_exon"] <- TRUE
+  # message("now processing entry number: ", .y)
+  
+  # DEBUG ###
+  # .x <- tibble_ref_matching_exon_entries_all_array.tree_IR[[6]]
+  # tibble_ref_gtf <- tibble_ref_gtf
+  # tibble_recon_gtf <- tibble_recon_gtf
+  ###########
+  
+  tibble_ref_gtf <<- tibble_ref_gtf
+  tibble_recon_gtf <<- tibble_recon_gtf
+  
+  chr <- .x$diff_exon_chr %>% paste %>% trimws
+  start <- .x$diff_exon_start %>% paste %>% trimws %>% type.convert
+  end <- .x$diff_exon_end %>% paste %>% trimws %>% type.convert
+  strand <- .x$matched_strand %>% paste %>% trimws
+  vec_ref_transcripts_matched_to_junction <- .x$matched_ref_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
+  vec_recon_transcripts_matched_to_junction <- .x$matched_recon_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
+  
+  # check reference annotation - but only if the junction was matched to reference in the first place.
+  tibble_all_confirmed_IR_entries_ref <- "uninit"
+  
+  if (all(is.na(vec_ref_transcripts_matched_to_junction)) != TRUE) {
+    
+    # match IR region to reference
+    tibble_ref_gtf_subset_IR_overlap <- tibble_ref_gtf[tibble_ref_gtf$seqnames == chr %>% trimws, ] %>% .[.$strand == strand %>% trimws, ] %>% .[.$start <= ((start %>% as.numeric) - 2) & .$end >= ((end %>% as.numeric) + 2), ] %>% .[.$type == "exon", ]
+  
+    # get all the entries which matched to the junction
+    tibble_ref_gtf_subset_junction_matching_entries <- dplyr::semi_join(tibble_ref_gtf[tibble_ref_gtf$type == "exon", ], vec_ref_transcripts_matched_to_junction, by = "transcript_id")
+    
+    # extract all the start coords of the junction-matched entries
+    vector_junction_matched_start_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "start"]
+    # find which IR matched entry has any same start coord
+    tibble_ref_gtf_subset_IR_overlap_start.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_start_coords)
+    
+    # extract all the end coords of the junction-matched entries
+    vector_junction_matched_end_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "end"]
+    # find which IR matched entry has any same end coord
+    tibble_ref_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_end_coords)
+    
+    # extract all the gene names of the junction-matched entries
+    vector_junction_matched_gene_names <- tibble_ref_gtf_subset_junction_matching_entries[, "gene_name"]
+    # find which IR matched entry has any same end coord
+    tibble_ref_gtf_subset_IR_overlap_gene.name.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_gene_names)
+    
+    tibble_union_start.and.end.matched <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
+                                            tibble_ref_gtf_subset_IR_overlap_end.matched,
+                                            tibble_ref_gtf_subset_IR_overlap_gene.name.matched) %>% purrr::reduce(dplyr::union)
+    
+    if (nrow(tibble_union_start.and.end.matched) == 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- "uninit"
+      
+    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- tibble_union_start.and.end.matched
+      
+    }
+    
+  }
+  
+  # check recon annotation - but only if the junction was matched to recon in the first place.
+  tibble_all_confirmed_IR_entries_recon <- "uninit"
+  
+  if (all(is.na(vec_recon_transcripts_matched_to_junction)) != TRUE) {
+    
+    # match IR region to recon GTF
+    tibble_recon_gtf_subset_IR_overlap <- tibble_recon_gtf[tibble_recon_gtf$seqnames == chr %>% trimws, ] %>% .[.$strand == strand %>% trimws, ] %>% .[.$start <= ((start %>% as.numeric) - 2) & .$end >= ((end %>% as.numeric) + 2), ] %>% .[.$type == "exon", ]
+  
+    # get all the entries which matched to the junction
+    tibble_recon_gtf_subset_junction_matching_entries <- dplyr::semi_join(tibble_recon_gtf[tibble_recon_gtf$type == "exon", ], vec_recon_transcripts_matched_to_junction, by = "transcript_id")
+    
+    # extract all the start coords of the junction-matched entries
+    vector_junction_matched_start_coords <- tibble_recon_gtf_subset_junction_matching_entries[, "start"]
+    # find which IR matched entry has any same start coord
+    tibble_recon_gtf_subset_IR_overlap_start.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_start_coords)
+    
+    # extract all the end coords of the junction-matched entries
+    vector_junction_matched_end_coords <- tibble_recon_gtf_subset_junction_matching_entries[, "end"]
+    # find which IR matched entry has any same end coord
+    tibble_recon_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_end_coords, by = "end")
+    
+    tibble_union_start.and.end.matched <- list(tibble_recon_gtf_subset_IR_overlap_start.matched, 
+                                            tibble_recon_gtf_subset_IR_overlap_end.matched) %>% purrr::reduce(dplyr::union)
+    
+    if (nrow(tibble_union_start.and.end.matched) == 0) {
+      
+      tibble_all_confirmed_IR_entries_recon <- "uninit"
+      
+    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
+      
+      tibble_all_confirmed_IR_entries_recon <- tibble_union_start.and.end.matched
+      
+    }
+    
+  }
+  
+  # we now have enough info. to write up the final summary
+  summarised_tibble_annotation <- .x %>% as_tibble
+  
+  summarised_tibble_annotation[, "NMD_reference"] <- if (tibble_all_confirmed_IR_entries_ref == "uninit") {
+    FALSE
+    } else {
+      any(tibble_all_confirmed_IR_entries_ref$transcript_biotype == "nonsense_mediated_decay")
+    }
+  
+   summarised_tibble_annotation[, "NMD_recon"] <- if (tibble_all_confirmed_IR_entries_recon == "uninit") {
+     FALSE
+     } else {
+       all(tibble_all_confirmed_IR_entries_recon$NMD_candidate == TRUE)
+     }
+   
+   summarised_tibble_annotation[, "first_or_last_exon_reference"] <- if (tibble_all_confirmed_IR_entries_ref == "uninit") {
+     .x$first_or_last_exon_reference %>% paste(collapse = ";")
+     } else {
+       tibble_all_confirmed_IR_entries_ref$first_or_last_exon %>% paste(collapse = ";")
+     }
+   
+   summarised_tibble_annotation[, "first_or_last_exon_recon"] <- if (tibble_all_confirmed_IR_entries_recon == "uninit") {
+     .x$first_or_last_exon_recon %>% paste(collapse = ";")
+     } else {
+       tibble_all_confirmed_IR_entries_recon$first_or_last_exon %>% paste(collapse = ";")
+     }
+   
+   summarised_tibble_annotation <- summarised_tibble_annotation %>% add_column(
+     "any_first_exon" = any(c(grep(x = .$first_or_last_exon_reference, pattern = "first_exon") %>% na.omit, 
+                              grep(x = .$first_or_last_exon_recon, pattern = "first_exon") %>% na.omit)),
+     "any_last_exon" = any(c(grep(x = .$first_or_last_exon_reference, pattern = "last_exon") %>% na.omit, 
+                             grep(x = .$first_or_last_exon_recon, pattern = "last_exon") %>% na.omit)),
+     "any_NMD" = any(c(grep(x = .$NMD_reference, pattern = "TRUE") %>% na.omit,
+                       grep(x = .$NMD_recon, pattern = "TRUE") %>% na.omit)), .after = "NMD_recon")
+  
+  return(summarised_tibble_annotation)
+  
+}, .progress = TRUE, .options = future_options(globals = c("as_tibble", "tibble_ref_gtf", "tibble_recon_gtf")))
 
-wide_tibble_of_psisigma_results_allcomparisons_final[union(grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "last_exon"), 
-                                                           grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "last_exon")), "last_exon"] <- TRUE
+# tibblize
+tibble_as.event.id_with_summarised_annotation_IR <- list_ref_matching_exon_entries_all_array.tree_IR_reannotated %>% rbindlist %>% as_tibble
+
+```
+
+### bind rows for final summarised exon reference annotation
+
+```{r}
+
+tibble_ref_matching_exon_entries_all_summarised <- dplyr::bind_rows(tibble_as.event.id_with_summarised_annotation_IR %>% type_convert %>% type_convert, 
+                                                                    # look at this shit LOL
+                                                                    tibble_ref_matching_exon_entries_all_not.IR_summarised %>% type_convert %>% type_convert)
+
+# left join of the annotated exon info onto the PSI-Sigma result tables
+wide_tibble_of_psisigma_results_allcomparisons_final <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_processed, tibble_ref_matching_exon_entries_all_summarised, by = c("diff_exon_coords", "splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end")) %>% dplyr::mutate_if(is.factor, as.character)
 
 # reorder columns
-wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "psisigma_gene.symbol", "psisigma_reference.transcript", "psisigma_exon_type", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_gene_names", "matched_recon_transcript_names", "matched_strand", "NMD_reference", "NMD_recon", "NMD_or_not", "first_or_last_exon_reference", "first_or_last_exon_recon", "first_exon", "last_exon", "num.replicates_comparison.1", "num.replicates_comparison.2", "pvalue", "FDR", "dpsi", "comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3", "comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3", "comparison")]
+wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "psisigma_gene.symbol", "psisigma_reference.transcript", "psisigma_exon_type", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_gene_names", "matched_recon_transcript_names", "matched_ref_transcript_names", "matched_strand", "NMD_reference", "NMD_recon", "any_NMD", "first_or_last_exon_reference", "first_or_last_exon_recon", "any_first_exon", "any_last_exon", "num.replicates_comparison.1", "num.replicates_comparison.2", "pvalue", "FDR", "dpsi", "comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3", "comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3", "comparison")]
 
 cat("There are", wide_tibble_of_psisigma_results_allcomparisons_final[, c("event_region_coords", "diff_exon_coords")] %>% unique %>% nrow, "exons detected in total (at least one observation across the entire time series)")
 
@@ -1184,10 +1380,9 @@ wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp <- reshape2::m
 wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp[, "replicate"] <- gsub(x = wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp$replicate, pattern = "comparison.1_absolute.psi_", replacement = "")
 
 # recast into a wide tibble
-## ALERT! SUM USED AS FUN.AGGREGATE. it means we'll be getting PSI values for the whole exon, not LSV.
 ## aggregate function only sums if all values are not all NA. so it preserves values which are all NA.
 ## wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp[c(2200:2206, 2665:2670), ]
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp %>% unique, formula =  database_ID + event_region_coords + diff_exon_coords + splicemode + psisigma_gene.symbol + diff_exon_chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_strand + NMD_reference + NMD_recon + NMD_or_not + first_or_last_exon_reference + first_or_last_exon_recon + first_exon + last_exon + ud_absolute.psi_1 + ud_absolute.psi_2 + ud_absolute.psi_3 ~ timepoint + replicate, value.var = "absolute_psi") %>% as_tibble
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp %>% unique, formula =  database_ID + event_region_coords + diff_exon_coords + splicemode + psisigma_gene.symbol + diff_exon_chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_strand + NMD_reference + NMD_recon + any_NMD + first_or_last_exon_reference + first_or_last_exon_recon + any_first_exon + any_last_exon + ud_absolute.psi_1 + ud_absolute.psi_2 + ud_absolute.psi_3 ~ timepoint + replicate, value.var = "absolute_psi") %>% as_tibble
 
 # rename the columns. add "absolute.psi" to the colname.
 colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) <- gsub(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only), pattern = "(\\d+)(d|h)_(\\d)", replacement = "\\1\\2_absolute.psi_\\3")
@@ -1220,7 +1415,7 @@ wide_tibble_of_absolute_PSI_averages_sum_temp <- wide_tibble_of_absolute_PSI_ave
 list_unique_exon_regions <- wide_tibble_of_absolute_PSI_averages_sum_temp[, c("event_region_coords", "diff_exon_coords", "splicemode")] %>% unique %>% array_tree
 
 # load the tibble of separated PSI averages into list
-list_of_tibbles_absolute_PSI_average_subset_by_region <- future_map(.x = list_unique_exon_regions, .f = ~wide_tibble_of_absolute_PSI_averages_sum_temp[wide_tibble_of_absolute_PSI_averages_sum_temp$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum_temp$diff_exon_coords == (.x[[2]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum_temp$splicemode == (.x[[3]] %>% paste), ], .progress = TRUE)
+list_of_tibbles_absolute_PSI_average_subset_by_region <- future_map(.x = list_unique_exon_regions, .f = ~wide_tibble_of_absolute_PSI_averages_sum_temp[wide_tibble_of_absolute_PSI_averages_sum_temp$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum_temp$diff_exon_coords == (.x[[2]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum_temp$splicemode == (.x[[3]] %>% paste), ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_absolute_PSI_averages_sum_temp")))
 
 # take the average PSI of each timepoint
 # we assume there are no more bugs which cause identical virtual splice variations to be duplicated. so therefore we do not need to take unique values.
@@ -1239,7 +1434,7 @@ list_of_tibbles_absolute_PSI_average_subset_by_region_sum <- future_map(.x = lis
                                                                                           
                                                                                         } 
                                                                                       
-                                                                                      }) %>% t) %>% as_tibble, .progress = TRUE)
+                                                                                      }) %>% t) %>% as_tibble, .progress = TRUE, .options = future_options(globals = FALSE))
 
 wide_tibble_of_absolute_PSI_averages_sum <- list_of_tibbles_absolute_PSI_average_subset_by_region_sum %>% rbindlist %>% as_tibble
 
@@ -1253,7 +1448,7 @@ wide_tibble_of_absolute_PSI_averages_sum <- list_of_tibbles_absolute_PSI_average
 
 list_unique_exons_absolute_PSI_levels_exon.switching <- wide_tibble_of_absolute_PSI_averages_separate[, c("event_region_coords", "splicemode")] %>% unique %>% array_tree
 
-list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_unique_exons_absolute_PSI_levels_exon.switching, .f = ~wide_tibble_of_absolute_PSI_averages_separate[wide_tibble_of_absolute_PSI_averages_separate$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_separate$splicemode == (.x[[2]] %>% paste), ], .progress = TRUE)
+list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_unique_exons_absolute_PSI_levels_exon.switching, .f = ~wide_tibble_of_absolute_PSI_averages_separate[wide_tibble_of_absolute_PSI_averages_separate$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_separate$splicemode == (.x[[2]] %>% paste), ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_absolute_PSI_averages_separate")))
 
 ```
 
@@ -1354,7 +1549,7 @@ write.table(x = tibble_of_absolute_PSI_averages_exon.switched_differential_separ
 
 list_unique_exons_absolute_PSI_levels_exon.switching <- wide_tibble_of_absolute_PSI_averages_sum[, c("event_region_coords", "splicemode")] %>% unique %>% array_tree
 
-list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_unique_exons_absolute_PSI_levels_exon.switching, .f = ~wide_tibble_of_absolute_PSI_averages_sum[wide_tibble_of_absolute_PSI_averages_sum$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum$splicemode == (.x[[2]] %>% paste), ], .progress = TRUE)
+list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_unique_exons_absolute_PSI_levels_exon.switching, .f = ~wide_tibble_of_absolute_PSI_averages_sum[wide_tibble_of_absolute_PSI_averages_sum$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum$splicemode == (.x[[2]] %>% paste), ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_absolute_PSI_averages_sum")))
 
 ```
 
@@ -2979,6 +3174,51 @@ dev.off()
 
 ```
 
+## check the concordance between the ref and recon gtf first/last exon and NMD
+
+```{r}
+
+# wide_tibble_of_psisigma_results_allcomparisons_final_no.IR <- wide_tibble_of_psisigma_results_allcomparisons_final[grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$splicemode, pattern = "IR"), ]
+
+# get row indices of first/last exon and NMD annotations.
+## first exon
+row.indices_first_exon_ref <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "first_exon")
+row.indices_first_exon_recon <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "first_exon")
+
+row.indices_first_exon_ref.recon.intersection <- intersect(row.indices_first_exon_ref, row.indices_first_exon_recon)
+row.indices_first_exon_ref.recon.union <- union(row.indices_first_exon_ref, row.indices_first_exon_recon)
+
+message("number of first exons in the reference: ", row.indices_first_exon_ref %>% length)
+message("number of first exons in the recon: ", row.indices_first_exon_recon %>% length)
+message("number of first exons in BOTH recon and reference: ", row.indices_first_exon_ref.recon.intersection %>% length)
+message("first exons jaccard similarity: ", (row.indices_first_exon_ref.recon.intersection %>% length)/(row.indices_first_exon_ref.recon.union %>% length))
+
+## last exon
+row.indices_last_exon_ref <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "last_exon")
+row.indices_last_exon_recon <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "last_exon")
+
+row.indices_last_exon_ref.recon.intersection <- intersect(row.indices_last_exon_ref, row.indices_last_exon_recon)
+row.indices_last_exon_ref.recon.union <- union(row.indices_last_exon_ref, row.indices_last_exon_recon)
+
+message("number of last exons in the reference: ", row.indices_last_exon_ref %>% length)
+message("number of last exons in the recon: ", row.indices_last_exon_recon %>% length)
+message("number of last exons in BOTH recon and reference: ", row.indices_last_exon_ref.recon.intersection %>% length)
+message("last exons jaccard similarity: ", (row.indices_last_exon_ref.recon.intersection %>% length)/(row.indices_last_exon_ref.recon.union %>% length))
+
+## NMD
+row.indices_NMD_ref <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$NMD_reference, pattern = "TRUE")
+row.indices_NMD_recon <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$NMD_recon, pattern = "TRUE")
+
+row.indices_NMD_ref.recon.intersection <- intersect(row.indices_NMD_ref, row.indices_NMD_recon)
+row.indices_NMD_ref.recon.union <- union(row.indices_NMD_ref, row.indices_NMD_recon)
+
+message("number of NMD in the reference: ", row.indices_NMD_ref %>% length)
+message("number of NMD in the recon: ", row.indices_NMD_recon %>% length)
+message("number of NMD in BOTH recon and reference: ", row.indices_NMD_ref.recon.intersection %>% length)
+message("NMD jaccard similarity: ", (row.indices_NMD_ref.recon.intersection %>% length)/(row.indices_NMD_ref.recon.union %>% length))
+
+```
+
 ## frequency distribution of no. exons detected/gene
 
 ### ALL exons
@@ -3084,34 +3324,34 @@ incl. NMD, first/last exon.
 
 # category means splicemode + NMD status + first/last exon
 # also clean up the splicemode column
-tibble_exons_per_category_all <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_all = n())
+tibble_exons_per_category_all <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_exons_all = n())
 
 all_exons_count <- tibble_exons_per_category_all$no_exons_all %>% sum(na.rm = TRUE)
-number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$NMD_or_not == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
-number_first_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$first_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
-number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$last_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$any_NMD == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_first_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$any_first_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$any_last_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 
 message("There are ", number_NMD_all_exons*100/all_exons_count, "% NMD exons overall.")
 message("There are ", number_first_exon_all_exons*100/all_exons_count, "% first exons overall.")
 message("There are ", number_last_exon_all_exons*100/all_exons_count, "% last exons overall.")
 
-tibble_exons_per_category_constitutive <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_constitutive = n())
+tibble_exons_per_category_constitutive <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_exons_constitutive = n())
 
 constitutive_exons_count <- tibble_exons_per_category_constitutive$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$NMD_or_not == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_first_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$first_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$last_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_first_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_first_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_last_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 
 message("There are ", number_NMD_constitutive_exons*100/constitutive_exons_count, "% NMD exons constitutive.")
 message("There are ", number_first_exon_constitutive_exons*100/constitutive_exons_count, "% first exons constitutive.")
 message("There are ", number_last_exon_constitutive_exons*100/constitutive_exons_count, "% last exons constitutive.")
 
-tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_or_not, first_exon, last_exon) %>% summarise(no_exons_differential = n())
+tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_exons_differential = n())
 
 differential_exons_count <- tibble_exons_per_category_differential$no_exons_differential %>% sum(na.rm = TRUE)
-number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$NMD_or_not == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
-number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$first_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
-number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$last_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_NMD == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_first_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_last_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 
 message("There are ", number_NMD_differential_exons*100/differential_exons_count, "% NMD exons differential.")
 message("There are ", number_first_exon_differential_exons*100/differential_exons_count, "% first exons differential.")
@@ -3120,7 +3360,7 @@ message("There are ", number_last_exon_differential_exons*100/differential_exons
 tibble_exons_per_category_summary <- list(tibble_exons_per_category_all, tibble_exons_per_category_constitutive, tibble_exons_per_category_differential) %>% purrr::reduce(dplyr::full_join)
 
 # melt the sample
-long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "NMD_or_not", "first_exon", "last_exon"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
+long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "any_NMD", "any_first_exon", "any_last_exon"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
   # add the overall counts for each splicemode
   dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_exons_per_splicemode" = sum(number_of_exons_per_category %>% na.omit))
 
@@ -3145,7 +3385,7 @@ ggplot() +
                 ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
   xlab("Splicemode") +
   scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
-  scale_shape_manual(name = "Category", limits = c("NMD_or_not", "first_exon", "last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
+  scale_shape_manual(name = "Category", limits = c("any_NMD", "any_first_exon", "any_last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
@@ -3154,7 +3394,7 @@ ggplot() +
 
 # upset plot
 message("all exons")
-df <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "NMD_or_not", "first_exon", "last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + NMD_or_not + first_exon + last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -3166,9 +3406,9 @@ pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_pe
 
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
-                      left_annotation = rowAnnotation("Set Type" = c("NMD_or_not" = "Exon ontology",
-                                                                     "first_exon" = "Exon ontology",
-                                                                     "last_exon" = "Exon ontology",
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
+                                                                     "any_first_exon" = "Exon ontology",
+                                                                     "any_last_exon" = "Exon ontology",
                                                                      "A3SS" = "Splicemode",
                                                                      "A5SS" = "Splicemode",
                                                                      "IR" = "Splicemode",
@@ -3181,7 +3421,7 @@ ComplexHeatmap::UpSet(upset_combs,
 dev.off()
 
 message("all constitutive")
-df <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "NMD_or_not", "first_exon", "last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + NMD_or_not + first_exon + last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -3193,9 +3433,9 @@ pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_pe
 
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
-                      left_annotation = rowAnnotation("Set Type" = c("NMD_or_not" = "Exon ontology",
-                                                                     "first_exon" = "Exon ontology",
-                                                                     "last_exon" = "Exon ontology",
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
+                                                                     "any_first_exon" = "Exon ontology",
+                                                                     "any_last_exon" = "Exon ontology",
                                                                      "A3SS" = "Splicemode",
                                                                      "A5SS" = "Splicemode",
                                                                      "IR" = "Splicemode",
@@ -3208,7 +3448,7 @@ ComplexHeatmap::UpSet(upset_combs,
 dev.off()
 
 message("all differential")
-df <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "NMD_or_not", "first_exon", "last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + NMD_or_not + first_exon + last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -3220,9 +3460,9 @@ pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_pe
 
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
-                      left_annotation = rowAnnotation("Set Type" = c("NMD_or_not" = "Exon ontology",
-                                                                     "first_exon" = "Exon ontology",
-                                                                     "last_exon" = "Exon ontology",
+                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
+                                                                     "any_first_exon" = "Exon ontology",
+                                                                     "any_last_exon" = "Exon ontology",
                                                                      "A3SS" = "Splicemode",
                                                                      "A5SS" = "Splicemode",
                                                                      "IR" = "Splicemode",

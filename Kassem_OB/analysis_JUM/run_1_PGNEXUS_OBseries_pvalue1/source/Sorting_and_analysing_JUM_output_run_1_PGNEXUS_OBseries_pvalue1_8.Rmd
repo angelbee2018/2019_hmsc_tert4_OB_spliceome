@@ -57,10 +57,10 @@ if(! dir.exists(results_directory_figures) ) {
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 # UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
@@ -1513,7 +1513,7 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
   message("now processing entry number: ", .y)
   
   # DEBUG ###
-  # .x <- as.event.id_array.tree_IR[[5]]
+  # .x <- as.event.id_array.tree_IR[[6]]
   # tibble_ref_gtf <- tibble_ref_gtf
   # tibble_recon_gtf <- tibble_recon_gtf
   ###########
@@ -1531,6 +1531,8 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
   vec_recon_transcripts_matched_to_junction <- subset_tibble_annotation$matched_recon_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
   
   # check reference annotation - but only if the junction was matched to reference in the first place.
+  tibble_all_confirmed_IR_entries_ref <- "uninit"
+  
   if (all(is.na(vec_ref_transcripts_matched_to_junction)) != TRUE) {
     
     # match IR region to reference
@@ -1554,13 +1556,25 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
     # find which IR matched entry has any same end coord
     tibble_ref_gtf_subset_IR_overlap_gene.name.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_gene_names)
     
-    tibble_all_confirmed_IR_entries_ref <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
+    tibble_union_start.and.end.matched <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
                                             tibble_ref_gtf_subset_IR_overlap_end.matched,
                                             tibble_ref_gtf_subset_IR_overlap_gene.name.matched) %>% purrr::reduce(dplyr::union)
+    
+    if (nrow(tibble_union_start.and.end.matched) == 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- "uninit"
+      
+    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- tibble_union_start.and.end.matched
+      
+    }
     
   }
   
   # check recon annotation - but only if the junction was matched to recon in the first place.
+  tibble_all_confirmed_IR_entries_recon <- "uninit"
+  
   if (all(is.na(vec_recon_transcripts_matched_to_junction)) != TRUE) {
     
     # match IR region to recon GTF
@@ -1577,10 +1591,20 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
     # extract all the end coords of the junction-matched entries
     vector_junction_matched_end_coords <- tibble_recon_gtf_subset_junction_matching_entries[, "end"]
     # find which IR matched entry has any same end coord
-    tibble_recon_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_end_coords)
+    tibble_recon_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_end_coords, by = "end")
     
-    tibble_all_confirmed_IR_entries_recon <- list(tibble_recon_gtf_subset_IR_overlap_start.matched, 
+    tibble_union_start.and.end.matched <- list(tibble_recon_gtf_subset_IR_overlap_start.matched, 
                                             tibble_recon_gtf_subset_IR_overlap_end.matched) %>% purrr::reduce(dplyr::union)
+    
+    if (nrow(tibble_union_start.and.end.matched) == 0) {
+      
+      tibble_all_confirmed_IR_entries_recon <- "uninit"
+      
+    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
+      
+      tibble_all_confirmed_IR_entries_recon <- tibble_union_start.and.end.matched
+      
+    }
     
   }
   
@@ -1594,8 +1618,16 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
                                          "matched_gene_names" = subset_tibble_annotation$matched_gene_names %>% paste(collapse = ";"),
                                          "matched_ref_transcript_names" = subset_tibble_annotation$matched_ref_transcript_names %>% paste(collapse = ";"),
                                          "matched_recon_transcript_names" = subset_tibble_annotation$matched_recon_transcript_names %>% paste(collapse = ";"),
-                                         "NMD_reference" = any(tibble_all_confirmed_IR_entries_ref$transcript_biotype == "nonsense_mediated_decay"),
-                                         "NMD_recon" = all(tibble_all_confirmed_IR_entries_recon$NMD_candidate == TRUE),
+                                         "NMD_reference" = if (tibble_all_confirmed_IR_entries_ref == "uninit") {
+                                           FALSE
+                                         } else {
+                                           any(tibble_all_confirmed_IR_entries_ref$transcript_biotype == "nonsense_mediated_decay")
+                                         },
+                                         "NMD_recon" = if (tibble_all_confirmed_IR_entries_recon == "uninit") {
+                                           FALSE
+                                         } else {
+                                           all(tibble_all_confirmed_IR_entries_recon$NMD_candidate == TRUE)
+                                         },
                                          "first_or_last_exon_reference" = subset_tibble_annotation$first_or_last_exon_reference %>% paste(collapse = ";"),
                                          "first_or_last_exon_recon" = subset_tibble_annotation$first_or_last_exon_recon %>% paste(collapse = ";"),
                                          "any_first_exon" = any(c(grep(x = subset_tibble_annotation$first_or_last_exon_reference, pattern = "first_exon") %>% na.omit, 

@@ -16,7 +16,7 @@ library(gtools)
 library(extrafont)
 # font_import(paths = "~/.local/share/fonts/")
 loadfonts(device = "pdf")
-# windowsFonts("Helvetica" = windowsFont("Helvetica"))
+windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
 library(genefilter)
@@ -34,7 +34,7 @@ plan(multiprocess)
 memory.limit(100000)
 
 library(biomaRt)
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "uswest")
 library(systemPipeR)
 library(GOstats)
 library(PFAM.db)
@@ -56,11 +56,11 @@ if(! dir.exists(results_directory_figures) ) {
      dir.create(results_directory_figures, recursive = TRUE)}
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 # UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
@@ -1513,7 +1513,7 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
   message("now processing entry number: ", .y)
   
   # DEBUG ###
-  # .x <- as.event.id_array.tree_IR[[5]]
+  # .x <- as.event.id_array.tree_IR[[6]]
   # tibble_ref_gtf <- tibble_ref_gtf
   # tibble_recon_gtf <- tibble_recon_gtf
   ###########
@@ -1531,6 +1531,8 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
   vec_recon_transcripts_matched_to_junction <- subset_tibble_annotation$matched_recon_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
   
   # check reference annotation - but only if the junction was matched to reference in the first place.
+  tibble_all_confirmed_IR_entries_ref <- "uninit"
+  
   if (all(is.na(vec_ref_transcripts_matched_to_junction)) != TRUE) {
     
     # match IR region to reference
@@ -1554,13 +1556,25 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
     # find which IR matched entry has any same end coord
     tibble_ref_gtf_subset_IR_overlap_gene.name.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_gene_names)
     
-    tibble_all_confirmed_IR_entries_ref <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
+    tibble_union_start.and.end.matched <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
                                             tibble_ref_gtf_subset_IR_overlap_end.matched,
                                             tibble_ref_gtf_subset_IR_overlap_gene.name.matched) %>% purrr::reduce(dplyr::union)
+    
+    if (nrow(tibble_union_start.and.end.matched) == 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- "uninit"
+      
+    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- tibble_union_start.and.end.matched
+      
+    }
     
   }
   
   # check recon annotation - but only if the junction was matched to recon in the first place.
+  tibble_all_confirmed_IR_entries_recon <- "uninit"
+  
   if (all(is.na(vec_recon_transcripts_matched_to_junction)) != TRUE) {
     
     # match IR region to recon GTF
@@ -1577,10 +1591,20 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
     # extract all the end coords of the junction-matched entries
     vector_junction_matched_end_coords <- tibble_recon_gtf_subset_junction_matching_entries[, "end"]
     # find which IR matched entry has any same end coord
-    tibble_recon_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_end_coords)
+    tibble_recon_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_recon_gtf_subset_IR_overlap, vector_junction_matched_end_coords, by = "end")
     
-    tibble_all_confirmed_IR_entries_recon <- list(tibble_recon_gtf_subset_IR_overlap_start.matched, 
+    tibble_union_start.and.end.matched <- list(tibble_recon_gtf_subset_IR_overlap_start.matched, 
                                             tibble_recon_gtf_subset_IR_overlap_end.matched) %>% purrr::reduce(dplyr::union)
+    
+    if (nrow(tibble_union_start.and.end.matched) == 0) {
+      
+      tibble_all_confirmed_IR_entries_recon <- "uninit"
+      
+    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
+      
+      tibble_all_confirmed_IR_entries_recon <- tibble_union_start.and.end.matched
+      
+    }
     
   }
   
@@ -1594,8 +1618,16 @@ list_as.event.id_with_summarised_annotation_IR <- purrr::imap(.x = as.event.id_a
                                          "matched_gene_names" = subset_tibble_annotation$matched_gene_names %>% paste(collapse = ";"),
                                          "matched_ref_transcript_names" = subset_tibble_annotation$matched_ref_transcript_names %>% paste(collapse = ";"),
                                          "matched_recon_transcript_names" = subset_tibble_annotation$matched_recon_transcript_names %>% paste(collapse = ";"),
-                                         "NMD_reference" = any(tibble_all_confirmed_IR_entries_ref$transcript_biotype == "nonsense_mediated_decay"),
-                                         "NMD_recon" = all(tibble_all_confirmed_IR_entries_recon$NMD_candidate == TRUE),
+                                         "NMD_reference" = if (tibble_all_confirmed_IR_entries_ref == "uninit") {
+                                           FALSE
+                                         } else {
+                                           any(tibble_all_confirmed_IR_entries_ref$transcript_biotype == "nonsense_mediated_decay")
+                                         },
+                                         "NMD_recon" = if (tibble_all_confirmed_IR_entries_recon == "uninit") {
+                                           FALSE
+                                         } else {
+                                           all(tibble_all_confirmed_IR_entries_recon$NMD_candidate == TRUE)
+                                         },
                                          "first_or_last_exon_reference" = subset_tibble_annotation$first_or_last_exon_reference %>% paste(collapse = ";"),
                                          "first_or_last_exon_recon" = subset_tibble_annotation$first_or_last_exon_recon %>% paste(collapse = ";"),
                                          "any_first_exon" = any(c(grep(x = subset_tibble_annotation$first_or_last_exon_reference, pattern = "first_exon") %>% na.omit, 
@@ -1623,6 +1655,8 @@ wide_table_all_splicemodes_split_with_na_with_ref_annot <- dplyr::left_join(wide
 
 # write table 
 write.table(x = wide_table_all_splicemodes_split_with_na_with_ref_annot, file = paste(results_directory_figures, "wide_table_of_all_JUM_results_", nrow(wide_table_all_splicemodes_split_with_na_with_ref_annot), "_entries_with_na_annotated.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# also write chr start end strand
 
 ```
 
@@ -1735,7 +1769,7 @@ qpvalue_cutoff <- 0.01
 
 ```
 
-### do the filtering
+### do the filtering of differential junctions
 
 ```{r}
 
@@ -1779,7 +1813,7 @@ print(paste("There are", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_I
 
 write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 # export associated gene set
-write.table(x = PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit, file = paste(results_directory_figures, "geneset_", length( PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_anysig.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit, file = paste(results_directory_figures, "geneset_", length( PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 # remove ALL na to produce the timeseries-ready table
 PSI_levels_timeseries_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, OBseries_timepoints], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
@@ -1793,7 +1827,6 @@ print(paste("There are", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% un
 write.table(x = PSI_levels_timeseries_OB_wide, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
-
 
 ### create table of constitutive junctions as well
 
@@ -1960,7 +1993,7 @@ This gene background shall contain all ensembl protein coding, long noncoding an
 
 ```{r}
 
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+# ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
 
 # # GOTERM
 # polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "go_id", "namespace_1003"), mart = ensembl_mart) %>% .[.$namespace_1003 != "",]
@@ -1978,7 +2011,6 @@ catdb <- makeCATdb(myfile = paste(results_dir, "polyA_RNAseq_GO_background_GOTER
 #### hypergeometric test for GO terms
 
 ```{r}
-
 
 # OB series
 
@@ -2025,9 +2057,11 @@ ggplot(OB_anysig_GOtest_all_topten, aes(x = reorder(Term, Padj), y = SampleMatch
  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
 
-
+# write the top 30 enrichment table
 write.table(x = OB_anysig_GOtest_all_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-  
+
+# write the top everything enrichment table
+write.table(x = bind_rows(OB_anysig_GOtest_MF_topten, OB_anysig_GOtest_BP_topten, OB_anysig_GOtest_CC_topten %>% dplyr::arrange(desc(Padj))), file = paste(results_directory_figures, "Top inf significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2115,7 +2149,7 @@ purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_top
 
 ```
 
-### Gene Ontology for the isoforms/genes with highest PSIs at every time point
+## Gene Ontology for the isoforms/genes with highest PSIs at every time point
 
 Plan: 
 
@@ -2125,7 +2159,7 @@ Plan:
 4. Bind rows for a total of three massive tables (one for each GO node)
 5. GGPLOT
 
-#### creation of lists of NORMALISED(SCALED) PSI values of isoforms per time point
+### creation of lists of NORMALISED(SCALED) PSI values of isoforms per time point
 
 ```{r}
 
@@ -2135,11 +2169,9 @@ list_of_scaled_PSI_OBseries <- wide_table_of_final_SOM_summary_5_by_5_OBseries[,
 
 list_of_scaled_PSI_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~cbind(.x, Gene = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "Gene"])) %>% cbind(., AS_event_ID = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "AS_event_ID"])) %>% cbind(., isoform_ID = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "isoform_ID"])) %>% cbind(splicemode = as.character(wide_table_of_final_SOM_summary_5_by_5_OBseries[, "splicemode"])))
 
-
-
 ```
 
-#### filtering for top 10% of isoforms with highest inclusion level
+### filtering for top 10% of isoforms with highest inclusion level
 
 ```{r}
 
@@ -2149,14 +2181,15 @@ list_of_highest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_s
 list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * high_scaledPSIcutoff)))
 list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID, .f = ~unique(.x[, "Gene"]))
 
-
-# list_of_highest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~.x[order(.x[, 1], decreasing = TRUE), ])
-# list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * high_scaledPSIcutoff)))
-# list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~unique(.x[, "Gene"]))
+# write geneset of each timepoint
+purrr::map2(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .y = names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered), 
+            .f = ~write.table(x = .x,
+                             file = paste(results_directory_figures, "geneset_top10percent_highestPSI_timepointwise_OBseries_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_", .y, ".txt", sep = ""),
+                             row.names = FALSE, col.names = FALSE, quote = FALSE, sep = "\t"))
 
 ```
 
-#### filtering for top 10% of isoforms with LOWEST inclusion level
+### filtering for top 10% of isoforms with LOWEST inclusion level
 
 ```{r}
 
@@ -2166,14 +2199,15 @@ list_of_lowest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_sc
 list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * low_scaledPSIcutoff)))
 list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered_with_isoformID, .f = ~unique(.x[, "Gene"]))
 
-
-# list_of_lowest_PSI_isoforms_per_timepoint_OBseries <- purrr::map(.x = list_of_scaled_PSI_OBseries, .f = ~.x[order(.x[, 1], decreasing = FALSE), ])
-# list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries, .f = ~head(.x, n = floor(nrow(.x) * low_scaledPSIcutoff)))
-# list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~unique(.x[, "Gene"]))
+# write geneset of each timepoint
+purrr::map2(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .y = names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered), 
+            .f = ~write.table(x = .x,
+                             file = paste(results_directory_figures, "geneset_top10percent_lowestPSI_timepointwise_OBseries_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_", .y, ".txt", sep = ""),
+                             row.names = FALSE, col.names = FALSE, quote = FALSE, sep = "\t"))
 
 ```
 
-#### GENE ONTOLOGY
+### GENE ONTOLOGY
 
 ```{r}
 
@@ -2276,7 +2310,7 @@ for (i in 1:3)
 
 ```
 
-#### GGPLOT
+### GGPLOT
 
 ```{r}
 
@@ -2392,15 +2426,13 @@ write.table(x = wide_table_of_timepointwise_lowestPSI_results_CC_OBseries_proces
 
 ```
 
-# protein family enrichment (EXPERIMENTAL)
+# protein family enrichment
 
 goal: to conduct hypergeometric tests of overrepresentation for gene subsets in protein families
 
 ## generating the gene background for PFAM protein families
 
 ```{r}
-
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
 
 # PROTEINFAMILY
 polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "pfam"), mart = ensembl_mart) %>% .[.$pfam != "",]
@@ -2486,8 +2518,12 @@ ggplot(OB_anysig_family_enrichment_topten, aes(x = reorder(TermID, padj), y = ge
  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
  ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
+# write result of top 30
 write.table(x = OB_anysig_family_enrichment_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-  
+
+# write result of everything
+write.table(x = OB_anysig_family_enrichment %>% dplyr::arrange(desc(padj)), file = paste(results_directory_figures, "Top inf significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
 ```
 
 ### anytimepoint
@@ -4047,9 +4083,9 @@ number_NMD_differential_junctions <- tibble_junctions_per_category_differential[
 number_first_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_first_exon == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
 number_last_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_last_exon == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_differential_junctions*100/differential_junctions_count, "% NMD exons differential.")
-message("There are ", number_first_exon_differential_junctions*100/differential_junctions_count, "% first exons differential.")
-message("There are ", number_last_exon_differential_junctions*100/differential_junctions_count, "% last exons differential.")
+message("There are ", number_NMD_differential_junctions*100/differential_junctions_count, "% NMD junctions differential.")
+message("There are ", number_first_exon_differential_junctions*100/differential_junctions_count, "% first junctions differential.")
+message("There are ", number_last_exon_differential_junctions*100/differential_junctions_count, "% last junctions differential.")
 
 # DIFFERENTIAL JUNCTIONS (PLAUSIBLE)
 tibble_junctions_per_category_differential_plausible <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_junctions_differential_plausible = n())
@@ -4059,9 +4095,9 @@ number_NMD_differential_plausible_junctions <- tibble_junctions_per_category_dif
 number_first_exon_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_first_exon == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
 number_last_exon_differential_plausible_junctions <- tibble_junctions_per_category_differential_plausible[tibble_junctions_per_category_differential_plausible$any_last_exon == TRUE, ] %>% .$no_junctions_differential_plausible %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_differential_plausible_junctions*100/differential_plausible_junctions_count, "% NMD exons differential (plausible).")
-message("There are ", number_first_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% first exons differential (plausible).")
-message("There are ", number_last_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% last exons differential (plausible).")
+message("There are ", number_NMD_differential_plausible_junctions*100/differential_plausible_junctions_count, "% NMD junctions differential (plausible).")
+message("There are ", number_first_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% first junctions differential (plausible).")
+message("There are ", number_last_exon_differential_plausible_junctions*100/differential_plausible_junctions_count, "% last junctions differential (plausible).")
 
 # COMBINE ALL THE TABLES FOR PLOTTING
 tibble_junctions_per_category_summary <- list(tibble_junctions_per_category_all, tibble_junctions_per_category_constitutive, tibble_junctions_per_category_differential, tibble_junctions_per_category_differential_plausible) %>% purrr::reduce(dplyr::full_join)
@@ -4100,12 +4136,14 @@ ggplot() +
   ggsave(filename = paste(results_directory_figures, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 30, units = "cm") 
 
 # upset plot
-## all junctions
+message("all junctions")
 df <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
 upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+print(set_size(upset_combs))
 
 pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_alljunctions.pdf", sep = ""), height = 4, width = 10)
 
@@ -4124,12 +4162,14 @@ ComplexHeatmap::UpSet(upset_combs,
 
 dev.off()
 
-## all constitutive
+message("all constitutive")
 df <- PSI_levels_timeseries_constitutive_OB_wide %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
 upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+print(set_size(upset_combs))
 
 pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 10)
 
@@ -4148,12 +4188,14 @@ ComplexHeatmap::UpSet(upset_combs,
 
 dev.off()
 
-## all differential
+message("all differential")
 df <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
 upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+print(set_size(upset_combs))
 
 pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential.pdf", sep = ""), height = 4, width = 10)
 
@@ -4172,12 +4214,14 @@ ComplexHeatmap::UpSet(upset_combs,
 
 dev.off()
 
-## differential (plausible)
+message("differential (plausible)")
 df <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
 upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$AS_event_ID) %>% make_comb_mat(mode = "distinct")
+
+print(set_size(upset_combs))
 
 pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential_plausible.pdf", sep = ""), height = 4, width = 10)
 
@@ -4197,6 +4241,50 @@ ComplexHeatmap::UpSet(upset_combs,
 dev.off()
 
 ```
+
+## check the concordance between the ref and recon gtf first/last exon and NMD
+
+```{r}
+
+# get row indices of first/last exon and NMD annotations.
+## first exon
+row.indices_first_exon_ref <- grep(x = wide_table_all_splicemodes_split_with_na_with_ref_annot$first_or_last_exon_reference, pattern = "first_exon")
+row.indices_first_exon_recon <- grep(x = wide_table_all_splicemodes_split_with_na_with_ref_annot$first_or_last_exon_recon, pattern = "first_exon")
+
+row.indices_first_exon_ref.recon.intersection <- intersect(row.indices_first_exon_ref, row.indices_first_exon_recon)
+row.indices_first_exon_ref.recon.union <- union(row.indices_first_exon_ref, row.indices_first_exon_recon)
+
+message("number of first exons in the reference: ", row.indices_first_exon_ref %>% length)
+message("number of first exons in the recon: ", row.indices_first_exon_recon %>% length)
+message("number of first exons in BOTH recon and reference: ", row.indices_first_exon_ref.recon.intersection %>% length)
+message("first exons jaccard similarity: ", (row.indices_first_exon_ref.recon.intersection %>% length)/(row.indices_first_exon_ref.recon.union %>% length))
+
+## last exon
+row.indices_last_exon_ref <- grep(x = wide_table_all_splicemodes_split_with_na_with_ref_annot$first_or_last_exon_reference, pattern = "last_exon")
+row.indices_last_exon_recon <- grep(x = wide_table_all_splicemodes_split_with_na_with_ref_annot$first_or_last_exon_recon, pattern = "last_exon")
+
+row.indices_last_exon_ref.recon.intersection <- intersect(row.indices_last_exon_ref, row.indices_last_exon_recon)
+row.indices_last_exon_ref.recon.union <- union(row.indices_last_exon_ref, row.indices_last_exon_recon)
+
+message("number of last exons in the reference: ", row.indices_last_exon_ref %>% length)
+message("number of last exons in the recon: ", row.indices_last_exon_recon %>% length)
+message("number of last exons in BOTH recon and reference: ", row.indices_last_exon_ref.recon.intersection %>% length)
+message("last exons jaccard similarity: ", (row.indices_last_exon_ref.recon.intersection %>% length)/(row.indices_last_exon_ref.recon.union %>% length))
+
+## NMD
+row.indices_NMD_ref <- grep(x = wide_table_all_splicemodes_split_with_na_with_ref_annot$NMD_reference, pattern = "TRUE")
+row.indices_NMD_recon <- grep(x = wide_table_all_splicemodes_split_with_na_with_ref_annot$NMD_recon, pattern = "TRUE")
+
+row.indices_NMD_ref.recon.intersection <- intersect(row.indices_NMD_ref, row.indices_NMD_recon)
+row.indices_NMD_ref.recon.union <- union(row.indices_NMD_ref, row.indices_NMD_recon)
+
+message("number of NMD in the reference: ", row.indices_NMD_ref %>% length)
+message("number of NMD in the recon: ", row.indices_NMD_recon %>% length)
+message("number of NMD in BOTH recon and reference: ", row.indices_NMD_ref.recon.intersection %>% length)
+message("NMD jaccard similarity: ", (row.indices_NMD_ref.recon.intersection %>% length)/(row.indices_NMD_ref.recon.union %>% length))
+
+```
+
 
 ## Recording absolute PSI values for reporting junction switching
 

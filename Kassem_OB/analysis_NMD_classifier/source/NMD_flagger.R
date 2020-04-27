@@ -3,14 +3,16 @@ Accepts an input of a reconstructed/assembled transcriptome annotation (e.g. str
 
 Behaviour: loads reconstructed transcriptome, then subsets each transcript. For each transcript, look-up the reference FASTA sequence and 3FT to find ALL start codons that occur more than 54nt upstream of the last exon-exon junction. Then look for any in-frame stop codons downstream. Transcript is an NMD candidate when the FIRST nucleotide of the stop codon is within 51 - 50nt of the last exon junction (the stop codon is fully encapsulated in the 51nt window).
 
+NMD candidature is flagged in the \"transcript_biotype\" entry of the GTF. First/last exon is flagged in a separate entry. Poison exons are defined on a per-transcript basis, with candidature flagged as a separate entry with the \"type\" attribute == \"poison_exon\"
+
 Recommended system requirements: 6 threads/64GB memory"
 
 # print the arguments received by the R script
-message("Arguments input:", commandArgs(), sep = "")
+cat("Arguments input:", commandArgs(), sep = "\n")
 args = 
   commandArgs(trailingOnly = TRUE)
-message(args)
-message("number of arguments specified:", length(args))
+cat(args)
+cat("number of arguments specified:", length(args))
 
 # SET ENVIRONMENT ##########
 #if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -46,7 +48,11 @@ list_input_arg_info = list(
   "6" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
                     help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you are doing haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The script won't try to search for a second file. In ensembl, this file is called \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character"),
   "7" = make_option(c("-W", "--checking_window_size"), type = "double", default = 51,
-                    help = "ADVANCED. Use this parameter to change the nucleotide window from the default of 51. DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double")
+                    help = "ADVANCED. Use this parameter to change the nucleotide window from the default of 51. 
+                    DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double"),
+  "8" = make_option(c("-E", "--min_exons_per_transcript"), type = "integer", default = 3,
+                    help = "ADVANCED. Use this parameter to change the minimum number of exons that a transcript must have in order to be flagged for NMD. As a general rule of thumb, the false positive rate:false negative rate ratio will decrease as you increase this parameter. Default is 3, meaning 2-exon transcripts and below will not be considered for NMD. 
+                    DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double")
 )
 
 input_arg_info <- OptionParser(option_list = list_input_arg_info, description = script_description)
@@ -67,7 +73,13 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
 # reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
 # reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
 # output_name <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMDflagged"
+
+# reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+# reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+# reference_genome_fasta_dir <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
+# output_name <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck.gtf"
 # window_size <- 51
+# min_exons_per_transcript <- 3
 
 ###############
 
@@ -75,11 +87,13 @@ reconstructed_gtf_path <- input_args$reconstructed_transcript_gtf
 reference_genome_fasta_dir <- input_args$reference_genome_fasta_dir
 output_name <- input_args$output_name
 window_size <- input_args$checking_window_size
+min_exons_per_transcript <- input_args$min_exons_per_transcript
 
-message("reconstructed_gtf_path:", reconstructed_gtf_path)
-message("reference_genome_fasta_dir:", reference_genome_fasta_dir)
-message("output_name:", output_name)
-message("window_size:", window_size)
+cat("reconstructed_gtf_path:", reconstructed_gtf_path, "\n")
+cat("reference_genome_fasta_dir:", reference_genome_fasta_dir, "\n")
+cat("output_name:", output_name, "\n")
+cat("window_size:", window_size, "\n")
+cat("min_exons_per_transcript:", min_exons_per_transcript, "\n")
 
 if(!dir.exists(output_name) ) {
   dir.create(output_name, recursive = TRUE)}
@@ -90,9 +104,9 @@ if (input_args$ncores != 0) {
   number_of_workers <- input_args$ncores
 } 
 
-message(number_of_workers, "cores will be used")
+cat(number_of_workers, "cores will be used\n")
+options(future.globals.maxSize = 30000000000, mc.cores = number_of_workers, future.fork.enable = TRUE)
 future::plan(multiprocess)
-options(future.globals.maxSize = 30000000000, mc.cores = number_of_workers)
 
 # DEFINE FUNCTIONS ##########################
 
@@ -134,10 +148,46 @@ test_for_any_valid_ORF <- function(vector_AA_sequence) {
 
 # BEGIN EXECUTION ###########################
 
-message("import reconstructed transcriptome GTF")
+cat("import reconstructed transcriptome GTF\n")
 reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
 vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(reference_genome_fasta_dir)[list.files(reference_genome_fasta_dir) %>% grep(., pattern = ".*.fa$")], sep = "")
+
+# automatically detect if exons are always numbered in increasing order regardless of strand (common for recon. transcripts)
+## sample the first transcript on the negative strand with more than 1 exon
+temp_number <- 1
+
+first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+
+while (reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
+       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
+       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
+       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
+  
+  temp_number <- temp_number + 1
+  
+  first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+  
+}
+
+# the test condition
+max_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
+max_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
+min_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
+
+exon_order <- NULL
+
+# if the exon 1 comes before the max exon, then the exon order is always increasing
+if (min_exon_start_test < max_exon_start_test) {
+  
+  exon_order <- "increasing"
+  
+  # if the exon 1 cones after the max exon, then the exon order is stranded.
+} else if (min_exon_start_test > max_exon_start_test) {
+  
+  exon_order <- "stranded"
+  
+}
 
 # specify the chromosomes to be run, according to user option --chrmode
 if (input_args$chrmode == 1) {
@@ -157,14 +207,14 @@ if (input_args$chrmode == 1) {
 }
 
 # begin looping thru each chromosome #####
-for (chr in 1) {
+for (chr in chr_to_run) {
   
   # start counting
   tictoc::tic(paste("Chromosome", chr))
   
-  message("now running chromosome ...", chr)
+  cat("now running chromosome ...", chr, "\n")
   
-  message("get positions of the vector where the path of the ref. genome fasta")
+  cat("get positions of the vector where the path of the ref. genome fasta\n")
   vector_ref_genome_paths_by_chr_position <- grep(x = vector_ref_genome_paths_by_chr, pattern = paste("(\\D|^)", chr, ".fa$", sep = ""))
   
   if (length(vector_ref_genome_paths_by_chr_position) != 1) {
@@ -173,30 +223,33 @@ for (chr in 1) {
     
   }
   
-  message("temporary allocation to ref genome fasta list")
+  cat("temporary allocation to ref genome fasta list\n")
   reference_genome_fasta_chr_temp <- seqinr::read.fasta(file = paste(vector_ref_genome_paths_by_chr[vector_ref_genome_paths_by_chr_position]), forceDNAtolower = FALSE)
   
   reconstructed_gtf_tempchr <- reconstructed_gtf[reconstructed_gtf$seqnames == chr, ]
   
-  message("subset reconstructed transcriptome GTF by filtering for exon entries only.")
+  cat("subset reconstructed transcriptome GTF by filtering for exon entries only.\n")
+  # leave aside the remaining entries for later inclusion
+  ## rows which do not describe an exon entry
+  row_indices_recon.gtf_non.exon.entries <- which(reconstructed_gtf_tempchr$type != "exon")
+  ## rows where the transcript_id is NA
+  row_indices_recon.gtf_na.transcript.id.entries <- which(is.na(reconstructed_gtf_tempchr$transcript_id))
+  
   row_indices_recon.gtf_exon.entries.only <- which(reconstructed_gtf_tempchr$type == "exon")
   reconstructed_gtf_exon.entries.only <- reconstructed_gtf_tempchr[row_indices_recon.gtf_exon.entries.only, ]
   
-  # leave aside the remaining entries for later inclusion
-  row_indices_recon.gtf_non.exon.entries <- which(reconstructed_gtf_tempchr$type != "exon")
-  
   # generate list of all 'transcript_id's to loop thru
-  list_transcript_ids <- reconstructed_gtf_tempchr$transcript_id %>% unique %>% array_tree
+  list_transcript_ids <- reconstructed_gtf_tempchr$transcript_id %>% unique %>% na.omit %>% array_tree
   
-  message("load the exon entries of the recon. GTF table into the list")
-  list_reconstructed_gtf_exon.entries.only_by_transcript_id <- future_map(.x = list_transcript_ids, .f = ~reconstructed_gtf_exon.entries.only[reconstructed_gtf_exon.entries.only$transcript_id == .x, ], .progress = TRUE, .options = future_options(globals = c("reconstructed_gtf_exon.entries.only"))) %>% set_names(reconstructed_gtf_tempchr$transcript_id %>% unique)
+  cat("load the exon entries of the recon. GTF table into the list\n")
+  list_reconstructed_gtf_exon.entries.only_by_transcript_id <- future_map(.x = list_transcript_ids, .f = ~reconstructed_gtf_exon.entries.only[reconstructed_gtf_exon.entries.only$transcript_id == .x, ], .progress = TRUE, .options = future_options(globals = c("reconstructed_gtf_exon.entries.only"))) %>% set_names(list_transcript_ids %>% unlist)
   
   # filter out transcript entries which only have one exon
-  list_reconstructed_gtf_exon.entries.only_by_transcript_id <- purrr::discard(.x = list_reconstructed_gtf_exon.entries.only_by_transcript_id, .p = ~length(.x$exon_number) < 2)
+  list_reconstructed_gtf_exon.entries.only_by_transcript_id <- purrr::discard(.x = list_reconstructed_gtf_exon.entries.only_by_transcript_id, .p = ~length(.x$exon_number %>% na.omit) < min_exons_per_transcript)
   
-  message("generate attributes of each transcript:
+  cat("generate attributes of each transcript:
       1. all genome-relative forward coords of each nucleotide,
-      2. coords of the nucleotides flanking last exon-exon junction")
+      2. coords of the nucleotides flanking last exon-exon junction\n")
   list_transcript_attributes <- future_map(.x = list_reconstructed_gtf_exon.entries.only_by_transcript_id, 
                                            .f = ~list(
                                              "recon_entries" = .x,
@@ -206,23 +259,27 @@ for (chr in 1) {
                                              # however for rev. strand, last_nt_of_second_last_exon will be the start coord of the second last exon, and the first_nt_of_last_exon will be the end coord of the last exon.
                                              "last_nt_of_second_last_exon" = if (.x$strand %>% unique %>% paste == "+") {
                                                .x[.x$exon_number == max(.x$exon_number %>% as.numeric) - 1, "end"] %>% paste %>% as.numeric
-                                             } else if (.x$strand %>% unique %>% paste == "-") {
+                                             } else if (exon_order == "stranded" & .x$strand %>% unique %>% paste == "-") {
+                                               .x[.x$exon_number == max(.x$exon_number %>% as.numeric) - 1, "start"] %>% paste %>% as.numeric
+                                             } else if (exon_order == "increasing" & .x$strand %>% unique %>% paste == "-") {
                                                .x[.x$exon_number == min(.x$exon_number %>% as.numeric) + 1, "start"] %>% paste %>% as.numeric
-                                             } , 
+                                             }, 
                                              "first_nt_of_last_exon" = if (.x$strand %>% unique %>% paste == "+") {
                                                .x[.x$exon_number == max(.x$exon_number %>% as.numeric), "start"] %>% paste %>% as.numeric
-                                             } else if (.x$strand %>% unique %>% paste == "-") {
+                                             } else if (exon_order == "stranded" & .x$strand %>% unique %>% paste == "-") {
+                                               .x[.x$exon_number == max(.x$exon_number %>% as.numeric), "end"] %>% paste %>% as.numeric
+                                             } else if (exon_order == "increasing" & .x$strand %>% unique %>% paste == "-") {
                                                .x[.x$exon_number == min(.x$exon_number %>% as.numeric), "end"] %>% paste %>% as.numeric
                                              }
                                            ), .progress = TRUE
                                            
   )
   
-  message("generate all the forward nucleotides of each transcript")
+  cat("generate all the forward nucleotides of each transcript\n")
   # also get the TRANSCRIPT RELATIVE position of the junction  (transcript-relative coord will be a half-integer value)
   list_transcript_fwd_nts <- future_imap(.x = list_transcript_attributes, .f = function(.x, .y) {
     
-    # message("now looking up nucleotides of transcript number", which(names(list_transcript_attributes) == .y), "/", length(list_transcript_attributes))
+    # cat("now looking up nucleotides of transcript number", which(names(list_transcript_attributes) == .y), "/", length(list_transcript_attributes), "\n")
     
     updated_list <- purrr::splice(.x,
                                   
@@ -237,10 +294,10 @@ for (chr in 1) {
     
   }, .progress = TRUE)
   
-  message("do 3FT based on the forward nucleotides of each transcript and test for whether there is any valid ORF.")
+  cat("do 3FT based on the forward nucleotides of each transcript and test for whether there is any valid ORF.\n")
   list_transcript_3FT <- future_imap(.x = list_transcript_fwd_nts, .f = function(.x, .y) {
     
-    message("now checking 3FT of transcript number", which(names(list_transcript_fwd_nts) == .y), "/", length(list_transcript_fwd_nts))
+    cat("now checking 3FT of transcript number", which(names(list_transcript_fwd_nts) == .y), "/", length(list_transcript_fwd_nts), "\n")
     
     # for simplicity, we exclude the last exon + 51 nt window from the nt sequence
     # hence get the effective fwd. nucleotide sequence:
@@ -319,9 +376,9 @@ rtracklayer::export(tibble_annotated_recon_gtf, con = paste(output_name, ".gtf",
 
 # print stats summary
 
-message("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique))
-message("number of transcripts which were in the GTF:", length(reconstructed_gtf$transcript_id %>% unique))
-message("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(reconstructed_gtf$transcript_id %>% unique))) * 100, "%")
+cat("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique), "\n")
+cat("number of transcripts which were in the GTF:", length(reconstructed_gtf$transcript_id %>% unique), "\n")
+cat("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(reconstructed_gtf$transcript_id %>% unique))) * 100, "%\n")
 
 # finish counting
 tictoc::toc()

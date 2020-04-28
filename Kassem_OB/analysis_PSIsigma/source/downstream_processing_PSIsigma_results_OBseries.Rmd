@@ -1047,9 +1047,9 @@ list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x =
   # message("now processing entry number: ", .y)
   
   # DEBUG ###
-  # .x <- tibble_ref_matching_exon_entries_all_array.tree_IR[[6]]
-  # tibble_ref_gtf <- tibble_ref_gtf
-  # tibble_recon_gtf <- tibble_recon_gtf
+  .x <- list_ref_matching_exon_entries_all_array.tree_IR[[216]]
+  tibble_ref_gtf <- tibble_ref_gtf
+  tibble_recon_gtf <- tibble_recon_gtf
   ###########
   
   tibble_ref_gtf <<- tibble_ref_gtf
@@ -1142,6 +1142,15 @@ list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x =
   
   # we now have enough info. to write up the final summary
   summarised_tibble_annotation <- .x %>% as_tibble
+  
+  # refresh the matched ref and recon transcript names
+  summarised_tibble_annotation[, "matched_ref_transcript_names"] <- if (tibble_all_confirmed_IR_entries_ref != "uninit") {
+    tibble_all_confirmed_IR_entries_ref$transcript_id %>% paste(collapse = ",")
+  }
+  
+  summarised_tibble_annotation[, "matched_recon_transcript_names"] <- if (tibble_all_confirmed_IR_entries_recon != "uninit") {
+    tibble_all_confirmed_IR_entries_recon$transcript_id %>% paste(collapse = ",")
+  }
   
   summarised_tibble_annotation[, "NMD_reference"] <- if (tibble_all_confirmed_IR_entries_ref == "uninit") {
     FALSE

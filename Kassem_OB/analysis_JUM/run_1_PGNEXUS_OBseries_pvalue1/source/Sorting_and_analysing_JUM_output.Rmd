@@ -46,10 +46,11 @@ library(ggdendro)
 library(data.table)
 library(Rfast)
 
-shared_dir <- "/media/Ubuntu/sharedfolder/"
+# shared_dir <- "/media/Ubuntu/sharedfolder/"
+shared_dir <- "Z:/"
 
-# results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
-results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+# results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
 
 results_directory_figures <- paste(results_dir, "figures/", sep="")
 
@@ -63,8 +64,8 @@ if(! dir.exists(results_directory_figures) ) {
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
-# UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
-UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+# UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 ```
 
@@ -2764,96 +2765,6 @@ tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibbl
 
 ## transcript and domain analyses! :)
 
-```{r eval=FALSE, include=FALSE}
-
-# sometimes, JUM seems to call novel splice junctions that are slightly off by at most 2 nt. If we expand the genomic coordinates by 2 on each side, we can correct for this.
-
-enable_greedy_genome_coordinates <- function(tibble_chr_strand_start_end) {
-  
-  tibble_chr_strand_start_end[, "start"] <- tibble_chr_strand_start_end$start - 2
-  tibble_chr_strand_start_end[, "end"] <- tibble_chr_strand_start_end$end + 2
-  
-  return(tibble_chr_strand_start_end)
-  
-}
-
-# all plausible differential junctions
-all_plausible_diff_junctions_chr_strand_start_end <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% JUM_ASeventID_and_splicemode_to_chr_strand_start_end
-
-message("total number of unique junction structures queried: ", all_plausible_diff_junctions_chr_strand_start_end$AS_event_ID %>% unique %>% length)
-
-all_plausible_diff_junctions_consequence <- tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain(all_plausible_diff_junctions_chr_strand_start_end, gtf_table = tibble_ref_gtf_simplified, ensembl_mart)
-
-tibble_all_plausible_diff_transcript_level_results <- all_plausible_diff_junctions_consequence$transcript_level_results
-
-tibble_transcript_level_summary_count <- tibble_all_plausible_diff_transcript_level_results %>% dplyr::group_by(AS_event_ID) %>% 
-  dplyr::summarise(number_protein_coding = any(transcript_biotype == "protein_coding"),
-                   number_lncrna = any(transcript_biotype == "lncRNA"),
-                   number_micrna = any(transcript_biotype == "miRNA"),
-                   number_three_prime_utr = any(type == "three_prime_utr"),
-                   number_five_prime_utr = any(type == "five_prime_utr"),
-                   number_CDS = any(type == "CDS"))
-
-message("total number of unique differential junction structures with any sort of transcript-level annotation: ", nrow(tibble_transcript_level_summary_count))
-
-message("percent of differential junction structures overlapping a protein coding transcript: ", length(which(tibble_transcript_level_summary_count$number_protein_coding == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
-message("percent of differential junction structures overlapping an lncRNA transcript: ", length(which(tibble_transcript_level_summary_count$number_lncrna == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
-message("percent of differential junction structures overlapping a miRNA transcript: ", length(which(tibble_transcript_level_summary_count$number_micrna == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
-
-message("percent of differential junction structures overlapping a 3' UTR region: ", length(which(tibble_transcript_level_summary_count$number_three_prime_utr == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
-message("percent of differential junction structures overlapping a 5' UTR region: ", length(which(tibble_transcript_level_summary_count$number_five_prime_utr == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
-message("percent of differential junction structures overlapping a CDS region: ", length(which(tibble_transcript_level_summary_count$number_CDS == TRUE))/nrow(tibble_transcript_level_summary_count) * 100)
-
-tibble_all_plausible_diff_protein_level_results <- all_plausible_diff_junctions_consequence$protein_level_results
-
-unique_interpro_ids <- tibble_all_plausible_diff_protein_level_results$interpro %>% .[tibble_all_plausible_diff_protein_level_results$interpro != "FALSE"]  %>% strsplit(split = ";") %>% unlist %>% unique
-
-tibble_protein_level_summary_count <- tibble_all_plausible_diff_protein_level_results %>% dplyr::group_by(AS_event_ID) %>% 
-  dplyr::summarise(overlaps_interpro_domain = any(interpro != "FALSE"),
-                   unique_interpro_ids = interpro %>% strsplit(split = ";") %>% unlist %>% unique %>% .[. != "FALSE"] %>% paste(collapse = ";"),
-                   overlaps_LCR = any(seg != "FALSE"),
-                   overlaps_disordered_region = any(mobidblite != "FALSE"),
-                   overlaps_ncoils = any(ncoils != "FALSE"),
-                   overlaps_signalp = any(signalp != "FALSE"),
-                   overlaps_tmhmm = any(tmhmm != "FALSE"))
-
-vector_unique_interpro_ids <- tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort
-
-# create tally of each unique instance of interpro ID per AS_event_ID
-tibble_interpro_id_tally_per_ASeventID <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% .[order(.$tally), ] %>% dplyr::arrange(desc(tally))
-# fetch descriptions of interpro ID
-tibble_interpro_ID_to_description_mapping <- getBM(filters = "interpro", values = tibble_interpro_id_tally_per_ASeventID$interpro_id, attributes = c("interpro", "interpro_description"), mart = ensembl_mart) %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
-# add column for plotting
-tibble_interpro_ID_to_description_mapping <- tibble_interpro_ID_to_description_mapping %>% add_column("interpro_identifier" = paste(tibble_interpro_ID_to_description_mapping$interpro_description, " (", tibble_interpro_ID_to_description_mapping$interpro_id, ")", sep = ""))
-# tibble join
-tibble_interpro_id_tally_per_ASeventID <- dplyr::right_join(tibble_interpro_ID_to_description_mapping, tibble_interpro_id_tally_per_ASeventID, by = "interpro_id")
-# plot
-ggplot(tibble_interpro_id_tally_per_ASeventID %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
-  geom_col(fill = "dodgerblue2") +
-  ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of differential junctions", dPSI_cutoff, "and any sig", p_or_q_value, qpvalue_cutoff, "encompassing", nrow(tibble_protein_level_summary_count), "PLAUSIBLE junctions")) +
-  xlab("Interpro identifier") +
-  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
-  ylab("Number of hits") +
-  # coord_cartesian(ylim = c(0, 50)) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
-
-write.table(x = tibble_interpro_id_tally_per_ASeventID, file = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-message("total number of unique junction structures with any sort of protein-level annotation: ", nrow(tibble_protein_level_summary_count), " (", nrow(tibble_protein_level_summary_count)*100/nrow(tibble_transcript_level_summary_count), "% of those which have any transcript annotation)")
-
-message("total percent of unique junction structures overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-
-message("total percent of unique junction structures overlapping a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique junction structures overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique junction structures overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique junction structures overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique junction structures overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-
-```
-
 NEW METHOD - USING CONSTITUENT JUNCTIONS
 
 ```{r message=FALSE, warning=FALSE}
@@ -3099,7 +3010,7 @@ list_genome_relative_differential_coords <- future_map(.x = list_ref_entries_mat
     # drop AS junction structures that don't have any differential regions.
     purrr::discard(.x = ., .p = ~length(.x$vector_genomic_coords_of_all_differential_exon_positions) == 0 & length(.x$vector_genomic_coords_of_all_differential_CDS_positions) == 0)
 
-# MATCH DIFFERENTIAL GENOME-RELATIVE COORDS TO EACH TRANSCRIPT CORRESPONDING TO PROTEIN ID
+# MATCH DIFFERENTIAL GENOME-RELATIVE COORDS TO EACH CDS REGION CORRESPONDING TO PROTEIN ID
 # THEN EXTRACT THE PROTEIN-RELATIVE COORDS
 list_transcript_and_protein_relative_differential_coords <- future_imap(.x = list_genome_relative_differential_coords, .f = function(.x, .y) {
   
@@ -3145,7 +3056,7 @@ list_matched_annotation <- future_map(.x = list_transcript_and_protein_relative_
   ############################################
   
   # DEBUG ###
-  # .x <- list_transcript_and_protein_relative_differential_coords[[1]]
+  # .x <- list_transcript_and_protein_relative_differential_coords[[74]]
   ###########
   
   input_list <- .x
@@ -3172,7 +3083,7 @@ list_matched_annotation <- future_map(.x = list_transcript_and_protein_relative_
       
     } ) %>% 
       # rbind and spit out unique transcript feature types.
-      rbindlist %>% .$type %>% unique,
+      rbindlist %>% .[, c("type", "transcript_biotype")] %>% unlist %>% unique,
     
     "biomart_annotations" = list(purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
       
@@ -3235,8 +3146,8 @@ list_matched_annotation <- future_map(.x = list_transcript_and_protein_relative_
       purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
         
       # DEBUG ###
-      # .x <- input_list$CDS_relative_differential_coords %>% .[[2]]
-      # .y <- names(input_list$CDS_relative_differential_coords) %>% .[2]
+      # .x <- input_list$CDS_relative_differential_coords %>% .[[6]]
+      # .y <- names(input_list$CDS_relative_differential_coords) %>% .[6]
       ###########
         
       tibble_uniprotkb_entries_from_ENSP <- tibble_ENSP_to_uniprotkb[tibble_ENSP_to_uniprotkb$ensembl_peptide_id == .y, ]
@@ -3285,7 +3196,7 @@ tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("
 # write table
 write.table(x = tibble_final_biomart_annotation, file = paste(results_dir, "table_junction_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""))
 
-# extract the biomart results and tibblise 
+# extract the PTM results and tibblise 
 tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_event_ID", "splicemode", "PTMs")] ) %>%
   purrr::discard(.p = ~.x$PTMs %>% nrow == 0) %>%
   purrr::map(~purrr::modify_at(.x = .x, .at = "PTMs", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble) %>%
@@ -3302,6 +3213,70 @@ tibble_final_annotation_supp <- list_tidied_annotation %>%
 # write table
 write.table(x = tibble_final_annotation_supp, file = paste(results_dir, "table_junction_ontology_supporting_info_", query_name, ".txt", sep = ""))
   
+```
+
+## stats summary of junction ontology
+
+```{r}
+
+# transcript-level
+message("total number of unique differential LSVs with any sort of transcript-level annotation: ", tibble_final_transcript_feature_annotation$AS_event_ID %>% length)
+
+message("percent of differential regions matched to protein coding transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "protein_coding") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+message("percent of differential regions matched to an lncRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "lncRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+message("percent of differential regions matched to a miRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "miRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+
+message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+
+# PROTEIN-LEVEL
+vector_unique_interpro_ids <- tibble_final_biomart_annotation$interpro %>% na.omit %>% unique
+
+tibble_protein_level_summary_count <- tibble_final_biomart_annotation %>% dplyr::group_by(AS_event_ID) %>% 
+  dplyr::summarise(overlaps_interpro_domain = all(is.na(interpro)) == FALSE,
+                   unique_interpro_ids = interpro %>% na.omit %>% unique %>% paste(collapse = ";"),
+                   overlaps_LCR = all(is.na(seg_start)) == FALSE,
+                   overlaps_disordered_region = all(is.na(mobidblite)) == FALSE,
+                   overlaps_ncoils = all(is.na(ncoils_start)) == FALSE,
+                   overlaps_signalp = all(is.na(signalp_start)) == FALSE,
+                   overlaps_tmhmm = all(is.na(tmhmm_start)) == FALSE)
+
+vector_unique_interpro_ids <- tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort
+
+# create tally of each unique instance of interpro ID per AS_event_ID
+tibble_interpro_id_tally_per_ASeventID <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% .[order(.$tally), ] %>% dplyr::arrange(desc(tally))
+# fetch descriptions of interpro ID
+tibble_interpro_ID_to_description_mapping <- getBM(filters = "interpro", values = tibble_interpro_id_tally_per_ASeventID$interpro_id, attributes = c("interpro", "interpro_description"), mart = ensembl_mart) %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
+# add column for plotting
+tibble_interpro_ID_to_description_mapping <- tibble_interpro_ID_to_description_mapping %>% add_column("interpro_identifier" = paste(tibble_interpro_ID_to_description_mapping$interpro_description, " (", tibble_interpro_ID_to_description_mapping$interpro_id, ")", sep = ""))
+# tibble join
+tibble_interpro_id_tally_per_ASeventID <- dplyr::right_join(tibble_interpro_ID_to_description_mapping, tibble_interpro_id_tally_per_ASeventID, by = "interpro_id")
+# plot
+ggplot(tibble_interpro_id_tally_per_ASeventID %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
+  geom_col(fill = "dodgerblue2") +
+  ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of differential junctions", dPSI_cutoff, "and any sig", p_or_q_value, qpvalue_cutoff, "encompassing", nrow(tibble_protein_level_summary_count), "LSVs")) +
+  xlab("Interpro identifier") +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Number of hits") +
+  # coord_cartesian(ylim = c(0, 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
+
+write.table(x = tibble_interpro_id_tally_per_ASeventID, file = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+message("total number of unique LSVs with any sort of protein-level annotation: ", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length, " (", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length *100/nrow(tibble_final_transcript_feature_annotation), "% of those which have any transcript annotation)")
+
+message("total percent of unique LSVs overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+
+message("total percent of unique LSVs overlapping a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique LSVs overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique LSVs overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique LSVs overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique LSVs overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+
 ```
 
 # REPEAT OF ANAYSES WITH PLAUSIBLE AS EVENTS ONLY

@@ -31,7 +31,7 @@ Wide table of absolute PSI (complete timepoints) - (separate/sum) -----> SOM
 
 library(tidyverse)
 library(gtools)
-# windowsFonts("Helvetica" = windowsFont("Helvetica"))
+windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 library(data.table)
 
@@ -67,14 +67,14 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-shared_dir <- "/media/Ubuntu/sharedfolder/"
-# shared_dir <- "Z:/"
+# shared_dir <- "/media/Ubuntu/sharedfolder/"
+shared_dir <- "Z:/"
 
-# psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
-psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
+psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
+# psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
 
-# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
-R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
+R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
+# R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
 
 if(! dir.exists(R_processing_results_dir) ) {
   dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -86,8 +86,8 @@ if(! dir.exists(R_processing_results_dir) ) {
 
 vector_OBseries_timepoints <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 
-# vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
-vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+# vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
@@ -788,7 +788,7 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
   mapped_aminoacid_positions <- purrr::discard(.x = mapped_aminoacid_positions, .p = ~length(.x) == 0)
   
   # retrieve all the domain and PTM annotations
-  coinciding_domains_PTMs <- tibble_of_mapped_protein_positions_to_list_of_domains_PTMs(mapped_aminoacid_positions, ensemblmart)
+  coinciding_domains_PTMs <- tibble_of_mapped_protein_positzions_to_list_of_domains_PTMs(mapped_aminoacid_positions, ensemblmart)
   
   # summarise protein and transcript-level analyses
   ## for the transcript level, only extract the "type" and "transcript_biotype" columns
@@ -4149,7 +4149,7 @@ tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::
   as_tibble %>%
   setNames(c("diff_exon_coords", "splicemode", "transcript_ids_with_annotation", "transcript_features"))
 # write table
-write.table(x = tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_transcript_features_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the biomart results and tibblise 
 tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff_exon_coords", "splicemode", "biomart_annotations")] ) %>%
@@ -4158,7 +4158,7 @@ tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("
   rbindlist %>% 
   as_tibble
 # write table
-write.table(x = tibble_final_biomart_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_biomart_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the PTM results and tibblise 
 tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff_exon_coords", "splicemode", "PTMs")] ) %>%
@@ -4167,15 +4167,17 @@ tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff
   rbindlist %>% 
   as_tibble
 # write table
-write.table(x = tibble_final_PTM_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_PTMs_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_PTM_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the other supporting information and tibblise
 tibble_final_annotation_supp <- list_tidied_annotation %>% 
   purrr::map(~.x[c("diff_exon_coords", "splicemode", "vector_genomic_coords_of_all_differential_exon_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")]) %>%
-  purrr::map(~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = ~.x %>% purrr::map(~paste(.x, collapse = ",")) %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", "protein_relative_differential_coords"))) %>% flatten %>% as_tibble) %>%
+  purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length != 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = ~.x %>% purrr::map(~paste(.x, collapse = ",")) %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", "protein_relative_differential_coords")))) %>%
+  purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length == 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = function(.x) {return("NA")} ) %>% splice("ensembl_peptide_id" = "NA")) %>%
+  purrr::map(~.x %>% flatten %>% as_tibble) %>%
   purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist %>% as_tibble
 # write table
-write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_dir, "table_exon_ontology_supporting_info_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_dir, "table_exon_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
   
 ```
 
@@ -4219,7 +4221,7 @@ tibble_interpro_id_tally_per_diff.exon <- dplyr::right_join(tibble_interpro_ID_t
 # plot
 ggplot(tibble_interpro_id_tally_per_diff.exon %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
   geom_col(fill = "dodgerblue2") +
-  ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of differential exons", dpsi_cutoff, "and any sig", pvalue_cutoff, pvalue_or_FDR, "encompassing", nrow(tibble_protein_level_summary_count), "exons")) +
+  ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of differential exons", dpsi_cutoff, "and any sig", pvalue_or_FDR, pvalue_cutoff, "encompassing", nrow(tibble_protein_level_summary_count), "exons")) +
   xlab("Interpro identifier") +
   scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
   ylab("Number of hits") +

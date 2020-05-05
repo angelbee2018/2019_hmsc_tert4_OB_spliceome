@@ -19,9 +19,13 @@ windowsFonts("Helvetica" = windowsFont("Helvetica"))
 # library(Laurae)
 
 library(furrr)
+options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
 future::plan(multiprocess)
+memory.limit(100000)
+
 library(RColorBrewer)
 library(ggplot2)
+library(Amelia)
 # library(kohonen)
 # library(genefilter)
 # library(gplots)
@@ -47,6 +51,8 @@ sp.hsa.canonical.isoforms_junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kasse
 
 con_sp.hsa.canonical.isoforms_junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons_katana_differential/txt/"
 
+con_sp.canonical.isoforms_PC <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_alltimepoints_con_sp.canonical.isoforms_PC/txt/"
+
 # maxquant_junctions.3FT_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_maxquant/run_1_PGNEXUS_OBseries_allsamples_angel.junctions.3FT/txt/"
 
 R_processing_results_dir <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
@@ -63,13 +69,86 @@ vector_sample_names <- purrr::cross2(vector_encoding_names, vector_replicate_nam
 
 ```
 
+# define functions
+
+## FUNCTION TO PLOT PCA FOR TIMEPOINT AND REPLICATE
+
+```{r}
+
+plot_PCA_for_timepoint_and_replicate <- function(matrixtable, timepoint_order = NULL, replicate_order = NULL, PCA_depths_y = NULL, PCA_depths_x = NULL, save_dir = NULL, save_name = NULL, graph_title = NULL) {
+  
+  # DEBUG ###
+  # save_dir <- R_processing_results_dir
+  # save_name <- "raw_MQ_intensities"
+  # 
+  # graph_title <- paste(.y[[1]], "\n", .y[[2]], sep = "")
+  # 
+  # timepoint_order <- c("ud_1_24", "ud_30_6", "30m", "1h", "6h", "1d")
+  # replicate_order <- vector_replicate_names
+  # 
+  # PCA_depths_y <- c(2, 3, 4)
+  # PCA_depths_x <- c(1, 2, 3)
+  ###########
+  
+  PCA_result <- prcomp(matrixtable)
+  
+  ## measure PC variance #
+  PCA_stdev <- tibble("PC" = 1:(PCA_result[["sdev"]] %>% length), "stdev" = PCA_result[["sdev"]])
+  
+  PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
+  PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
+  
+  ggplot(PCA_variance) + 
+    geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+    scale_fill_gradientn(colours = heat.colors(n = (PCA_result[["sdev"]] %>% length))) +
+    ggtitle(paste("PCA variance distribution\n", graph_title, sep = "")) +
+    guides(size = FALSE) + 
+    xlab("PC") +
+    ylab("Variance explained (%)") +
+    theme_bw() +
+    theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+  ## measure PC loadings #
+  ## column names of the matrix need to be split by a "|", like this: timepoint|replicatenumber
+  PCA_loadings <- PCA_result[["rotation"]] %>% as_tibble(rownames = "sample")
+  PCA_loadings <- add_column(PCA_loadings, "timepoint" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\1") %>% factor(x = ., levels = timepoint_order))
+  PCA_loadings <- add_column(PCA_loadings, "replicatenumber" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\2") %>% factor(x = ., levels = replicate_order))
+  
+  # plot PCA for multiple depths all in one go.
+  purrr::map2(.y = PCA_depths_y, .x = PCA_depths_x, .f = function(.y, .x) {
+    
+    pc_y <- .y
+    pc_x <- .x
+    
+    ggplot(PCA_loadings) + 
+    geom_point(aes(y = !!(paste("PC", pc_y, sep = "") %>% as.name), x = !!(paste("PC", pc_x, sep = "") %>% as.name), shape = replicatenumber, color = timepoint, size = 2)) +
+    scale_fill_gradientn(name = "Timepoint", colours = rainbow(n = (PCA_loadings %>% nrow))) +
+    scale_shape_discrete(name = "Replicate") +
+    ggtitle(paste("PCA loadings\n", graph_title, sep = "")) +
+    guides(size = FALSE) + 
+    xlab(paste("PC", pc_x, " (", PCA_variance[pc_x, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+    ylab(paste("PC", pc_y, " (", PCA_variance[pc_y, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+    theme_bw() +
+    theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 25, units = "cm") +
+    ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 25, units = "cm")
+    
+    } )
+  
+}
+
+```
+
 # read the tables into environment
 
 ```{r}
 
 list_maxquant_run_dirs <- list("junc.exons" = junc.exons_results_dir,
                                "sp.hsa.canonical.isoforms_junc.exons" = sp.hsa.canonical.isoforms_junc.exons_results_dir,
-                               "con_sp.hsa.canonical.isoforms_junc.exons" = con_sp.hsa.canonical.isoforms_junc.exons_results_dir)
+                               "con_sp.hsa.canonical.isoforms_junc.exons" = con_sp.hsa.canonical.isoforms_junc.exons_results_dir,
+                               "con_sp.canonical.isoforms_PC" = con_sp.canonical.isoforms_PC)
                                
 list_output.table_categories <- list("evidence" = "evidence.txt", 
                                      "modification_specific_peptides" = "modificationSpecificPeptides.txt", 
@@ -81,84 +160,81 @@ list_output.table_categories <- list("evidence" = "evidence.txt",
 # create combinations of files and runs
 list_for_maxquant_table_import <- purrr::map(.x = list_maxquant_run_dirs, .f = ~purrr::cross2(.x, list_output.table_categories))
 # also create corresponding combinations of names to annotate with
-list_of_nested_table_names <- purrr::map(.x = names(list_maxquant_run_dirs), .f = ~purrr::cross2(.x, names(list_output.table_categories)))
+list_of_nested_table_names <- purrr::map(.x = names(list_maxquant_run_dirs), .f = ~purrr::cross2(.x, names(list_output.table_categories)) %>% set_names(names(list_output.table_categories))) %>% set_names(names(list_maxquant_run_dirs))
 
+# read the tables into the environment
 list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~future_map(.x = .x, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble, .progress = TRUE))
+# rename the lists at L2
+list_imported_maxquant_tibbles <- list_imported_maxquant_tibbles %>% purrr::map(.f = ~set_names(.x, names(list_output.table_categories)))
 
 ```
 
 # global processing of tables
-
-## set the list indices of the .txt file type for each experiment
-
-```{r}
-
-# at this stage, evidence.txt is in every 1, 2, 3, ... etc... indices
-# msms.txt is 4, 5, 6, ...
-
-vector_evidence.txt_list.indices <- which(purrr::map(list_for_maxquant_table_import, ~.x[[2]] == "evidence.txt") %>% unlist == TRUE)
-
-vector_modificationSpecificPeptides.txt_list.indices <- which(purrr::map(list_for_maxquant_table_import, ~.x[[2]] == "modificationSpecificPeptides.txt") %>% unlist == TRUE)
-
-vector_msms.txt_list.indices <- which(purrr::map(list_for_maxquant_table_import, ~.x[[2]] == "msms.txt") %>% unlist == TRUE)
-
-vector_peptides.txt_list.indices <- which(purrr::map(list_for_maxquant_table_import, ~.x[[2]] == "peptides.txt") %>% unlist == TRUE)
-
-vector_proteingroups.txt_list.indices <- which(purrr::map(list_for_maxquant_table_import, ~.x[[2]] == "proteinGroups.txt") %>% unlist == TRUE)
-
-vector_phosphosites.txt_list.indices <- which(purrr::map(list_for_maxquant_table_import, ~.x[[2]] == "Phospho (STY)Sites.txt") %>% unlist == TRUE)
-
-```
 
 ## shuffle tables
 
 ```{r}
 
 # remove all peptides which have no MS/MS count from the evidence tables
-list_imported_maxquant_tibbles_processed_temp <- list_imported_maxquant_tibbles %>% modify_at(.at = vector_evidence.txt_list.indices, 
-                                                                                       .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP))
+list_imported_maxquant_tibbles_processed_temp <- list_imported_maxquant_tibbles %>% purrr::map(
+  .f = ~purrr::modify_at(.x = .x, .at = "evidence", 
+                         .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP)))
 
 # remove all the columns with unnecessary ratio info
-list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles_processed_temp %>% modify_at(.at = c(vector_peptides.txt_list.indices, vector_proteingroups.txt_list.indices, vector_phosphosites.txt_list.indices), .f = function(.x) {
+list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles_processed_temp %>% 
   
-  # .x <- list_imported_maxquant_tibbles_processed_temp[[5]]
+  purrr::map(~modify_at(.x = .x, .at = c("evidence", "peptides", "protein_groups", "phosphosites"), .f = function(.x) {
+  
+  # .x <- list_imported_maxquant_tibbles_processed_temp[[1]][[1]]
   
   # remove H/M
   filtered_table <- .x[, -grep(x = colnames(.x), pattern = "H.M")]
   
   filtered_table2 <- filtered_table[, -setdiff(grep(x = colnames(filtered_table), pattern = "Ratio"), grep(x = colnames(filtered_table), pattern = "KR_|IB_|IB2_"))]
   
-  filtered_table3 <- filtered_table2[, -grep(x = colnames(filtered_table2), pattern = "Ratio.(H.L|M.L).(KR_|IB_|IB2_)")]
+  # filtered_table3 <- filtered_table2 %>% dplyr::select(-grep(x = colnames(filtered_table2), pattern = "Ratio.(H.L|M.L).(KR_|IB_|IB2_)"))
   
-  return(filtered_table3)
+  return(filtered_table2)
   
-} ) %>% modify_at(.at = c(vector_phosphosites.txt_list.indices), .f = function(.x) {
+} ) ) %>% 
+  
+  purrr::map(~modify_at(.x = .x, .at = "phosphosites", .f = function(.x) {
   
   # remove occupancy column
   filtered_table4 <- .x[, -grep(x = colnames(.x), pattern = "Occupancy")]
   
   return(filtered_table4)
   
-} ) 
+} ) )
 
 ```
 
 # Data triaging
 
-## boxplots to show the range/distribution of all the intensities for each replicate - phosphopeptides
+## boxplots to show the range/distribution of all the intensities for each replicate - proteins and phosphopeptides
 
 ```{r}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .y = list_of_nested_table_names[vector_phosphosites.txt_list.indices], .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("phosphosites", "protein_groups")]
+  Y <- .y[c("phosphosites", "protein_groups")]
+  
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+    
+    # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices][[1]]
   # .y <- list_of_nested_table_names[vector_phosphosites.txt_list.indices][[1]]
   ###########
-  
-  df <- .x
-  
-  df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_intensity", value.name = "intensity", na.rm = TRUE)
+    
+    df <- .x
+    
+    df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_intensity", value.name = "intensity", na.rm = TRUE)
   
   ggplot(df2) +
     geom_boxplot(aes(x = channel_name_intensity, y = intensity, 
@@ -171,557 +247,713 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.tx
     guides(size = FALSE) + 
     xlab("Channel name") + 
     ylab("Channel intensity distribution") +
-    ggtitle(paste("Distribution of intensities for each mass channel", .y[[1]], .y[[2]], sep = ", ")) +
+    ggtitle(paste("Distribution of intensities for each mass channel\n", .y[[1]], "\n", .y[[2]], sep = "")) +
     scale_x_discrete(limits = df2$channel_name_intensity %>% unique, breaks = df2$channel_name_intensity %>% unique, labels = gsub(x = df2$channel_name_intensity, pattern = "Intensity.", replacement = "") %>% gsub(x = ., pattern = "(L|M|H).(.*)", replacement = "\\2_\\1") %>% unique) + 
-    scale_y_log10(limits = c(min(df2 %>% dplyr::filter(., intensity > 0) %>% .$intensity), max(df2$intensity) * 1e1)) +
+    scale_y_log10(limits = c(min(df2 %>% dplyr::filter(., intensity > 0) %>% .$intensity), max(df2$intensity) * 1e1 * 1e1)) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
-    ggsave(filename = paste(R_processing_results_dir, "qualityplot_intensity_distribution_per_mass_channel_", .y[[1]], "_phosphosites.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-    ggsave(filename = paste(R_processing_results_dir, "qualityplot_intensity_distribution_per_mass_channel_", .y[[1]], "_phosphosites.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
-  
-} )
-
-```
-
-## boxplots to show the range/distribution of ratios for each replicate - phosphopeptides
-
-```{r}
-
-purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .y = list_of_nested_table_names[vector_phosphosites.txt_list.indices], .f = function(.x, .y) {
-  
-  df <- .x
-
-  df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_ratio", value.name = "ratio", na.rm = TRUE)
-  
-  ggplot(df2) +
-    geom_boxplot(aes(x = channel_name_ratio, 
-                  y = ratio, 
-                   # %>% gsub(x = ., pattern = "___[1-3]", replacement = "")
-                  fill = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1"), 
-                  colour = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1"),
-                  size = channel_name_ratio)) +
-    geom_text(data = df2, stat = "count", aes(x = channel_name_ratio, label = ..count..), angle = 90, hjust = 0, position = position_nudge(x = 0, y = 1)) +
-    scale_fill_manual(values = alpha(c("gold", "chocolate2", "red4"), 0.5), limits = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, name = "Biological Replicate") +
-    scale_colour_manual(values = c(brewer.pal(9, "YlOrRd") %>% rev %>% head(4), brewer.pal(9, "Blues") %>% rev%>% head(4)), limits = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1") %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1") %>% unique, name = "SILAC timepoint encoding
-                        + phosphostate") +
-    scale_size_manual(values = rep(0.5, times = length(df2$channel_name_ratio %>% unique))) + 
-    guides(size = FALSE) + 
-    xlab("Channel name") + 
-    ylab("Channel ratio distribution") +
-    ggtitle(paste("Distribution of ratios for each replicate + phosphostate", .y[[1]], .y[[2]], sep = ", ")) +
-    scale_x_discrete(limits = df2$channel_name_ratio %>% unique, breaks = df2$channel_name_ratio %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.(.*).normalized.(.*)", replacement = "\\2_\\1") %>% unique) + 
-    scale_y_continuous(trans = "log10") +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"))
-  
-} )
-
-```
-
-## plot the correlation of mass channels between BIOLOGICAL replicates of the same timepoint - phosphopeptides
-
-```{r warning=FALSE}
-
-purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .y = list_of_nested_table_names[vector_phosphosites.txt_list.indices], .f = function(.x, .y) {
-
-  df <- .x
-  
-  df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])]
-  
-  
-  combs <- combn(x = colnames(df2)[grep(x = colnames(df2), pattern = "Intensity")], m = 2) %>% t
-  
-  combs2 <- combs %>% as_tibble %>% add_column("rep_1_LMH" = gsub(x = combs[, 1] %>% unlist, pattern = "Intensity.(L|M|H).*", replacement = "\\1"), 
-                                               "rep_2_LMH" = gsub(x = combs[, 2] %>% unlist, pattern = "Intensity.(L|M|H).*", replacement = "\\1"), 
-                                               "rep_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = "Intensity.(L|M|H).(IB|IB2|KR)_(.*)", replacement = "\\3"), 
-                                               "rep_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = "Intensity.(L|M|H).(IB|IB2|KR)_(.*)", replacement = "\\3"))
-  
-  combs2 <- combs2[combs2$rep_1_LMH == combs2$rep_2_LMH &
-                     combs2$rep_1_timepoint == combs2$rep_2_timepoint, ]
-  
-  list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
-    
-    colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Intensity")]
-    
-    pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
-    
-    return(pairwise_subset_table)
-    
-  })
-  
-  tibble_pairwise_comparisons_intensity_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
-  
-  # normal plot
-  #  %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0)
-  ggplot(tibble_pairwise_comparisons_intensity_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "lm") +
-    xlab("Comparison 1 channel intensity") + 
-    ylab("Comparison 2 channel intensity") + 
-    ggtitle(paste("Correlation of mass channel intensities between biological replicates of the same time point", .y[[1]], .y[[2]], sep = ", ")) +
-    facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-  # log-log plot
-  ggplot(tibble_pairwise_comparisons_intensity_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "lm") +
-    xlab("Comparison 1 channel intensity (log2)") + 
-    ylab("Comparison 2 channel intensity (log2)") + 
-    ggtitle(paste("Correlation of log2 mass channel intensities between biological replicates of the same time point", .y[[1]], .y[[2]], sep = ", ")) +
-    facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-} )
-
-```
-
-## plot the correlation of non-normalised ratios for each biological replicate of the same timepoint - phosphopeptides
-
-```{r warning=FALSE}
-
-purrr::map2(.x = list_imported_maxquant_tibbles[vector_phosphosites.txt_list.indices], .y = list_of_nested_table_names[vector_phosphosites.txt_list.indices], .f = function(.x, .y) {
-
-  df <- .x
-  
-  df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")])]
-  
-  combs <- combn(x = colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")], m = 2) %>% t
-  
-  combs2 <- combs %>% as_tibble %>% add_column("comparison_1_ratiotype" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
-                                               "comparison_2_ratiotype" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
-                                               "comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
-                                               "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
-                                               "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"), 
-                                               "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"))
-  
-  combs2 <- combs2[combs2$comparison_1_ratiotype == combs2$comparison_2_ratiotype &
-                     combs2$comparison_1_replicate != combs2$comparison_2_replicate &
-                     combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
-  
-  list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
-    
-    # DEBUG #####
-    # .x <- combs2[1, 1]
-    # .y <- combs2[1, 2]
-    #############
-      
-    colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio")]
-    
-    pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
-    
-    return(pairwise_subset_table)
-    
-  })
-  
-  tibble_pairwise_comparisons_ratio_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
-  
-  # normal plot
-  ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "lm") +
-    # scale_x_continuous(trans = "log2") +
-    # scale_y_continuous(trans = "log2") +
-    xlab("Comparison 1 ratio") + 
-    ylab("Comparison 2 ratio") + 
-    ggtitle(paste("Correlation of ratios (un-normalised) between replicates of the same time point", .y[[1]], .y[[2]], sep = ", ")) +
-    facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free")
-  
-  # log-log plot
-  ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "lm") +
-    # scale_x_continuous(trans = "log2") +
-    # scale_y_continuous(trans = "log2") +
-    xlab("Comparison 1 ratio (log2)") + 
-    ylab("Comparison 2 ratio (log2)") + 
-    ggtitle(paste("Correlation of ratios (un-normalised) between replicates of the same time point", .y[[1]], .y[[2]], sep = ", ")) +
-    facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free")
-  
-} )
-
-```
-
-## plot the correlation of normalised ratios for each biological replicate of the same timepoint - phosphopeptides
-
-```{r warning=FALSE}
-
-purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .y = list_of_nested_table_names[vector_phosphosites.txt_list.indices], .f = function(.x, .y) {
-
-  df <- .x
-  
-  df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*_(6|24)$")])]
-  
-  combs <- combn(x = colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*_(6|24)$")], m = 2) %>% t
-  
-  combs2 <- combs %>% as_tibble %>% add_column("comparison_1_ratiotype" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
-                                               "comparison_2_ratiotype" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
-                                               "comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
-                                               "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
-                                               "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"), 
-                                               "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"))
-  
-  combs2 <- combs2[combs2$comparison_1_ratiotype == combs2$comparison_2_ratiotype &
-                     combs2$comparison_1_replicate != combs2$comparison_2_replicate &
-                     combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
-  
-  list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
-    
-    # DEBUG #####
-    # .x <- combs2[1, 1]
-    # .y <- combs2[1, 2]
-    #############
-      
-    colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio")]
-    
-    pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
-    
-    return(pairwise_subset_table)
-    
-  })
-  
-  tibble_pairwise_comparisons_ratio_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
-  
-  # normal plot
-  ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "lm") +
-    # scale_x_continuous(trans = "log2") +
-    # scale_y_continuous(trans = "log2") +
-    xlab("Comparison 1 ratio") + 
-    ylab("Comparison 2 ratio") + 
-    ggtitle(paste("Correlation of mass channel ratios between replicates of the same time point", .y[[1]], .y[[2]], sep = ", ")) +
-    facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-  # log-log plot
-  ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "lm") +
-    # scale_x_continuous(trans = "log2") +
-    # scale_y_continuous(trans = "log2") +
-    xlab("Comparison 1 ratio (log2)") + 
-    ylab("Comparison 2 ratio (log2)") + 
-    ggtitle(paste("Correlation of log2 mass channel ratios between replicates of the same time point", .y[[1]], .y[[2]], sep = ", ")) +
-    facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-} )
-
-```
-
-## MA plot (log2 ratio/avg intensity) - MQ non-normalised ratios - phosphopeptides
-
-```{r}
-
-purrr::map2(.x = list_imported_maxquant_tibbles[vector_peptides.txt_list.indices], .y = list_of_nested_table_names[vector_peptides.txt_list.indices], .f = function(.x, .y) {
-
-  df <- .x
-  
-  # create new columns of average intensities in one step
-  list_avg_columns <- purrr::map(.x = vector_sample_names, .f = ~list(
-    "average.Intensity.H.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.H.", .x, sep = "")),
-                                               which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean),
-    "average.Intensity.M.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.M.", .x, sep = "")),
-                                               which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean)
-    ) %>% set_names(c(paste("average.Intensity.H.L.", .x, sep = ""),
-                      paste("average.Intensity.M.L.", .x, sep = ""))))
-  
-  tibble_avg_columns <- list_avg_columns %>% flatten %>% as_tibble
-  
-  df2 <- dplyr::bind_cols(df %>% as_tibble, tibble_avg_columns)
-  
-  # melt the peptide table for a comparison of ratio vs. avg for each ratio taken for each sample.
-  ## NOTE: the ratios considered here are aggregate phospho ratios, not separated by phospho state.
-  df2_norm.ratio.names <- colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")]
-  tibble_ratio_and_sample_to_plot <- tibble("ratio_type" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).*", replacement = "\\1"),
-                                            "sample_name" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).(.*)", replacement = "\\2"))
-  
-  # create list of tables, each pertaining to a single comparison
-  list_tibbles_subset_for_MA_comparisons <- purrr::map2(.x = tibble_ratio_and_sample_to_plot$ratio_type, .y = tibble_ratio_and_sample_to_plot$sample_name, 
-                                                        .f = ~df2[, c(colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio|Intensity")], 
-                                                                      paste("average.Intensity.", .x, ".", .y, sep = ""),
-                                                                      paste("Ratio.", .x, ".normalized.", .y, sep = ""))] %>%
-                                                          add_column("comparison_name_ratio" = .x, 
-                                                                     "comparison_name_sample" = .y))
-  
-  # rename the columns so that we can rbind
-  list_tibbles_subset_for_MA_comparisons_renamed <- purrr::map(.x = list_tibbles_subset_for_MA_comparisons, .f = function(.x) {
-    
-    tibble <- .x
-    column_names <- colnames(tibble)
-    
-    # 4th-last name is the avg. intensity.
-    colnames(tibble)[length(column_names) - 3] <- "avg_intensity"
-    # -last name is the normalised ratio
-    colnames(tibble)[length(column_names) - 2] <- "MQ_normalized_ratio"
-    
-    return(tibble)
+    ggsave(filename = paste(R_processing_results_dir, "qualityplot_intensity_distribution_per_mass_channel_", .y[[1]], "_", .y[[2]], ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+    ggsave(filename = paste(R_processing_results_dir, "qualityplot_intensity_distribution_per_mass_channel_", .y[[1]], "_", .y[[2]], ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
     
   } )
   
-  # rbind
-  long_tibble_MA.plot <- list_tibbles_subset_for_MA_comparisons_renamed %>% rbindlist %>% as_tibble
-  
-  # ggplot
-  ggplot(long_tibble_MA.plot, aes(x = avg_intensity, y = log2(MQ_normalized_ratio))) +
-    geom_point() +
-    geom_smooth(formula = y~x, colour = "red", method = "loess") +
-    geom_hline(aes(yintercept = mean(log2(MQ_normalized_ratio %>% na.omit))), linetype = 2, colour = "blue") +
-    xlab("average of log2 intensities") +
-    facet_grid(comparison_name_ratio ~ comparison_name_sample, scales = "free") +
-    ggtitle(paste("M-A plot of log non-normalised MQ ratios vs. avg. intensities for phosphopeptide", .y[[1]], .y[[2]], sep = ", ")) +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-} )
+}, .progress = TRUE)
 
 ```
 
-## MA plot (log2 ratio/avg intensity) - MQ normalised ratios - phosphopeptides
+## boxplots to show the range/distribution of ratios for each replicate - proteins and phosphopeptides
 
 ```{r}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_peptides.txt_list.indices], .y = list_of_nested_table_names[vector_peptides.txt_list.indices], .f = function(.x, .y) {
-
-  df <- .x
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
-  # create new columns of average intensities in one step
-  list_avg_columns <- purrr::map(.x = vector_sample_names, .f = ~list(
-    "average.Intensity.H.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.H.", .x, sep = "")),
-                                               which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean),
-    "average.Intensity.M.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.M.", .x, sep = "")),
-                                               which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean)
-    ) %>% set_names(c(paste("average.Intensity.H.L.", .x, sep = ""),
-                      paste("average.Intensity.M.L.", .x, sep = ""))))
-  
-  tibble_avg_columns <- list_avg_columns %>% flatten %>% as_tibble
-  
-  df2 <- dplyr::bind_cols(df %>% as_tibble, tibble_avg_columns)
-  
-  # melt the peptide table for a comparison of ratio vs. avg for each ratio taken for each sample.
-  ## NOTE: the ratios considered here are aggregate phospho ratios, not separated by phospho state.
-  df2_norm.ratio.names <- colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*(6|24)$")]
-  tibble_ratio_and_sample_to_plot <- tibble("ratio_type" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).*", replacement = "\\1"),
-                                            "sample_name" = gsub(x = df2_norm.ratio.names, pattern = ".*normalized.(.*)", replacement = "\\1"))
-  
-  # create list of tables, each pertaining to a single comparison
-  list_tibbles_subset_for_MA_comparisons <- purrr::map2(.x = tibble_ratio_and_sample_to_plot$ratio_type, .y = tibble_ratio_and_sample_to_plot$sample_name, 
-                                                        .f = ~df2[, c(colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio|Intensity")], 
-                                                                      paste("average.Intensity.", .x, ".", .y, sep = ""),
-                                                                      paste("Ratio.", .x, ".normalized.", .y, sep = ""))] %>%
-                                                          add_column("comparison_name_ratio" = .x, 
-                                                                     "comparison_name_sample" = .y))
-  
-  # rename the columns so that we can rbind
-  list_tibbles_subset_for_MA_comparisons_renamed <- purrr::map(.x = list_tibbles_subset_for_MA_comparisons, .f = function(.x) {
-    
-    tibble <- .x
-    column_names <- colnames(tibble)
-    
-    # 4th-last name is the avg. intensity.
-    colnames(tibble)[length(column_names) - 3] <- "avg_intensity"
-    # -last name is the normalised ratio
-    colnames(tibble)[length(column_names) - 2] <- "MQ_normalized_ratio"
-    
-    return(tibble)
-    
-  } )
-  
-  # rbind
-  long_tibble_MA.plot <- list_tibbles_subset_for_MA_comparisons_renamed %>% rbindlist %>% as_tibble
-  
-  # ggplot
-  ggplot(long_tibble_MA.plot, aes(x = avg_intensity, y = log2(MQ_normalized_ratio))) +
-    geom_point() +
-    geom_smooth(formula = y~x, colour = "red", method = "loess") +
-    geom_hline(aes(yintercept = mean(log2(MQ_normalized_ratio %>% na.omit))), linetype = 2, colour = "blue") +
-    xlab("average of log2 intensities") +
-    facet_grid(comparison_name_ratio ~ comparison_name_sample, scales = "free") +
-    ggtitle(paste("M-A plot of log normalised MQ ratios vs. avg. intensities for phosphopeptide", .y[[1]], .y[[2]], sep = ", ")) +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-
-} )
-
-```
-
-## compare the phospho and non-phosphopeptide frequency distributions - phosphopeptides
-
-```{r}
-
-purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_modificationSpecificPeptides.txt_list.indices], .y = list_of_nested_table_names[vector_modificationSpecificPeptides.txt_list.indices], .f = function(.x, .y) {
-  
-  # use the modificationSpecificPeptides.txt file
-  df <- .x
-  
-  # PLAN: to create a long table with just the LMH intensities of each sample as variables.
-  # subset for intensity per sample only
-  df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_intensity", value.name = "intensity", na.rm = TRUE) %>% as_tibble
-  
-  # add column indicating whether or not a peptide is phospho or not.
-  # we need this because the "phospho..STY" column gives us values from 0-4.
-  phospho_or_not <- df2$Phospho..STY. %>% as.double > 0
-  
-  df3 <- add_column(df2, "phospho_or_not" = phospho_or_not)
-  
-  # GGPLOT #####
-  # line - absolute counts
-  ggplot(df3 %>% dplyr::filter(., intensity > 0), aes(x = intensity, colour = phospho_or_not)) +
-    geom_density(aes(y = ..count..)) +
-    facet_wrap(~channel_name_intensity, scales = "free") +
-    ggtitle(bquote("Comparison of intensity distributions of phosphopeptide vs. nonphospho per mass channel, "~.(.y[[1]])~", "~.(.y[[2]]))) +
-    xlab(expression(XIC~Intensity)) +
-    # xlim(c(0, 1)) +
-    scale_x_continuous(trans = "log10") +
-    ylab("Frequency (smoothed)") +
-    scale_color_manual(limits = c(FALSE, TRUE), values = c("blue", "orange"), labels = c("Non-phospho", "Phospho"), name = "Phospho or not") + 
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  # +
-  #   ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.absolute", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  #   ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.absolute", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
-  
-  # line - normalised counts
-  ggplot(df3 %>% dplyr::filter(., intensity > 0), aes(x = intensity, colour = phospho_or_not)) +
-    geom_density(aes(y = ..density..)) +
-    facet_wrap(~channel_name_intensity, scales = "free") +
-    ggtitle(bquote("Comparison of intensity distributions of phosphopeptide vs. nonphospho per mass channel, "~.(.y[[1]])~", "~.(.y[[2]]))) +
-    xlab(expression(XIC~Intensity)) +
-    # xlim(c(0, 1)) +
-    scale_x_continuous(trans = "log10") +
-    ylab("Density (smoothed)") +
-    scale_color_manual(limits = c(FALSE, TRUE), values = c("blue", "orange"), labels = c("Non-phospho", "Phospho"), name = "Phospho or not") + 
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-  # bar
-  ggplot(df3 %>% dplyr::filter(., intensity > 0), aes(x = intensity, fill = phospho_or_not)) +
-    geom_histogram(aes(y = ..count..)) +
-    facet_wrap(~channel_name_intensity, scales = "free") +
-    ggtitle(bquote("Comparison of intensity distributions of phosphopeptide vs. nonphospho per mass channel, "~.(.y[[1]])~", "~.(.y[[2]]))) +
-    xlab(expression(XIC~Intensity)) +
-    # xlim(c(0, 1)) +
-    scale_x_continuous(trans = "log10") +
-    ylab("Frequency") +
-    scale_fill_manual(limits = c(FALSE, TRUE), values = c("blue", "orange"), labels = c("Non-phospho", "Phospho"), name = "Phospho or not") + 
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-} )
-
-```
-
-## PCA analysis of intensities - raw MQ output
-
-```{r}
-
-list_of_dfs_phosphosites.proteingroups <- purrr::map2(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], 
-                                                                  .y = list_imported_maxquant_tibbles_processed[vector_proteingroups.txt_list.indices],
-                                                                  .f = ~list("phosphosites" = .x,
-                                                                             "protein groups" = .y))
-
-list_of_tibble_intensities_for_pca <- purrr::map_depth(.x = list_of_dfs_phosphosites.proteingroups, .depth = 2, .ragged = FALSE, .f = function(.x) {
-
-  # plot the PCA of the phosphosites and the proteins
-  # first, we get the phosphosites from phosphosites.txt and the proteins from proteingroups.txt and then we make matrices using the intensities
-  ## phosphosites
-  df <- .x
-  ## subset intensity values
-  tibble_phosphosites_intensities <- df[, colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")]]
-  ## rename columns
-  colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(L).(IB|IB2|KR)_(30_6)", replacement = "ud_30_6|\\2")
-  colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(M).(IB|IB2|KR)_(30_6)", replacement = "30m|\\2")
-  colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(H).(IB|IB2|KR)_(30_6)", replacement = "6h|\\2")
-  
-  colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(L).(IB|IB2|KR)_(1_24)", replacement = "ud_1_24|\\2")
-  colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(M).(IB|IB2|KR)_(1_24)", replacement = "1h|\\2")
-  colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(H).(IB|IB2|KR)_(1_24)", replacement = "1d|\\2")
-  # done fixing tibble_phosphosites_intensities
-  
-  return(tibble_phosphosites_intensities)
-
-} )
-
-library(Amelia)
-
-purrr::map2(.x = list_of_tibble_intensities_for_pca, .y = list_of_nested_table_names[vector_proteingroups.txt_list.indices], .f = function(.x, .y) {
-  
-  Y <- .y
-  
-  purrr::map2(.x = .x, .y = names(.x), .f = ~missmap(.x, main = paste("Missingness heatmap for raw intensities\n", Y[[1]], .y, sep = ", ")))
-  
-} )
-
-# pdfstub = paste(qualitycheck_results_dir, "heatmap_missingness_combinedcount_tables.pdf", sep = "")
-
-# PCA analysis
-
-purrr::map2(.x = list_of_tibble_intensities_for_pca, .y = list_of_nested_table_names[vector_proteingroups.txt_list.indices], .f = function(.x, .y) {
-
   # DEBUG ###
-  # .x <- list_of_tibble_intensities_for_pca[[1]]
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
   ###########
   
-  Y <- .y
+  X <- .x[c("phosphosites", "protein_groups")]
+  Y <- .y[c("phosphosites", "protein_groups")]
   
-  purrr::map2(.x = .x, .y = names(.x), .f = function(.x, .y) {
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
     
+    df <- .x
+
+    df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_ratio", value.name = "ratio", na.rm = TRUE)
+    
+    ggplot(df2) +
+      geom_boxplot(aes(x = channel_name_ratio, 
+                    y = ratio, 
+                     # %>% gsub(x = ., pattern = "___[1-3]", replacement = "")
+                    fill = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1"), 
+                    colour = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1"),
+                    size = channel_name_ratio)) +
+      geom_text(data = df2, stat = "count", aes(x = channel_name_ratio, label = ..count..), angle = 90, hjust = 0, position = position_nudge(x = 0, y = 1)) +
+      scale_fill_manual(values = alpha(c("gold", "chocolate2", "red4"), 0.5), limits = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(IB|IB2|KR).*", replacement = "\\1") %>% unique, name = "Biological Replicate") +
+      scale_colour_manual(values = c(brewer.pal(9, "YlOrRd") %>% rev %>% head(4), brewer.pal(9, "Blues") %>% rev %>% head(4)), limits = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1") %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.*normalized.", replacement = "") %>% gsub(x = ., pattern = ".*(1_24|30_6.*)", replacement = "0_\\1") %>% unique, name = "SILAC timepoint encoding\n+ phosphostate") +
+      scale_size_manual(values = rep(0.25, times = length(df2$channel_name_ratio %>% unique))) + 
+      guides(size = FALSE) + 
+      xlab("Channel name") + 
+      ylab("Channel ratio distribution") +
+      ggtitle(paste("Distribution of ratios for each replicate + phosphostate\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      scale_x_discrete(limits = df2$channel_name_ratio %>% unique, breaks = df2$channel_name_ratio %>% unique, labels = gsub(x = df2$channel_name_ratio, pattern = "Ratio.(.*).normalized.(.*)", replacement = "\\2_\\1") %>% unique) + 
+      scale_y_continuous(trans = "log10", limits = c(min(df2 %>% dplyr::filter(., ratio > 0) %>% .$ratio), max(df2$ratio) * 2)) +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(R_processing_results_dir, "qualityplot_ratio_distribution_", .y[[1]], "_", .y[[2]], ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+    ggsave(filename = paste(R_processing_results_dir, "qualityplot_ratio_distribution_", .y[[1]], "_", .y[[2]], ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+    
+    } )
+  
+  }, .progress = TRUE)
+
+```
+
+## plot the correlation of mass channel intensities between BIOLOGICAL replicates of the same timepoint - proteins and phosphopeptides
+
+```{r warning=FALSE}
+
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("phosphosites", "protein_groups")]
+  Y <- .y[c("phosphosites", "protein_groups")]
+  
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
+    df <- .x
+    
+    df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])]
+    
+    
+    combs <- combn(x = colnames(df2)[grep(x = colnames(df2), pattern = "Intensity")], m = 2) %>% t
+    
+    combs2 <- combs %>% as_tibble %>% add_column("rep_1_LMH" = gsub(x = combs[, 1] %>% unlist, pattern = "Intensity.(L|M|H).*", replacement = "\\1"), 
+                                                 "rep_2_LMH" = gsub(x = combs[, 2] %>% unlist, pattern = "Intensity.(L|M|H).*", replacement = "\\1"), 
+                                                 "rep_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = "Intensity.(L|M|H).(IB|IB2|KR)_(.*)", replacement = "\\3"), 
+                                                 "rep_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = "Intensity.(L|M|H).(IB|IB2|KR)_(.*)", replacement = "\\3"))
+    
+    combs2 <- combs2[combs2$rep_1_LMH == combs2$rep_2_LMH &
+                       combs2$rep_1_timepoint == combs2$rep_2_timepoint, ]
+    
+    list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+      
+      colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Intensity")]
+      
+      pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+      
+      return(pairwise_subset_table)
+      
+    })
+    
+    tibble_pairwise_comparisons_intensity_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
+    
+    # normal plot
+    #  %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0)
+    ggplot(tibble_pairwise_comparisons_intensity_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
+      geom_point() +
+      geom_smooth(formula = y ~ x, method = "lm") +
+      xlab("Comparison 1 channel intensity") + 
+      ylab("Comparison 2 channel intensity") + 
+      ggtitle(paste("Correlation of mass channel intensities between biological replicates of the same time point\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free", ncol = 6) +
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_intensity_replicate_correlation_", .y[[1]], "_", .y[[2]], "_linear.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_intensity_replicate_correlation_", .y[[1]], "_", .y[[2]], "_linear.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm")
+    
+    # log-log plot
+    ggplot(tibble_pairwise_comparisons_intensity_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
+      geom_point() +
+      geom_smooth(formula = y ~ x, method = "lm") +
+      xlab("Comparison 1 channel intensity (log2)") + 
+      ylab("Comparison 2 channel intensity (log2)") + 
+      ggtitle(paste("Correlation of log2 mass channel intensities between biological replicates of the same time point\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free", ncol = 6) +
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_intensity_replicate_correlation_", .y[[1]], "_", .y[[2]], "_loglog.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_intensity_replicate_correlation_", .y[[1]], "_", .y[[2]], "_loglog.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm")
+    
+  } )
+  
+}, .progress = TRUE)
+
+```
+
+## plot the correlation of non-normalised ratios for each biological replicate of the same timepoint - proteins and phosphopeptides
+
+```{r warning=FALSE}
+
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("phosphosites", "protein_groups")]
+  Y <- .y[c("phosphosites", "protein_groups")]
+  
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
     # DEBUG ###
-    # .x <- list_of_tibble_intensities_for_pca[[1]][[1]]
-    # .y <- names(list_of_tibble_intensities_for_pca[[1]])
-    
-    # .x <- tibble_normalised_result[, 3:ncol(tibble_normalised_result)] %>% na.omit
+    # .x <- X[[1]]
+    # .y <- Y[[1]]
     ###########
     
-    PCA_result <- prcomp(.x)
+    df <- .x
     
-    ## measure PC variance #
-    PCA_stdev <- tibble("PC" = 1:(PCA_result[["sdev"]] %>% length), "stdev" = PCA_result[["sdev"]])
+    df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")])]
     
-    PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
-    PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
+    combs <- combn(x = colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")], m = 2) %>% t
     
-    ggplot(PCA_variance) + 
-      geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
-      scale_fill_gradientn(colours = heat.colors(n = (PCA_result[["sdev"]] %>% length))) +
-      ggtitle(paste("PCA variance distribution", Y[[1]], .y, sep = ", ")) +
-      guides(size = FALSE) + 
-      xlab("PC") +
-      ylab("Variance explained (%)") +
+    combs2 <- combs %>% as_tibble %>% add_column("comparison_1_ratiotype" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                                 "comparison_2_ratiotype" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                                 "comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                                 "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                                 "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"), 
+                                                 "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"))
+    
+    combs2 <- combs2[combs2$comparison_1_ratiotype == combs2$comparison_2_ratiotype &
+                       combs2$comparison_1_replicate != combs2$comparison_2_replicate &
+                       combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
+    
+    list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+      
+      # DEBUG #####
+      # .x <- combs2[1, 1]
+      # .y <- combs2[1, 2]
+      #############
+        
+      colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio")]
+      
+      pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+      
+      return(pairwise_subset_table)
+      
+    })
+    
+    tibble_pairwise_comparisons_ratio_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
+    
+    # normal plot
+    ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
+      geom_point() +
+      geom_smooth(formula = y ~ x, method = "lm") +
+      # scale_x_continuous(trans = "log2") +
+      # scale_y_continuous(trans = "log2") +
+      xlab("Comparison 1 ratio") + 
+      ylab("Comparison 2 ratio") + 
+      ggtitle(paste("Correlation of ratios (un-normalised) between replicates of the same time point\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free", ncol = 6) +
       theme_bw() +
-      theme(text = element_text(family = "Helvetica"))
-    # +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+      theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_un.normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_linear.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_un.normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_linear.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
+    
+    # log-log plot
+    ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
+      geom_point() +
+      geom_smooth(formula = y ~ x, method = "lm") +
+      # scale_x_continuous(trans = "log2") +
+      # scale_y_continuous(trans = "log2") +
+      xlab("Comparison 1 ratio (log2)") + 
+      ylab("Comparison 2 ratio (log2)") + 
+      ggtitle(paste("Correlation of ratios (un-normalised) between replicates of the same time point\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free", ncol = 6) +
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_un.normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_loglog.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+    ggsave(filename = paste(R_processing_results_dir, "scatterplot_un.normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_loglog.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
+    
+  } )
   
-    ## measure PC loadings #
-    PCA_loadings <- PCA_result[["rotation"]] %>% as_tibble(rownames = "sample")
-    PCA_loadings <- add_column(PCA_loadings, "timepoint" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\1"))
-    PCA_loadings <- add_column(PCA_loadings, "replicatenumber" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\2"))
+}, .progress = TRUE)
+
+```
+
+## plot the correlation of normalised ratios for each biological replicate of the same timepoint - proteins and phosphopeptides
+
+```{r warning=FALSE}
+
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("phosphosites", "protein_groups")]
+  Y <- .y[c("phosphosites", "protein_groups")]
+  
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
+    # DEBUG ###
+    # .x <- X[[1]]
+    # .y <- Y[[1]]
+    ###########
+
+    df <- .x
     
-    ggplot(PCA_loadings) + 
-      geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
-      scale_fill_gradientn(colours = heat.colors(n = (PCA_loadings %>% nrow))) +
-      scale_shape_discrete(name = "Replicate") +
-      ggtitle(paste("PCA loadings", Y[[1]], .y, sep = ", ")) +
-      guides(size = FALSE) + 
-      xlab(paste("PC1 (", PCA_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-      ylab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+    df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*_(6|24)$")])]
+    
+    combs <- combn(x = colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*_(6|24)$")], m = 2) %>% t
+    
+    combs2 <- combs %>% as_tibble %>% add_column("comparison_1_ratiotype" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                                 "comparison_2_ratiotype" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(M.L|H.L)(.*)", replacement = "\\1"),
+                                                 "comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                                 "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\1"),
+                                                 "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"), 
+                                                 "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = ".*(IB|IB2|KR)_(.*)", replacement = "\\2"))
+    
+    combs2 <- combs2[combs2$comparison_1_ratiotype == combs2$comparison_2_ratiotype &
+                       combs2$comparison_1_replicate != combs2$comparison_2_replicate &
+                       combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
+    
+    list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+      
+      # DEBUG #####
+      # .x <- combs2[1, 1]
+      # .y <- combs2[1, 2]
+      #############
+        
+      colnames_id.vars <- colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio")]
+      
+      pairwise_subset_table <- df2[, colnames_id.vars] %>% add_column("comparison_1_value" = df2[, .x %>% paste] %>% unlist, "comparison_2_value" = df2[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+      
+      return(pairwise_subset_table)
+      
+    })
+    
+    tibble_pairwise_comparisons_ratio_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
+    
+    # normal plot
+    ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
+      geom_point() +
+      geom_smooth(formula = y ~ x, method = "lm") +
+      # scale_x_continuous(trans = "log2") +
+      # scale_y_continuous(trans = "log2") +
+      xlab("Comparison 1 ratio") + 
+      ylab("Comparison 2 ratio") + 
+      ggtitle(paste("Correlation of mass channel ratios between replicates of the same time point\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free", ncol = 6) +
       theme_bw() +
-      theme(text = element_text(family = "Helvetica")) 
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(R_processing_results_dir, "scatterplot_normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_linear.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+      ggsave(filename = paste(R_processing_results_dir, "scatterplot_normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_linear.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
     
-    # +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+    # log-log plot
+    ggplot(tibble_pairwise_comparisons_ratio_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value %>% log2, y = comparison_2_value %>% log2)) +
+      geom_point() +
+      geom_smooth(formula = y ~ x, method = "lm") +
+      # scale_x_continuous(trans = "log2") +
+      # scale_y_continuous(trans = "log2") +
+      xlab("Comparison 1 ratio (log2)") + 
+      ylab("Comparison 2 ratio (log2)") + 
+      ggtitle(paste("Correlation of log2 mass channel ratios between replicates of the same time point\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free", ncol = 6) +
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(R_processing_results_dir, "scatterplot_normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_loglog.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+      ggsave(filename = paste(R_processing_results_dir, "scatterplot_normalised_ratio_replicate_correlation_", .y[[1]], "_", .y[[2]], "_loglog.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
+    
+  } )
+  
+}, .progress = TRUE)
+
+```
+
+## MA plot (log2 ratio/avg intensity) - MQ non-normalised ratios - proteins, peptides and phosphopeptides
+
+```{r}
+
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("peptides", "phosphosites", "protein_groups")]
+  Y <- .y[c("peptides", "phosphosites", "protein_groups")]
+  
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
+    # # DEBUG ###
+    # .x <- X[[1]]
+    # .y <- Y[[1]]
+    #############
+    
+    df <- .x
+    
+    # create new columns of average intensities in one step
+    list_avg_columns <- purrr::map(.x = vector_sample_names, .f = ~list(
+      "average.Intensity.H.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.H.", .x, sep = "")),
+                                                 which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean),
+      "average.Intensity.M.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.M.", .x, sep = "")),
+                                                 which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean)
+      ) %>% set_names(c(paste("average.Intensity.H.L.", .x, sep = ""),
+                        paste("average.Intensity.M.L.", .x, sep = ""))))
+    
+    tibble_avg_columns <- list_avg_columns %>% flatten %>% as_tibble
+    
+    df2 <- dplyr::bind_cols(df %>% as_tibble, tibble_avg_columns)
+    
+    # melt the peptide table for a comparison of ratio vs. avg for each ratio taken for each sample.
+    ## NOTE: the ratios considered here are aggregate phospho ratios, not separated by phospho state.
+    df2_norm.ratio.names <- colnames(df)[grep(x = colnames(df), pattern = "Ratio.(H.L|M.L).(IB|KR).*(6|24)$")]
+    tibble_ratio_and_sample_to_plot <- tibble("ratio_type" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).*", replacement = "\\1"),
+                                              "sample_name" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).(.*)", replacement = "\\2"))
+    
+    # create list of tables, each pertaining to a single comparison
+    list_tibbles_subset_for_MA_comparisons <- purrr::map2(.x = tibble_ratio_and_sample_to_plot$ratio_type, .y = tibble_ratio_and_sample_to_plot$sample_name, 
+                                                          .f = ~df2[, c(colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio|Intensity")], 
+                                                                        paste("average.Intensity.", .x, ".", .y, sep = ""),
+                                                                        paste("Ratio.", .x, ".", .y, sep = ""))] %>%
+                                                            add_column("comparison_name_ratio" = .x, 
+                                                                       "comparison_name_sample" = .y))
+    
+    # rename the columns so that we can rbind
+    list_tibbles_subset_for_MA_comparisons_renamed <- purrr::map(.x = list_tibbles_subset_for_MA_comparisons, .f = function(.x) {
+      
+      tibble <- .x
+      column_names <- colnames(tibble)
+      
+      # 4th-last name is the avg. intensity.
+      colnames(tibble)[length(column_names) - 3] <- "avg_intensity"
+      # -last name is the normalised ratio
+      colnames(tibble)[length(column_names) - 2] <- "MQ_normalized_ratio"
+      
+      return(tibble)
+      
+    } )
+    
+    # rbind
+    long_tibble_MA.plot <- list_tibbles_subset_for_MA_comparisons_renamed %>% rbindlist %>% as_tibble
+    
+    # ggplot
+    ggplot(long_tibble_MA.plot, aes(x = avg_intensity, y = log2(MQ_normalized_ratio))) +
+      geom_point() +
+      geom_smooth(formula = y~x, colour = "red", method = "loess") +
+      geom_hline(aes(yintercept = mean(log2(MQ_normalized_ratio %>% na.omit))), linetype = 2, colour = "blue") +
+      xlab("average of log2 intensities") +
+      facet_grid(comparison_name_ratio ~ comparison_name_sample, scales = "free") +
+      ggtitle(paste("M-A plot of log non-normalised MQ ratios vs. avg. intensities\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(R_processing_results_dir, "M.A_plot_non.normalised_ratios_", .y[[1]], "_", .y[[2]], ".pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+      ggsave(filename = paste(R_processing_results_dir, "M.A_plot_non.normalised_ratios_", .y[[1]], "_", .y[[2]], ".svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
+    
+  } )
+  
+}, .progress = TRUE)
+
+```
+
+## MA plot (log2 ratio/avg intensity) - MQ normalised ratios - proteins, peptides and phosphopeptides
+
+```{r}
+
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("peptides", "phosphosites", "protein_groups")]
+  Y <- .y[c("peptides", "phosphosites", "protein_groups")]
+  
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
+    # DEBUG ###
+    # .x <- X[[1]]
+    # .y <- Y[[1]]
+    ###########
+
+    df <- .x
+    
+    # create new columns of average intensities in one step
+    list_avg_columns <- purrr::map(.x = vector_sample_names, .f = ~list(
+      "average.Intensity.H.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.H.", .x, sep = "")),
+                                                 which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean),
+      "average.Intensity.M.L" = apply(X = df[, c(which(colnames(df) == paste("Intensity.M.", .x, sep = "")),
+                                                 which(colnames(df) == paste("Intensity.L.", .x, sep = "")))] %>% log2, MARGIN = 1, FUN = mean)
+      ) %>% set_names(c(paste("average.Intensity.H.L.", .x, sep = ""),
+                        paste("average.Intensity.M.L.", .x, sep = ""))))
+    
+    tibble_avg_columns <- list_avg_columns %>% flatten %>% as_tibble
+    
+    df2 <- dplyr::bind_cols(df %>% as_tibble, tibble_avg_columns)
+    
+    # melt the peptide table for a comparison of ratio vs. avg for each ratio taken for each sample.
+    ## NOTE: the ratios considered here are aggregate phospho ratios, not separated by phospho state.
+    df2_norm.ratio.names <- colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.*(6|24)$")]
+    tibble_ratio_and_sample_to_plot <- tibble("ratio_type" = gsub(x = df2_norm.ratio.names, pattern = ".*(H.L|M.L).*", replacement = "\\1"),
+                                              "sample_name" = gsub(x = df2_norm.ratio.names, pattern = ".*normalized.(.*)", replacement = "\\1"))
+    
+    # create list of tables, each pertaining to a single comparison
+    list_tibbles_subset_for_MA_comparisons <- purrr::map2(.x = tibble_ratio_and_sample_to_plot$ratio_type, .y = tibble_ratio_and_sample_to_plot$sample_name, 
+                                                          .f = ~df2[, c(colnames(df2)[-grep(x = colnames(df2), pattern = "Ratio|Intensity")], 
+                                                                        paste("average.Intensity.", .x, ".", .y, sep = ""),
+                                                                        paste("Ratio.", .x, ".normalized.", .y, sep = ""))] %>%
+                                                            add_column("comparison_name_ratio" = .x, 
+                                                                       "comparison_name_sample" = .y))
+    
+    # rename the columns so that we can rbind
+    list_tibbles_subset_for_MA_comparisons_renamed <- purrr::map(.x = list_tibbles_subset_for_MA_comparisons, .f = function(.x) {
+      
+      tibble <- .x
+      column_names <- colnames(tibble)
+      
+      # 4th-last name is the avg. intensity.
+      colnames(tibble)[length(column_names) - 3] <- "avg_intensity"
+      # -last name is the normalised ratio
+      colnames(tibble)[length(column_names) - 2] <- "MQ_normalized_ratio"
+      
+      return(tibble)
+      
+    } )
+    
+    # rbind
+    long_tibble_MA.plot <- list_tibbles_subset_for_MA_comparisons_renamed %>% rbindlist %>% as_tibble
+    
+    # ggplot
+    ggplot(long_tibble_MA.plot, aes(x = avg_intensity, y = log2(MQ_normalized_ratio))) +
+      geom_point() +
+      geom_smooth(formula = y~x, colour = "red", method = "loess") +
+      geom_hline(aes(yintercept = mean(log2(MQ_normalized_ratio %>% na.omit))), linetype = 2, colour = "blue") +
+      xlab("average of log2 intensities") +
+      facet_grid(comparison_name_ratio ~ comparison_name_sample, scales = "free") +
+      ggtitle(paste("M-A plot of log normalised MQ ratios vs. avg. intensities\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(R_processing_results_dir, "M.A_plot_normalised_ratios_", .y[[1]], "_", .y[[2]], ".pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+      ggsave(filename = paste(R_processing_results_dir, "M.A_plot_normalised_ratios_", .y[[1]], "_", .y[[2]], ".svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
   
   } )
   
-} )
+}, .progress = TRUE)
+  
+```
+
+## compare the phospho and non-phosphopeptide frequency distributions
+
+```{r}
+
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("modification_specific_peptides")]
+  Y <- .y[c("modification_specific_peptides")]
+  
+  purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
+    # DEBUG ###
+    # .x <- X[[1]]
+    # .y <- Y[[1]]
+    ###########
+
+    # use the modificationSpecificPeptides.txt file
+    df <- .x
+    
+    # PLAN: to create a long table with just the LMH intensities of each sample as variables.
+    # subset for intensity per sample only
+    df2 <- df[, c(colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")])] %>% reshape2::melt(., id.vars = colnames(df)[-grep(x = colnames(df), pattern = "Ratio|Intensity")], variable.name = "channel_name_intensity", value.name = "intensity", na.rm = TRUE) %>% as_tibble
+    
+    # add column indicating whether or not a peptide is phospho or not.
+    # we need this because the "phospho..STY" column gives us values from 0-4.
+    phospho_or_not <- df2$Phospho..STY. %>% as.double > 0
+    
+    df3 <- add_column(df2, "phospho_or_not" = phospho_or_not)
+    
+    # GGPLOT #####
+    # line - absolute counts
+    ggplot(df3 %>% dplyr::filter(., intensity > 0), aes(x = intensity, colour = phospho_or_not)) +
+      geom_density(aes(y = ..count..)) +
+      facet_wrap(~channel_name_intensity, scales = "free", ncol = 6) +
+      ggtitle(paste("Comparison of intensity distributions of phosphopeptide vs. nonphospho per mass channel\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      xlab(expression(XIC~Intensity)) +
+      # xlim(c(0, 1)) +
+      scale_x_continuous(trans = "log10") +
+      ylab("Frequency (smoothed)") +
+      scale_color_manual(limits = c(FALSE, TRUE), values = c("blue", "orange"), labels = c("Non-phospho", "Phospho"), name = "Phospho or not") + 
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(R_processing_results_dir, "qualityplot_lineplot_frequency_", .y[[1]], "_phospho_vs_nonphospho.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+      ggsave(filename = paste(R_processing_results_dir, "qualityplot_lineplot_frequency_", .y[[1]], "_phospho_vs_nonphospho.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
+    
+    # line - normalised counts
+    ggplot(df3 %>% dplyr::filter(., intensity > 0), aes(x = intensity, colour = phospho_or_not)) +
+      geom_density(aes(y = ..density..)) +
+      facet_wrap(~channel_name_intensity, scales = "free", ncol = 6) +
+      ggtitle(paste("Comparison of intensity distributions of phosphopeptide vs. nonphospho per mass channel\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      xlab(expression(XIC~Intensity)) +
+      # xlim(c(0, 1)) +
+      scale_x_continuous(trans = "log10") +
+      ylab("Density (smoothed)") +
+      scale_color_manual(limits = c(FALSE, TRUE), values = c("blue", "orange"), labels = c("Non-phospho", "Phospho"), name = "Phospho or not") + 
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(R_processing_results_dir, "qualityplot_lineplot_density_", .y[[1]], "_phospho_vs_nonphospho.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+      ggsave(filename = paste(R_processing_results_dir, "qualityplot_lineplot_density_", .y[[1]], "_phospho_vs_nonphospho.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
+    
+    # bar
+    ggplot(df3 %>% dplyr::filter(., intensity > 0), aes(x = intensity, fill = phospho_or_not)) +
+      geom_histogram(aes(y = ..count..)) +
+      facet_wrap(~channel_name_intensity, scales = "free", ncol = 6) +
+      ggtitle(paste("Comparison of intensity distributions of phosphopeptide vs. nonphospho per mass channel\n", .y[[1]], "\n", .y[[2]], sep = "")) +
+      xlab(expression(XIC~Intensity)) +
+      # xlim(c(0, 1)) +
+      scale_x_continuous(trans = "log10") +
+      ylab("Frequency") +
+      scale_fill_manual(limits = c(FALSE, TRUE), values = c("blue", "orange"), labels = c("Non-phospho", "Phospho"), name = "Phospho or not") + 
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(R_processing_results_dir, "qualityplot_barplot_frequency_", .y[[1]], "_phospho_vs_nonphospho.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 20, units = "cm") +
+      ggsave(filename = paste(R_processing_results_dir, "qualityplot_barplot_frequency_", .y[[1]], "_phospho_vs_nonphospho.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 20, units = "cm")
+    
+  } )
+  
+}, .progress = TRUE)
+
+```
+
+## PCA analysis - pre-treatment
+
+### FUNCTION TO TURN ANY ZEROES INTO NA IN A TABLE
+
+```{r}
+
+zero_to_NA <- function(input_table) {
+
+  output_table <- input_table %>% apply(X = ., MARGIN = 2, FUN = function(X) {
+    
+    out.column <- X
+
+    out.column[which(out.column == 0 | out.column == Inf| out.column == -Inf)] <- NA
+    
+    return(out.column)
+    
+  } )
+  
+  return(output_table)
+  
+}
+
+```
+
+### FUNCTION TO LOG TRANSFORM NON-NA VALUES INTO LOG2
+
+```{r}
+
+transform_non.na_to_log2 <- function(input_table) {
+
+  output_table <- input_table %>% apply(X = ., MARGIN = 2, FUN = function(X) {
+    
+    out.column <- X
+
+    out.column[which(out.column != 0)] <- log2(out.column[which(out.column != 0)])
+    
+    return(out.column)
+    
+  } )
+  
+  return(output_table)
+  
+}
+
+```
+
+### PCA analysis of intensities - raw MQ output
+
+```{r}
+
+list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles <- future_map(.x = list_imported_maxquant_tibbles_processed, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
+  ###########
+
+  L2_list_of_tibbles <- purrr::map_at(.x = .x, .at = c("peptides", "phosphosites", "protein_groups"), .f = function(.x) {
+    
+    # # DEBUG ###
+    # .x <- list_imported_maxquant_tibbles_processed[[1]][[1]]
+    #############
+    
+    # plot the PCA of the phosphosites and the proteins
+    # first, we get the phosphosites from phosphosites.txt and the proteins from proteingroups.txt and then we make matrices using the intensities
+    ## phosphosites
+    df <- .x
+    ## subset intensity values
+    tibble_phosphosites_intensities <- df[, colnames(df)[grep(x = colnames(df), pattern = "Intensity.(L|M|H).(KR_|IB_|IB2_)")]]
+    ## rename columns
+    colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(L).(IB|IB2|KR)_(30_6)", replacement = "ud_30_6|\\2")
+    colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(M).(IB|IB2|KR)_(30_6)", replacement = "30m|\\2")
+    colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(H).(IB|IB2|KR)_(30_6)", replacement = "6h|\\2")
+  
+    colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(L).(IB|IB2|KR)_(1_24)", replacement = "ud_1_24|\\2")
+    colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(M).(IB|IB2|KR)_(1_24)", replacement = "1h|\\2")
+    colnames(tibble_phosphosites_intensities) <- gsub(x = colnames(tibble_phosphosites_intensities), pattern = "Intensity.(H).(IB|IB2|KR)_(1_24)", replacement = "1d|\\2")
+    # done fixing tibble_phosphosites_intensities
+    
+    return(tibble_phosphosites_intensities)
+    
+  } )
+  
+  return(L2_list_of_tibbles)
+  
+}, .progress = TRUE)
+  
+# plot missingness and PCA
+future_map2(.x = list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("peptides", "phosphosites", "protein_groups")]
+  Y <- .y[c("peptides", "phosphosites", "protein_groups")]
+  
+  L2_list_of_tibbles <- purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
+    # DEBUG ###
+    # .x <- X[[1]]
+    # .y <- Y[[1]]
+    ###########
+    
+    # PLOT MISSINGNESS IN AMELIA
+    pdf(file = paste(R_processing_results_dir, "missingness_heatmap_intensities_", .y[[1]], "_", .y[[2]], ".pdf", sep = ""))
+
+    Amelia::missmap(.x %>% zero_to_NA %>% as_tibble,
+            main = paste("Missingness heatmap for raw intensities\n", .y[[1]], "\n", .y[[2]], sep = ""))
+
+    dev.off()
+    
+    # plot PCA at multiple levels
+    # use complete timeseries only
+    plot_PCA_for_timepoint_and_replicate(matrixtable = .x %>% zero_to_NA %>% na.omit, 
+                                         graph_title = paste("intensities", "\n", .y[[1]], "\n", .y[[2]], sep = ""),
+                                         PCA_depths_y = c(2, 3, 4),
+                                         PCA_depths_x = c(1, 2, 3),
+                                         timepoint_order = c("ud_1_24", "ud_30_6", "30m", "1h", "6h", "1d"),
+                                         replicate_order = vector_replicate_names,
+                                         save_dir = R_processing_results_dir,
+                                         save_name = paste("raw_MQ_intensities_", .y[[1]], "_", .y[[2]], sep = ""))
+    
+  } )
+    
+}, .progress = TRUE)
+  
 
 ```
 
@@ -729,98 +961,80 @@ purrr::map2(.x = list_of_tibble_intensities_for_pca, .y = list_of_nested_table_n
 
 ```{r}
 
-list_of_tibble_ratios_for_pca <- purrr::map_depth(.x = list_of_dfs_phosphosites.proteingroups, .depth = 2, .ragged = FALSE, .f = function(.x) {
-
-  # plot the PCA of the phosphosites and the proteins
-  # first, we get the phosphosites from phosphosites.txt and the proteins from proteingroups.txt and then we make matrices using the intensities
-  ## phosphosites
-  df <- .x
-  ## subset intensity values
-  tibble_phosphosites_ratios <- df[, colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.(KR_|IB_|IB2_).*(6|24)$")]]
-  ## rename columns
-  colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(M.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "30m_vs_ud|\\2")
-  colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(H.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "6h_vs_ud|\\2")
+list_of_peptide_phosphopeptide_proteingroups_ratio_matrixtibbles <- future_map(.x = list_imported_maxquant_tibbles_processed, .f = function(.x, .y) {
   
-  colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(M.L).normalized.(IB|IB2|KR)_(1_24)", replacement = "1h_vs_ud|\\2")
-  colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(H.L).normalized.(IB|IB2|KR)_(1_24)", replacement = "1d_vs_ud|\\2")
-  # done fixing tibble_phosphosites_ratios
-  
-  return(tibble_phosphosites_ratios)
-
-} )
-
-library(Amelia)
-
-purrr::map2(.x = list_of_tibble_ratios_for_pca, .y = list_of_nested_table_names[vector_proteingroups.txt_list.indices], .f = function(.x, .y) {
-  
-  Y <- .y
-  
-  purrr::map2(.x = .x, .y = names(.x), .f = ~missmap(.x, main = paste("Missingness heatmap for raw ratios\n", Y[[1]], .y, sep = ", ")))
-  
-} )
-
-# pdfstub = paste(qualitycheck_results_dir, "heatmap_missingness_combinedcount_tables.pdf", sep = "")
-
-
-# PCA analysis
-
-purrr::map2(.x = list_of_tibble_ratios_for_pca, .y = list_of_nested_table_names[vector_proteingroups.txt_list.indices], .f = function(.x, .y) {
-
   # DEBUG ###
-  # .x <- list_of_tibble_ratios_for_pca[[1]]
+  # .x <- list_imported_maxquant_tibbles_processed[[1]]
   ###########
+
+  L2_list_of_tibbles <- purrr::map_at(.x = .x, .at = c("peptides", "phosphosites", "protein_groups"), .f = function(.x) {
+    
+    # # DEBUG ###
+    # .x <- list_imported_maxquant_tibbles_processed[[1]][[1]]
+    #############
   
-  Y <- .y
-  
-  purrr::map2(.x = .x, .y = names(.x), .f = function(.x, .y) {
+    # plot the PCA of the phosphosites and the proteins
+    # first, we get the phosphosites from phosphosites.txt and the proteins from proteingroups.txt and then we make matrices using the intensities
+    ## phosphosites
+    df <- .x
+    ## subset intensity values
+    tibble_phosphosites_ratios <- df[, colnames(df)[grep(x = colnames(df), pattern = "Ratio.*normalized.(KR_|IB_|IB2_).*(6|24)$")]]
+    ## rename columns
+    colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(M.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "30m_vs_ud|\\2")
+    colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(H.L).normalized.(IB|IB2|KR)_(30_6)", replacement = "6h_vs_ud|\\2")
     
-    # DEBUG ###
-    # .x <- list_of_tibble_ratios_for_pca[[1]]
-    # .y <- names(list_of_tibble_ratios_for_pca)
-    ###########
+    colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(M.L).normalized.(IB|IB2|KR)_(1_24)", replacement = "1h_vs_ud|\\2")
+    colnames(tibble_phosphosites_ratios) <- gsub(x = colnames(tibble_phosphosites_ratios), pattern = "Ratio.(H.L).normalized.(IB|IB2|KR)_(1_24)", replacement = "1d_vs_ud|\\2")
+    # done fixing tibble_phosphosites_ratios
     
-    PCA_result <- prcomp(.x %>% na.omit)
-    
-    ## measure PC variance #
-    PCA_stdev <- tibble("PC" = 1:(PCA_result[["sdev"]] %>% length), "stdev" = PCA_result[["sdev"]])
-    
-    PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
-    PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
-    
-    ggplot(PCA_variance) + 
-      geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
-      scale_fill_gradientn(colours = heat.colors(n = (PCA_result[["sdev"]] %>% length))) +
-      ggtitle(paste("PCA variance distribution", Y[[1]] , .y, sep = ", ")) +
-      xlab("PC") +
-      ylab("Variance explained (%)") +
-      theme_bw() +
-      theme(text = element_text(family = "Helvetica"))
-    # +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
-  
-    ## measure PC loadings #
-    PCA_loadings <- PCA_result[["rotation"]] %>% as_tibble(rownames = "sample")
-    PCA_loadings <- add_column(PCA_loadings, "timepoint" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\1"))
-    PCA_loadings <- add_column(PCA_loadings, "replicatenumber" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\2"))
-    
-    ggplot(PCA_loadings) + 
-      geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
-      scale_fill_gradientn(colours = heat.colors(n = (PCA_loadings %>% nrow))) +
-      scale_shape_discrete(name = "Replicate") +
-      ggtitle(paste("PCA loadings", Y[[1]], .y, sep = ", ")) +
-      xlab(paste("PC1 (", PCA_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-      ylab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-      theme_bw() +
-      theme(text = element_text(family = "Helvetica")) 
-    
-    # +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-    #   ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_JUM_combined_count.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+    return(tibble_phosphosites_ratios)
   
   } )
   
-} )
+  return(L2_list_of_tibbles)
+  
+}, .progress = TRUE)
+
+# plot missingness and PCA
+future_map2(.x = list_of_peptide_phosphopeptide_proteingroups_ratio_matrixtibbles, .y = list_of_nested_table_names, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[[1]]
+  # .y <- list_of_nested_table_names[[1]]
+  ###########
+  
+  X <- .x[c("peptides", "phosphosites", "protein_groups")]
+  Y <- .y[c("peptides", "phosphosites", "protein_groups")]
+  
+  L2_list_of_tibbles <- purrr::map2(.x = X, .y = Y, .f = function(.x, .y) {
+
+    # DEBUG ###
+    # .x <- X[[1]]
+    # .y <- Y[[1]]
+    ###########
+    
+    # PLOT MISSINGNESS IN AMELIA
+    pdf(file = paste(R_processing_results_dir, "missingness_heatmap_ratio_", .y[[1]], "_", .y[[2]], ".pdf", sep = ""))
+
+    Amelia::missmap(.x %>% zero_to_NA %>% as_tibble,
+            main = paste("Missingness heatmap for raw ratios\n", .y[[1]], "\n", .y[[2]], sep = ""))
+
+    dev.off()
+    
+    # plot PCA at multiple levels
+    ## because ratios will always have missing values, only plot PCA with fully intact values.
+    plot_PCA_for_timepoint_and_replicate(matrixtable = .x %>% na.omit, 
+                                         graph_title = paste("ratios", "\n", .y[[1]], "\n", .y[[2]], sep = ""),
+                                         PCA_depths_y = c(2, 3, 4),
+                                         PCA_depths_x = c(1, 2, 3),
+                                         timepoint_order = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"),
+                                         replicate_order = vector_replicate_names,
+                                         save_dir = R_processing_results_dir,
+                                         save_name = paste("raw_MQ_ratios_", .y[[1]], "_", .y[[2]], sep = ""))
+    
+  } )
+    
+}, .progress = TRUE)
 
 ```
 
@@ -829,348 +1043,298 @@ purrr::map2(.x = list_of_tibble_ratios_for_pca, .y = list_of_nested_table_names[
 ```{r}
 
 library(ProteoMM)
+library(EDASeq)
+library(limma)
 
 set.seed(7)
 
 ```
 
-## treat all zeroes as NA
-
-EigenMS input intensities MUST be log transformed and not zero - not even potentially real zeroes.
-```{r}
-
-list_of_tibble_intensities_for_processing <- list_of_tibble_intensities_for_pca %>% purrr::map_depth(.depth = 2, .ragged = FALSE, .f = ~mutate_all(., .funs = function(x) {
-
-  out.column <- x
-
-  out.column[which(out.column == 0 | out.column == Inf| out.column == -Inf)] <- NA
-  
-  out.column[which(out.column != 0)] <- log2(out.column[which(out.column != 0)])
-
-  return(out.column)
-
-} ))
-
-```
-
-## prepare annotation column so that each row is traceable
-
-```{r}
-
-list_of_tibble_intensities_for_processing_ids <- list_of_dfs_phosphosites.proteingroups %>% purrr::map_depth(.depth = 2, .ragged = FALSE, .f = ~.x[, "id"])
-
-```
-
-## run eigenMS normalisation
+## run eigenMS normalisation and plotting all in one step
 
 (Karpievitch et al. Bioinformatics 2009)
-```{r}
 
-# SECOND-PASS NORMALISATION #####
-# data_cols <- tibble_normalised_result[, 3:ncol(tibble_normalised_result)]
-# annotation_cols <- tibble_normalised_result[, c("id", "Protein.IDs")]
+NOTE: EigenMS input intensities MUST be log2 transformed and not zero - not even potentially real zeroes.
+```{r include=FALSE}
 
-list_of_tibbles_eigenMS_normalisation_result <- future_pmap(.l = list(
-  
-  "L1" = list_of_tibble_intensities_for_processing,
-  "L2" = list_of_tibble_intensities_for_processing_ids,
-  "L3" = list_of_nested_table_names[vector_phosphosites.txt_list.indices]
-  
-), .f = function(L1, L2, L3) {
-  
-  # DEBUG ###
-  # list_data_tibbles <- list_of_tibble_intensities_for_processing[[1]]
-  # list_id_tibbles <- list_of_tibble_intensities_for_processing_ids[[1]]
-  # TABLE_NAMES <- list_of_nested_table_names[vector_phosphosites.txt_list.indices][[1]]
-  ###########
-  
-  list_data_tibbles <- L1
-  list_id_tibbles <- L2
-  TABLE_NAMES <- L3
-  
-  eigenMS_result_of_single_table <- purrr::pmap(.l = list(
+# set parameter sweep for the value of h.c.
+# can either be a numeric vector of h.c's to sweep in order (last one will be kept due to for loop)
+# or it can be logical FALSE, indicating no sweep required.
+h.c_sweep <- FALSE
+
+list_of_eigenMS_results <- purrr::pmap(.l = list(
+  "L1" = list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles,
+  "L2" = list_imported_maxquant_tibbles_processed,
+  "L3" = list_of_nested_table_names,
+  "L4" = names(list_of_nested_table_names)), .f = function(L1, L2, L3, L4) {
     
-    "l1" = list_data_tibbles, 
-    "l2" = list_id_tibbles,
-    "l3" = names(list_data_tibbles)
-    
-  ), .f = function(l1, l2, l3) {
+    cat("now processing", L4, "at level 1\n")
     
     # DEBUG ###
-    # data_cols <- list_of_tibble_intensities_for_processing[[1]][[1]]
-    # annotation_cols <- list_of_tibble_intensities_for_processing_ids[[1]][[1]]
-    # name_phospho_or_protein <- names(list_of_tibble_intensities_for_processing[[1]])[[1]]
+    # L1 <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[["sp.hsa.canonical.isoforms_junc.exons"]]
+    # L2 <- list_imported_maxquant_tibbles_processed[["sp.hsa.canonical.isoforms_junc.exons"]]
+    # L3 <- list_of_nested_table_names[["sp.hsa.canonical.isoforms_junc.exons"]]
     ###########
     
-    # define tables #####
-    data_cols <- l1
-    annotation_cols <- l2
-    name_phospho_or_protein <- l3
-    
-    # calculate PI value
-    # this doesn't seem to work if you have rows which are totally complete
-    pdf(paste(R_processing_results_dir, "eigenMS_PI_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-    PI_value <- ProteoMM::eigen_pi(data_cols[-which(rowSums(is.na(data_cols))/ncol(data_cols) == 0), ])
-    dev.off()
-    
-    # create sample groupings for each timepoint
-    design_factor_info <- gsub(x = colnames(data_cols), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
-    
-    # first normalisation
-    pdf(paste(R_processing_results_dir, "eigenMS_first_normalisation_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-    eigen_ms_first_normalisation_result <- ProteoMM::eig_norm1(data_cols %>% as.matrix, treatment = design_factor_info, prot.info = annotation_cols %>% as.matrix)
-    dev.off()
-    
-    # set the number of bias trends manually
-    # eigen_ms_first_normalisation_result$h.c <- 4
-    
-    pdf(paste(R_processing_results_dir, "eigenMS_second_normalisation_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-    eigen_ms_second_normalisation_result <- ProteoMM::eig_norm2(eigen_ms_first_normalisation_result)
-    dev.off()
-    
-    # extract the normalised values and put them into a tibble
-    tibble_normalised_result <- eigen_ms_second_normalisation_result$normalized %>% as_tibble
-    
-    # rename columns
-    colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "^X", replacement = "")
-    colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "(.*).(IB|IB2|KR)", replacement = "\\1\\|\\2")
-    colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "present", replacement = "id")
-
-    return(list("result_table" = tibble_normalised_result,
-                "hc_value" = eigen_ms_first_normalisation_result$h.c,
-                "PI_value" = PI_value))
-    
-  } )
+    L1 <- L1
+    L2 <- L2
+    L3 <- L3
   
-  return(eigenMS_result_of_single_table)
-  
-}, .progress = TRUE)
-
-```
-
-## plot RLE, MDS, intra-timepoint correlation scatterplot and CV vs. mean before and after normalisation
-
-CV = sd/mean
-
-```{r}
-
-purrr::pmap(.l = list(
-  
-  "L1" = list_of_tibbles_eigenMS_normalisation_result,
-  "L2" = list_of_tibble_intensities_for_pca,
-  "L3" = list_of_nested_table_names[vector_phosphosites.txt_list.indices]
-  
-  ), .f = function(L1, L2, L3) {
-    
-    # DEBUG ###
-    # list_eigenMS_normalised_tibbles <- list_of_tibbles_eigenMS_normalisation_result[[1]]
-    # list_raw_tibbles <- list_of_tibble_intensities_for_pca[[1]]
-    # TABLE_NAMES <- list_of_nested_table_names[vector_phosphosites.txt_list.indices][[1]]
-    ###########
-  
-    list_eigenMS_normalised_tibbles <- L1
-    list_raw_tibbles <- L2
-    TABLE_NAMES <- L3
-  
-    # this is where the actual plotting happens
-    purrr::pmap(.l = list(
+    L2_list_of_tibbles <- purrr::pmap(.l = list(
+      "l1" = L1[c("peptides", "phosphosites", "protein_groups")],
+      "l2" = L2[c("peptides", "phosphosites", "protein_groups")],
+      "l3" = L3[c("peptides", "phosphosites", "protein_groups")],
+      "l4" = c("peptides", "phosphosites", "protein_groups")), .f = function(l1, l2, l3, l4) {
       
-      "l1" = list_eigenMS_normalised_tibbles, 
-      "l2" = list_raw_tibbles,
-      "l3" = names(list_eigenMS_normalised_tibbles)
-      
-    ), .f = function(l1, l2, l3) {
-      
-      # DEBUG ###
-      # normalised_tibble_and_hc <- list_of_tibbles_eigenMS_normalisation_result[[1]][[1]]
-      # raw_tibble <- list_of_tibble_intensities_for_pca[[1]][[1]]
-      # name_phospho_or_protein <- names(list_of_tibbles_eigenMS_normalisation_result[[1]])[[1]]
-      ###########
-    
-      # define tables #####
-      normalised_tibble_and_hc <- l1
-      raw_tibble <- l2
-      name_phospho_or_protein <- l3
-      
-      # PLOT RLE #####
-      # plot raw
-      pdf(paste(R_processing_results_dir, "RLE_plot_raw_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-      plotRLE(raw_tibble %>% as.matrix, main = paste("raw", TABLE_NAMES[[1]], name_phospho_or_protein, sep = ", "))
-      dev.off()
-      # plot normalised
-      pdf(paste(R_processing_results_dir, "RLE_plot_normalised_eigenMS_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-      plotRLE(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, main = paste("normalised_eigenMS, hc=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""))
-      dev.off()
-      ################
-      
-      # PLOT MDS #####
-      # design factor info for legend
-      design_factor_info_normalised <- gsub(x = colnames(normalised_tibble_and_hc$result_table %>% .[, -1]), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
-      design_factor_info_raw <- gsub(x = colnames(raw_tibble), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
-      # plot normalised
-      pdf(paste(R_processing_results_dir, "MDSplot_eigenMS_normalised, hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-      par(oma = c(0, 0, 0, 5))
-      plotMDS(normalised_tibble_and_hc$result_table %>% .[, -1] %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), main = paste("normalised, hc=", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = ""), cex = 2, pch = 1:length(levels(design_factor_info_normalised)))
-      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_normalised), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_normalised))), pch = 1:length(levels(design_factor_info_normalised)))
-      dev.off()
-      # plot raw
-      pdf(paste(R_processing_results_dir, "MDSplot_raw_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), width = 10, height = 6)
-      par(oma = c(0, 0, 0, 5))
-      plotMDS(raw_tibble %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), main = paste("raw", TABLE_NAMES[[1]], name_phospho_or_protein, sep = ", "), cex = 2, pch = 1:length(levels(design_factor_info_raw)))
-      legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info_raw), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info_raw))), pch = 1:length(levels(design_factor_info_raw)))
-      dev.off()
-      ################
-      
-      # SCATTERPLOT: the intra-timepoint correlation #####
-      df <- normalised_tibble_and_hc$result_table
-      combs <- combn(x = colnames(df[, -1]), m = 2) %>% t
-      combs2 <- combs %>% as_tibble %>% add_column("comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
-                                                   "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
-                                                   "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"), 
-                                                   "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"))
-      combs2 <- combs2[combs2$comparison_1_replicate != combs2$comparison_2_replicate &
-                         combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
-      
-      list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
+        cat("now processing", l4, "at level 2\n")
         
-        # DEBUG #####
-        # .x <- combs2[1, 1]
-        # .y <- combs2[1, 2]
-        #############
+        # DEBUG ###
+        # l1 <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[["con_sp.hsa.canonical.isoforms_junc.exons"]][["protein_groups"]]
+        # l2 <- list_imported_maxquant_tibbles_processed[["con_sp.hsa.canonical.isoforms_junc.exons"]][["protein_groups"]]
+        # l3 <- list_of_nested_table_names[["con_sp.hsa.canonical.isoforms_junc.exons"]][["protein_groups"]]
+        ###########
+        
+        set.seed(7)
+        
+        # define tables #####
+        data_cols <- l1 %>% zero_to_NA %>% transform_non.na_to_log2
+        untransformed_cols <- l2
+        names <- l3
+        
+        # calculate PI value
+        # this doesn't seem to work if you have rows which are totally complete
+        pdf(paste(R_processing_results_dir, "eigenMS_PI_", names[[1]], "_", names[[2]], ".pdf", sep = ""), width = 10, height = 6)
+        PI_value <- ProteoMM::eigen_pi(data_cols[-which(rowSums(is.na(data_cols))/ncol(data_cols) == 0), ])
+        dev.off()
+        
+        # create sample groupings for each timepoint
+        design_factor_info <- factor(x = gsub(x = colnames(data_cols), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE), levels = c("ud_1_24", "ud_30_6", "30m", "1h", "6h", "1d"))
+        
+        # first normalisation
+        pdf(paste(R_processing_results_dir, "eigenMS_first_normalisation_", names[[1]], "_", names[[2]], ".pdf", sep = ""), width = 10, height = 6)
+        eigen_ms_first_normalisation_result <- ProteoMM::eig_norm1(data_cols %>% as.matrix, treatment = design_factor_info, prot.info = untransformed_cols[, "id"] %>% as.matrix)
+        dev.off()
+        
+        autodetected_h.c <- eigen_ms_first_normalisation_result$h.c
+        
+        # sweep h.c. and export the results
+        if (h.c_sweep != FALSE) {
           
-        colnames_id.vars <- colnames(df[, 1])
-        
-        pairwise_subset_table <- df[, colnames_id.vars] %>% add_column("comparison_1_value" = df[, .x %>% paste] %>% unlist, "comparison_2_value" = df[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
-        
-        return(pairwise_subset_table)
-        
-      })
-      
-      tibble_pairwise_comparisons_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
-      
-      ggplot(tibble_pairwise_comparisons_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
-        geom_point() +
-        geom_smooth(formula = y ~ x, method = "lm") +
-        annotate(geom = "text", x = 15, y = 30, label = bquote(R^2 == ~ .(cor(x = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_1_value, y = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_2_value, method = "pearson"))), size = 5) +
-        # scale_x_continuous(trans = "log2") +
-        # scale_y_continuous(trans = "log2") +
-        xlab("Comparison 1 normalised intensity (log2)") + 
-        ylab("Comparison 2 normalised intensity (log2)") + 
-        ggtitle(paste("Intra-timepoint (between replicates) correlation after EigenMS normalisation,
-                hc = ", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = "")) +
-        # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-        theme_bw() +
-        theme(text = element_text(family = "Helvetica")) +
-        ggsave(filename = paste(R_processing_results_dir, "scatterplot_intra.timepoint_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
-        ggsave(filename = paste(R_processing_results_dir, "scatterplot_intra.timepoint_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
-        ################
-      
-        # plot the CV vs. mean log2 intensity for each item-per-timepoint #####
-        # melt by subsetting table by each timepoint.
-        list_of_values_per_timepoint <- purrr::map(.x = design_factor_info_normalised, .f = function(.x) {
+          h.c_values_to_run <- h.c_sweep
           
-          # DEBUG #####
-          # .x <- design_factor_info[1]
-          #############
+        } else if (h.c_sweep == FALSE) {
+          
+          h.c_values_to_run <- autodetected_h.c
+          
+        }
+        
+        # loop thru all the h.c. values
+        future_map(.x = h.c_values_to_run, .f = function(.x) {
+          
+          # DEBUG ###
+          # .x <- 2
+          ###########
+          
+          cat("now processing h.c. value ", .x, "\n")
+          
+          ## set the number of bias trends manually
+          eigen_ms_first_normalisation_result$h.c <- .x
+          
+          cat("eigenMS second normalisation step\n")
+          pdf(paste(R_processing_results_dir, "eigenMS_second_normalisation_", names[[1]], "_", names[[2]], "_hc", .x, ".pdf", sep = ""), width = 10, height = 6)
+          eigen_ms_second_normalisation_result <- ProteoMM::eig_norm2(eigen_ms_first_normalisation_result)
+          dev.off()
+          
+          # extract the normalised values and put them into a tibble
+          ## with extra annotation columns
+          tibble_normalised_result <- eigen_ms_second_normalisation_result$normalized %>% as_tibble
+          # rename columns
+          colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "^X", replacement = "")
+          colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "(.*).(IB|IB2|KR)", replacement = "\\1\\|\\2")
+          colnames(tibble_normalised_result) <- gsub(x = colnames(tibble_normalised_result), pattern = "present", replacement = "id")
+          
+          ## without extra annotation columns
+          tibble_normalised_result_values.only <- eigen_ms_second_normalisation_result$norm_m %>% as_tibble
+          # rename columns
+          colnames(tibble_normalised_result_values.only) <- gsub(x = colnames(tibble_normalised_result_values.only), pattern = "^X", replacement = "")
+          colnames(tibble_normalised_result_values.only) <- gsub(x = colnames(tibble_normalised_result_values.only), pattern = "(.*).(IB|IB2|KR)", replacement = "\\1\\|\\2")
+          
+          # PLOTTING ##################
+          
+          cat("PLOT RLE\n")
+          # plot raw
+          pdf(paste(R_processing_results_dir, "RLE_plot_raw_", names[[1]], "_", names[[2]], ".pdf", sep = ""), width = 10, height = 6)
+            plotRLE(data_cols %>% as.matrix, main = paste("raw", names[[1]], names[[2]], sep = "\n"))
+          dev.off()
+          # plot normalised
+          pdf(paste(R_processing_results_dir, "RLE_plot_eigenMS_normalised_", names[[1]], "_", names[[2]], "_hc", .x, ".pdf", sep = ""), width = 10, height = 6)
+            plotRLE(tibble_normalised_result_values.only %>% as.matrix, main = paste("normalised_eigenMS, hc = ", .x, "\n", names[[1]], "\n", names[[2]], sep = ""))
+          dev.off()
+          ################
+          
+          cat("PLOT MDS\n")
+          # plot normalised
+          pdf(paste(R_processing_results_dir, "MDSplot_eigenMS_normalised_", names[[1]], "_", names[[2]], "_hc", .x, ".pdf", sep = ""), width = 10, height = 6)
+            par(oma = c(0, 0, 0, 5))
+            plotMDS(tibble_normalised_result_values.only %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info))), main = paste("MDS normalised, hc =", .x, "\n", names[[1]], "\n", names[[2]], sep = ""), cex = 2, pch = 1:length(levels(design_factor_info)))
+            legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info))), pch = 1:length(levels(design_factor_info)))
+          dev.off()
+          # plot raw
+          pdf(paste(R_processing_results_dir, "MDSplot_raw_", names[[1]], "_", names[[2]], ".pdf", sep = ""), width = 10, height = 6)
+            par(oma = c(0, 0, 0, 5))
+            plotMDS(data_cols %>% as.matrix, col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info))), main = paste("raw", names[[1]], names[[2]], sep = "\n"), cex = 2, pch = 1:length(levels(design_factor_info)))
+            legend(par('usr')[2], par('usr')[4], xpd = NA, bty = "n", legend = levels(design_factor_info), col = brewer.pal(n = 11, name = "Spectral") %>% .[-(5:7)] %>% tail(length(levels(design_factor_info))), pch = 1:length(levels(design_factor_info)))
+          dev.off()
+          ################
+          
+          cat("do SCATTERPLOT: the intra-timepoint correlation\n")
+          combs <- combn(x = colnames(tibble_normalised_result_values.only), m = 2) %>% t
+          combs2 <- combs %>% as_tibble %>% add_column("comparison_1_replicate" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
+                                                       "comparison_2_replicate" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\2"),
+                                                       "comparison_1_timepoint" = gsub(x = combs[, 1] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"), 
+                                                       "comparison_2_timepoint" = gsub(x = combs[, 2] %>% unlist, pattern = "^(.*)\\|(.*)$", replacement = "\\1"))
+          combs2 <- combs2[combs2$comparison_1_replicate != combs2$comparison_2_replicate &
+                             combs2$comparison_1_timepoint == combs2$comparison_2_timepoint, ]
+          
+          list_of_comparisons <- purrr::map2(.x = combs2[, 1] %>% array_tree, .y = combs2[, 2] %>% array_tree, .f = function(.x, .y) {
             
-          id.cols <- df[, 1]
+            # DEBUG #####
+            # .x <- combs2[1, 1]
+            # .y <- combs2[1, 2]
+            #############
+              
+            colnames_id.vars <- colnames(tibble_normalised_result_values.only)
+            
+            pairwise_subset_table <- tibble_normalised_result_values.only[, colnames_id.vars] %>% 
+              add_column("comparison_1_value" = tibble_normalised_result_values.only[, .x %>% paste] %>% unlist, 
+                         "comparison_2_value" = tibble_normalised_result_values.only[, .y %>% paste] %>% unlist, "comparison_1_name" = .x %>% paste, "comparison_2_name" = .y %>% paste)
+            
+            return(pairwise_subset_table)
+            
+          })
           
-          col.indices_data.vars <- grep(x = colnames(df), pattern = .x)
+          tibble_pairwise_comparisons_per_replicate <- list_of_comparisons %>% rbindlist %>% as_tibble
           
-          # extract the data cols for all reps of 1 timepoint and rename the colnames so that we can rbind properly
-          data.cols <- df[, col.indices_data.vars] %>% setNames(., c("intensity_IB", "intensity_IB2", "intensity_KR")) %>% add_column(., "timepoint" = .x)
-          
-          timepointwise_subset_table <- dplyr::bind_cols(id.cols, data.cols)
-          
-          return(timepointwise_subset_table)
-          
-        })
-    
-        tibble_of_values_per_timepoint <- list_of_values_per_timepoint %>% rbindlist %>% as_tibble
-        # add mean and CV columns
-        tibble_of_values_per_timepoint <- tibble_of_values_per_timepoint %>% 
-          add_column("mean" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {mean(X %>% na.omit)}),
-                     "CV" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {return(sd(X %>% na.omit)/mean(X %>% na.omit))}))
+          ggplot(tibble_pairwise_comparisons_per_replicate %>% dplyr::filter(., comparison_1_value > 0 & comparison_2_value > 0), aes(x = comparison_1_value, y = comparison_2_value)) +
+            geom_point() +
+            geom_smooth(formula = y ~ x, method = "lm") +
+            annotate(geom = "text", x = 15, y = 30, label = bquote(R^2 == ~ .(cor(x = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_1_value, y = tibble_pairwise_comparisons_per_replicate %>% na.omit %>% .$comparison_2_value, method = "pearson"))), size = 5) +
+            # scale_x_continuous(trans = "log2") +
+            # scale_y_continuous(trans = "log2") +
+            xlab("Comparison 1 normalised intensity (log2)") + 
+            ylab("Comparison 2 normalised intensity (log2)") + 
+            ggtitle(paste("Intra-timepoint (between replicates) correlation after EigenMS normalisation", names[[1]], names[[2]], sep = "\n")) +
+            # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
+            theme_bw() +
+            theme(text = element_text(family = "Helvetica")) +
+            ggsave(filename = paste(R_processing_results_dir, "scatterplot_intra.timepoint_eigenMS_normalised_", names[[1]], "_", names[[2]], "_hc", .x, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
+            ggsave(filename = paste(R_processing_results_dir, "scatterplot_intra.timepoint_eigenMS_normalised_", names[[1]], "_", names[[2]], "_hc", .x, ".svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+            ################
         
-        ggplot(tibble_of_values_per_timepoint, aes(x = 2^mean, y = CV)) +
-          geom_point() +
-          geom_smooth(formula = y ~ x, method = "loess", span = normalised_tibble_and_hc$PI_value) +
-          # scale_x_continuous(trans = "log2") +
-          # scale_y_continuous(trans = "log2") +
-          # cut the axis at the 90% percentile highest value
-          coord_cartesian(xlim = c(0, 2^quantile(tibble_of_values_per_timepoint$mean, probs = c(0.92)))) +
-          xlab("Mean Intensity (normalised)") + 
-          ylab("CV") + 
-          ggtitle(paste("CV vs. mean after EigenMS normalisation,
-                hc = ", normalised_tibble_and_hc$hc_value, ", ", TABLE_NAMES[[1]], ", ", name_phospho_or_protein, sep = "")) +
-          # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-          theme_bw() +
-          theme(text = element_text(family = "Helvetica")) +
-          ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
-          ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_eigenMS_normalised_hc", normalised_tibble_and_hc$hc_value, "_", TABLE_NAMES[[1]], "_", name_phospho_or_protein, ".svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+          cat("plot the CV vs. mean log2 intensity for each item-per-timepoint\n")
+          # melt by subsetting table by each timepoint.
+          
+          cat("raw\n")
+          list_of_values_per_timepoint_raw <- purrr::map(.x = design_factor_info, .f = function(.x) {
+            
+            # DEBUG #####
+            # .x <- design_factor_info[1]
+            #############
+              
+            id.cols <- untransformed_cols[, "id"]
+            
+            col.indices_data.vars <- grep(x = colnames(data_cols %>% as_tibble), pattern = .x)
+            
+            # extract the data cols for all reps of 1 timepoint and rename the colnames so that we can rbind properly
+            obs.cols <- data_cols[, col.indices_data.vars] %>% as_tibble %>% setNames(., nm = c("intensity_IB", "intensity_IB2", "intensity_KR")) %>% add_column(., "timepoint" = .x)
+            
+            timepointwise_subset_table <- dplyr::bind_cols(id.cols, obs.cols)
+            
+            return(timepointwise_subset_table)
+            
+          })
+      
+          tibble_of_values_per_timepoint_raw <- list_of_values_per_timepoint_raw %>% rbindlist %>% as_tibble
+          # add mean and CV columns
+          tibble_of_values_per_timepoint_raw <- tibble_of_values_per_timepoint_raw %>% 
+            add_column("mean" = apply(X = tibble_of_values_per_timepoint_raw[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {mean(X %>% na.omit)}),
+                       "CV" = apply(X = tibble_of_values_per_timepoint_raw[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {return(sd(X %>% na.omit)/mean(X %>% na.omit))}))
+          
+          ggplot(tibble_of_values_per_timepoint_raw, aes(x = 2^mean, y = CV)) +
+            geom_point() +
+            # geom_smooth(formula = y ~ x, method = "loess", span = PI_value) +
+            # scale_x_continuous(trans = "log2") +
+            # scale_y_continuous(trans = "log2") +
+            # cut the axis at the 90% percentile highest value
+            coord_cartesian(xlim = c(0, 2^quantile(tibble_of_values_per_timepoint_raw$mean, probs = c(0.92), na.rm = TRUE))) +
+            xlab("Mean Intensity (normalised)") + 
+            ylab("CV") + 
+            ggtitle(paste("CV vs. mean of raw intensities", names[[1]], names[[2]], sep = "\n")) +
+            # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
+            theme_bw() +
+            theme(text = element_text(family = "Helvetica")) +
+            ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_raw_", names[[1]], "_", names[[2]], ".pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
+            ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_raw_", names[[1]], "_", names[[2]], ".svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+          
+          cat("normalised\n")
+          list_of_values_per_timepoint <- purrr::map(.x = design_factor_info, .f = function(.x) {
+            
+            # DEBUG #####
+            # .x <- design_factor_info[1]
+            #############
+              
+            id.cols <- tibble_normalised_result[, "id"]
+            
+            col.indices_data.vars <- grep(x = colnames(tibble_normalised_result_values.only), pattern = .x)
+            
+            # extract the data cols for all reps of 1 timepoint and rename the colnames so that we can rbind properly
+            obs.cols <- tibble_normalised_result_values.only[, col.indices_data.vars] %>% setNames(., c("intensity_IB", "intensity_IB2", "intensity_KR")) %>% add_column(., "timepoint" = .x)
+            
+            timepointwise_subset_table <- dplyr::bind_cols(id.cols, obs.cols)
+            
+            return(timepointwise_subset_table)
+            
+          })
+      
+          tibble_of_values_per_timepoint <- list_of_values_per_timepoint %>% rbindlist %>% as_tibble
+          # add mean and CV columns
+          tibble_of_values_per_timepoint <- tibble_of_values_per_timepoint %>% 
+            add_column("mean" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {mean(X %>% na.omit)}),
+                       "CV" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {return(sd(X %>% na.omit)/mean(X %>% na.omit))}))
+          
+          ggplot(tibble_of_values_per_timepoint, aes(x = 2^mean, y = CV)) +
+            geom_point() +
+            # geom_smooth(formula = y ~ x, method = "loess", span = PI_value) +
+            # scale_x_continuous(trans = "log2") +
+            # scale_y_continuous(trans = "log2") +
+            # cut the axis at the 90% percentile highest value
+            coord_cartesian(xlim = c(0, 2^quantile(tibble_of_values_per_timepoint$mean, probs = c(0.92)))) +
+            xlab("Mean Intensity (normalised)") + 
+            ylab("CV") + 
+            ggtitle(paste("CV vs. mean after EigenMS normalisation", names[[1]], names[[2]], sep = "\n")) +
+            # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
+            theme_bw() +
+            theme(text = element_text(family = "Helvetica")) +
+            ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_eigenMS_normalised_", names[[1]], "_", names[[2]], "_hc", .x, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
+            ggsave(filename = paste(R_processing_results_dir, "scatterplot_CV_vs_mean_eigenMS_normalised_", names[[1]], "_", names[[2]], "_hc", .x, ".svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+          
+        }, .progress = TRUE )
         
-        ################
-      
-    } )
+        return(list("result_table" = tibble_normalised_result,
+                      "hc_value" = eigen_ms_first_normalisation_result$h.c,
+                      "PI_value" = PI_value))
+        
+      } )
     
-  })
-      
-```
+    })
 
-plot the CV vs. mean log2 intensity for each item-per-timepoint
-CV = sd/mean
-
-```{r warning=FALSE}
-
-# purrr::map(.x = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], .f = function(.x) {
-
-  df <- tibble_normalised_result
-
-  # melt by subsetting table by each timepoint.
-  list_of_values_per_timepoint <- purrr::map(.x = design_factor_info, .f = function(.x) {
-    
-    # DEBUG #####
-    # .x <- design_factor_info[1]
-    #############
-      
-    id.cols <- df[, 1:2]
-    
-    col.indices_data.vars <- grep(x = colnames(df), pattern = .x)
-    
-    # extract the data cols for all reps of 1 timepoint and rename the colnames so that we can rbind properly
-    data.cols <- df[, col.indices_data.vars] %>% setNames(., c("intensity_IB", "intensity_IB2", "intensity_KR")) %>% add_column(., "timepoint" = .x)
-    
-    timepointwise_subset_table <- dplyr::bind_cols(id.cols, data.cols)
-    
-    return(timepointwise_subset_table)
-    
-  })
-  
-  tibble_of_values_per_timepoint <- list_of_values_per_timepoint %>% rbindlist %>% as_tibble
-  # add mean and CV columns
-  tibble_of_values_per_timepoint <- tibble_of_values_per_timepoint %>% 
-    add_column("mean" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {mean(X %>% na.omit)}),
-               "CV" = apply(X = tibble_of_values_per_timepoint[, c("intensity_IB", "intensity_IB2", "intensity_KR")], MARGIN = 1, FUN = function(X) {return(sd(X %>% na.omit)/mean(X %>% na.omit))}))
-  
-  ggplot(tibble_of_values_per_timepoint, aes(x = 2^mean, y = CV)) +
-    geom_point() +
-    geom_smooth(formula = y ~ x, method = "dpois") +
-    # scale_x_continuous(trans = "log2") +
-    # scale_y_continuous(trans = "log2") +
-    coord_cartesian(xlim = c(0, 7.5e8)) +
-    xlab("Mean Intensity (normalised)") + 
-    ylab("CV") + 
-    ggtitle("CV vs. mean for EigenMS") +
-    # facet_wrap(paste("comparison 2:", comparison_2_name)~paste("comparison 1:", comparison_1_name), scales = "free") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"))
-  
-# } )
+# , .progress = TRUE, .options = future_options(globals = c("plotRLE", "plotMDS", "ProteoMM", "zero_to_NA", "transform_non.na_to_log2", "R_processing_results_dir"))
 
 ```
-
 
 # Normalyzer workflow
+
+NOTE: treat all zeroes as NA. Normalyzer input intensities should NOT be log transformed, since it's going to be done somewhere along the track
 
 ```{r}
 
@@ -1178,81 +1342,70 @@ library(NormalyzerDE)
 
 ```
 
-## treat all zeroes as NA
-
-Normalyzer input intensities should NOT be log transformed, since it's going to be done somewhere along the track
-```{r}
-
-list_of_tibble_intensities_for_processing <- list_of_tibble_intensities_for_pca %>% purrr::map_depth(.depth = 2, .ragged = FALSE, .f = ~mutate_all(., .funs = function(x) {
-
-  out.column <- x
-
-  out.column[which(out.column == 0 | out.column == Inf| out.column == -Inf)] <- NA
-  
-  # out.column[which(out.column != 0)] <- log2(out.column[which(out.column != 0)])
-
-  return(out.column)
-
-} ))
-
-```
-
 ## append a minimal amount of information back onto the tibbles for identification
 
 ```{r}
 
-list_of_tibble_intensities_for_processing_with_id <- purrr::map2(.x = list_of_tibble_intensities_for_processing, 
-                                                                .y = list_imported_maxquant_tibbles_processed[vector_phosphosites.txt_list.indices], 
-                                                                .f = ~dplyr::bind_cols(.y[, c("id", "Proteins")], .x))
-
-# Proteins: phosphosites.txt
-# Protein.IDs: proteingroups.txt
+list_of_eigenMS_results <- future_pmap(.l = list(
+  "L1" = list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles,
+  "L2" = list_imported_maxquant_tibbles_processed,
+  "L3" = list_of_nested_table_names,
+  "L4" = names(list_of_nested_table_names)), .f = function(L1, L2, L3, L4) {
+    
+    cat("now processing", L4, "at level 1\n")
+    
+    # DEBUG ###
+    # L1 <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[["sp.hsa.canonical.isoforms_junc.exons"]]
+    # L2 <- list_imported_maxquant_tibbles_processed[["sp.hsa.canonical.isoforms_junc.exons"]]
+    # L3 <- list_of_nested_table_names[["sp.hsa.canonical.isoforms_junc.exons"]]
+    ###########
+    
+    L1 <- L1
+    L2 <- L2
+    L3 <- L3
+  
+    L2_list_of_tibbles <- purrr::pmap(.l = list(
+      "l1" = L1[c("peptides", "phosphosites", "protein_groups")],
+      "l2" = L2[c("peptides", "phosphosites", "protein_groups")],
+      "l3" = L3[c("peptides", "phosphosites", "protein_groups")],
+      "l4" = c("peptides", "phosphosites", "protein_groups")), .f = function(l1, l2, l3, l4) {
+        
+        cat("now processing", l4, "at level 2\n")
+        
+        # DEBUG ###
+        # l1 <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[["con_sp.hsa.canonical.isoforms_junc.exons"]][["protein_groups"]]
+        # l2 <- list_imported_maxquant_tibbles_processed[["con_sp.hsa.canonical.isoforms_junc.exons"]][["protein_groups"]]
+        # l3 <- list_of_nested_table_names[["con_sp.hsa.canonical.isoforms_junc.exons"]][["protein_groups"]]
+        ###########
+        
+        set.seed(7)
+        
+        # define tables #####
+        data_cols <- l1 %>% zero_to_NA
+        untransformed_cols <- l2
+        names <- l3
+        
+        ## generate design matrix
+        normalyzer_design_matrix <- tibble("sample" = colnames(data_cols),
+                                           "group" = 
+                                             # create sample groupings for each timepoint
+                                             # to treat all MSC time points as the same: ^([^_|\\|]+).* 
+                                             design_factor_info <- gsub(x = colnames(data_cols), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
+                                           )
+        
+        ## generate SummarizedExperiment object
+        sumExpObj <- SummarizedExperiment::SummarizedExperiment(
+          assays = as.matrix(data_cols), 
+          colData = normalyzer_design_matrix, 
+          rowData = untransformed_cols[, "id"])
+        
+        ## run Normalyzer
+        normalyzer(jobName = paste(names[[1]], "_", names[[2]], sep = ""), 
+                   experimentObj = sumExpObj, 
+                   outputDir = R_processing_results_dir)
+        
+      } )
+    
+  }, .progress = TRUE, .options = future_options(scheduling = 2))
 
 ```
-
-## create design matrix
-
-```{r}
-
-normalyzer_design_matrix <- tibble("sample" = colnames(list_of_tibble_intensities_for_processing_with_id[[1]])[-c(1, 2)],
-                        "group" = 
-                          # create sample groupings for each timepoint
-                          # to treat all MSC time points as the same: ^([^_|\\|]+).* 
-                          design_factor_info <- gsub(x = colnames(list_of_tibble_intensities_for_processing_with_id[[1]])[-c(1, 2)], pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE) %>% as.factor
-                        )
-
-
-```
-
-## generate SummarizedExperiment object
-
-```{r}
-
-sumExpObj <- SummarizedExperiment::SummarizedExperiment(
-  assays = as.matrix(list_of_tibble_intensities_for_processing_with_id[[1]][-c(1, 2)]), 
-  colData = normalyzer_design_matrix, 
-  rowData = list_of_tibble_intensities_for_processing_with_id[[1]][c(1, 2)])
-
-# setupRawDataObject(sumExpObj, inputFormat = "default", zeroToNA = TRUE, sampleColName = "sample", groupColName = "group")
-
-# normObj <- SummarizedExperiment::verifySummarizedExperiment(experimentObj = sumExpObj, sampleColName = "sample")
-
-```
-
-## run evaluation
-
-```{r}
-
-# normResults <- normMethods(sumExpObj)
-
-# normalyzer(jobName = "test_run", 
-#            designPath = designFp, 
-#            dataPath = dataFp, 
-#            outputDir = R_processing_results_dir)
-
-normalyzer(jobName = "test", 
-           experimentObj = sumExpObj, 
-           outputDir = R_processing_results_dir)
-
-```
-

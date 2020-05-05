@@ -3185,7 +3185,7 @@ tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::
   as_tibble %>%
   setNames(c("AS_event_ID", "splicemode", "transcript_ids_with_annotation", "transcript_features"))
 # write table
-write.table(x = tibble_final_transcript_feature_annotation, file = paste(results_dir, "table_junction_ontology_matched_transcript_features_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_transcript_feature_annotation, file = paste(results_dir, "table_junction_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the biomart results and tibblise 
 tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_event_ID", "splicemode", "biomart_annotations")] ) %>%
@@ -3194,7 +3194,7 @@ tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("
   rbindlist %>% 
   as_tibble
 # write table
-write.table(x = tibble_final_biomart_annotation, file = paste(results_dir, "table_junction_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_biomart_annotation, file = paste(results_dir, "table_junction_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the PTM results and tibblise 
 tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_event_ID", "splicemode", "PTMs")] ) %>%
@@ -3203,16 +3203,39 @@ tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_e
   rbindlist %>% 
   as_tibble
 # write table
-write.table(x = tibble_final_PTM_annotation, file = paste(results_dir, "table_junction_ontology_matched_PTMs_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_PTM_annotation, file = paste(results_dir, "table_junction_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the other supporting information and tibblise
 tibble_final_annotation_supp <- list_tidied_annotation %>% 
   purrr::map(~.x[c("AS_event_ID", "splicemode", "vector_genomic_coords_of_all_differential_exon_positions", "vector_genomic_coords_of_all_differential_CDS_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")]) %>%
-  purrr::map(~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = ~.x %>% purrr::map(~paste(.x, collapse = ",")) %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", "protein_relative_differential_coords"))) %>% flatten %>% as_tibble) %>%
+  purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length != 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = ~.x %>% purrr::map(~paste(.x, collapse = ",")) %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", "protein_relative_differential_coords")))) %>%
+  purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length == 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = function(.x) {return("NA")} ) %>% splice("ensembl_peptide_id" = "NA")) %>%
+  purrr::map(~.x %>% flatten %>% as_tibble) %>%
   purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist %>% as_tibble
 # write table
-write.table(x = tibble_final_annotation_supp, file = paste(results_dir, "table_junction_ontology_supporting_info_", query_name, ".txt", sep = ""))
+write.table(x = tibble_final_annotation_supp, file = paste(results_dir, "table_junction_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# try calculating frameshift by just naively looking at whether the differential region is a multiple of 3
+tibble_final_annotation_supp_with_frameshift_test <- tibble_final_annotation_supp %>% 
+  add_column("total_differential_region_size" = purrr::map(.x = tibble_final_annotation_supp$vector_genomic_coords_of_all_differential_exon_positions, .f = ~.x %>% strsplit(split = ",") %>% unlist %>% length) %>% unlist, .after = "vector_genomic_coords_of_all_differential_exon_positions") %>%
+  add_column("remainder_by_3" = .$total_differential_region_size %% 3, .after = "total_differential_region_size")
+# write table
+write.table(x = tibble_final_annotation_supp_with_frameshift_test, file = paste(results_dir, "table_junction_ontology_supporting_info_frameshift_test_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+subset_tibble_final_annotation_supp_with_frameshift_test <- tibble_final_annotation_supp_with_frameshift_test %>% dplyr::distinct(AS_event_ID, splicemode, remainder_by_3)
   
+ggplot(data = subset_tibble_final_annotation_supp_with_frameshift_test) +
+  geom_bar(stat = "count", mapping = aes(y = ..count.., x = splicemode)) +
+  geom_label(stat = "count", mapping = aes(label = ..count.., x = splicemode)) +
+  facet_wrap(~remainder_by_3, scales = "free", labeller = labeller(sample = c("0" = "No Frameshift", "1" = "Frameshift by 1", "2" = "Frameshift by 2"))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_directory_figures, "table_junction_ontology_supporting_info_frameshift_test_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
+ ggsave(filename = paste(results_directory_figures, "table_junction_ontology_supporting_info_frameshift_test_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm") 
+  
+  
+
 ```
 
 ## stats summary of junction ontology
@@ -4103,14 +4126,35 @@ FLASHseq_dir <- "Y:/2019_FLASHseq/results/R_processing_results/"
 
 ```
 
-## enrichment of upstream RBPs - clusterwise
+### import the bed files from file - ON HOLD
+
+```{r eval=FALSE, include=FALSE}
+
+list_of_RBP_target_gene_categories_raw <- list(
+  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/bedfile_srsf2_clip_GSE111900_WT.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble,
+  
+  # "SRSF1 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF1.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF2 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR5-SRSF2.bed_annotated_PEP0.01.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble,
+  "SRSF3 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR8-SRSF3.bed_annotated_PEP0.01.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble,
+  # "SRSF4 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR9-SRSF4.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF5 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR10-SRSF5.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF6 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR11-SRSF6.bed_annotated_PEP0.01.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble,
+  # "SRSF7 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR12-SRSF7.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF9 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR13-SRSF9.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF11 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR14-SRSF11.bed_annotated_PEP0.01.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble,
+  
+  "MBNL2 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/bedfile_mbnl2_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble,
+  "MBNL1 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/bedfile_mbnl1_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble,
+  "MBNL3 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/bedfile_mbnl3_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble
+  )
+
+```
+
 
 ```{r}
 
-# prepare enrichment categories for each upstream candidate RBP
-
 list_of_RBP_target_gene_categories_raw <- list(
-  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/srsf2_clip_GSE111900_WT_0.01FDR.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/geneset_srsf2_clip_GSE111900_WT_0.01FDR.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   
   # "SRSF1 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF1.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   "SRSF2 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR5-SRSF2.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
@@ -4122,14 +4166,20 @@ list_of_RBP_target_gene_categories_raw <- list(
   # "SRSF9 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR13-SRSF9.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   "SRSF11 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR14-SRSF11.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
   
-  "MBNL2 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl2_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
-  "MBNL1 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl1_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
-  "MBNL3 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/mbnl3_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper)
+  "MBNL2 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/geneset_mbnl2_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
+  "MBNL1 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/geneset_mbnl1_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
+  "MBNL3 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/geneset_mbnl3_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper)
   )
 
 list_of_RBP_target_gene_categories <- list_of_RBP_target_gene_categories_raw %>% flatten
 
 names(list_of_RBP_target_gene_categories) <- names(list_of_RBP_target_gene_categories_raw)
+
+```
+
+## enrichment of upstream RBPs - clusterwise
+
+```{r}
 
 ## gene enrichment in each cluster
  

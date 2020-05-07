@@ -1060,7 +1060,7 @@ NOTE: EigenMS input intensities MUST be log2 transformed and not zero - not even
 # set parameter sweep for the value of h.c.
 # can either be a numeric vector of h.c's to sweep in order (last one will be kept due to for loop)
 # or it can be logical FALSE, indicating no sweep required.
-h.c_sweep <- FALSE
+h.c_sweep <- 2
 
 list_of_eigenMS_results <- purrr::pmap(.l = list(
   "L1" = list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles,
@@ -1089,9 +1089,9 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
         cat("now processing", l4, "at level 2\n")
         
         # DEBUG ###
-        l1 <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[["junc.exons"]][["peptides"]]
-        l2 <- list_imported_maxquant_tibbles_processed[["junc.exons"]][["peptides"]]
-        l3 <- list_of_nested_table_names[["junc.exons"]][["peptides"]]
+        # l1 <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[["junc.exons"]][["peptides"]]
+        # l2 <- list_imported_maxquant_tibbles_processed[["junc.exons"]][["peptides"]]
+        # l3 <- list_of_nested_table_names[["junc.exons"]][["peptides"]]
         ###########
         
         if(! dir.exists(paste(R_processing_results_dir, "eigenMS/", sep = "")) ) {
@@ -1102,38 +1102,7 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
         set.seed(7)
         
         # define tables #####
-        data_cols <- l1 %>% zero_to_NA %>% transform_non.na_to_log2 %>% (function(input_table) {
-          
-          # DEBUG ###
-          # input_table <- l1 %>% zero_to_NA %>% transform_non.na_to_log2
-          ###########
-          
-          output_table_temp <- input_table %>% as_tibble %>% 
-            # add column for the average of each SILAC encode
-            add_column("ud_1_24_average" = input_table[, grep(x = colnames(input_table), pattern = "ud_1_24")] %>% 
-                         apply(MARGIN = 1, FUN = function(X) {
-                           out <- mean(2^X, na.rm = TRUE)
-                           out[which(is.infinite(out))] <- NA
-                         } ) %>% log2 ) %>%
-            add_column("ud_30_6_average" = input_table[, grep(x = colnames(input_table), pattern = "ud_30_6")] %>% 
-                         apply(MARGIN = 1, FUN = function(X) {
-                           out <- mean(2^X, na.rm = TRUE) %>% log2
-                           out[which(is.infinite(out))] <- NA
-                         } ) %>% log2 )
-        
-          # MINUS LOG FOR LOG FC
-          ## calculate logFC for 1/24
-          output_table_temp_1_24 <- dplyr::select(output_table_temp, contains("1h") | contains("1d")) %>% dplyr::select(!contains("ud")) %>% dplyr::mutate_all(.funs = function(x) {x - output_table_temp$ud_1_24_average} )
-          
-          ## calculate logFC for 30/6
-          output_table_temp_30_6 <- dplyr::select(output_table_temp, contains("30m") | contains("6h")) %>% dplyr::select(!contains("ud")) %>% dplyr::mutate_all(.funs = function(x) {x - output_table_temp$ud_30_6_average} )
-          
-          output_table <- dplyr::bind_cols(output_table_temp_1_24, output_table_temp_30_6)
-          
-          return(output_table)
-          
-        } )
-        
+        data_cols <- l1 %>% zero_to_NA %>% transform_non.na_to_log2
         untransformed_cols <- l2
         names <- l3
         
@@ -1144,7 +1113,7 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
         dev.off()
         
         # create sample groupings for each timepoint
-        design_factor_info <- factor(x = gsub(x = colnames(data_cols), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE), levels = c("30m", "1h", "6h", "1d"))
+        design_factor_info <- factor(x = gsub(x = colnames(data_cols), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE), levels = c("ud_1_24", "ud_30_6", "30m", "1h", "6h", "1d"))
         
         # first normalisation
         pdf(paste("./eigenMS_first_normalisation_", names[[1]], "_", names[[2]], ".pdf", sep = ""), width = 10, height = 6)
@@ -1153,16 +1122,22 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
         
         autodetected_h.c <- eigen_ms_first_normalisation_result$h.c
         
+        plan(sequential)
+        
         # sweep h.c. and export the results
         if (h.c_sweep != FALSE) {
           
           h.c_values_to_run <- h.c_sweep
-          plan(multiprocess)
+          
+          if (length(h.c_sweep) > 1) {
+            
+            plan(multiprocess)
+            
+          }
           
         } else if (h.c_sweep == FALSE) {
           
           h.c_values_to_run <- autodetected_h.c
-          plan(sequential)
           
         }
         
@@ -1234,7 +1209,7 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
                                                graph_title = paste("intensities", "\n", names[[1]], "\n", names[[2]], sep = ""),
                                                PCA_depths_y = c(2, 3, 4),
                                                PCA_depths_x = c(1, 2, 3),
-                                               timepoint_order = c("30m", "1h", "6h", "1d"),
+                                               timepoint_order = c("ud_1_24", "ud_30_6", "30m", "1h", "6h", "1d"),
                                                replicate_order = vector_replicate_names,
                                                save_dir = paste("./", sep = ""),
                                                save_name = paste("eigenMS_normalised_", names[[1]], "_", names[[2]], "_hc", .x, sep = ""))
@@ -1382,6 +1357,10 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
 
 # , .progress = TRUE, .options = future_options(globals = c("plotRLE", "plotMDS", "ProteoMM", "zero_to_NA", "transform_non.na_to_log2", "R_processing_results_dir"))
 
+# also create a version of the list without the h.c and PI metadata.
+list_of_eigenMS_results_tibble.only <- purrr::map(.x = list_of_eigenMS_results, 
+                                                  .f = ~purrr::map(.x = .x, .f = ~.x$result_table))
+
 ```
 
 # Normalyzer workflow
@@ -1433,7 +1412,7 @@ list_of_eigenMS_results <- future_pmap(.l = list(
         set.seed(7)
         
         # define tables #####
-        data_cols <- l1 %>% zero_to_NA
+        data_cols <- l1 %>% zero_to_NA 
         untransformed_cols <- l2
         names <- l3
         
@@ -1459,10 +1438,6 @@ list_of_eigenMS_results <- future_pmap(.l = list(
       } )
     
   }, .progress = TRUE, .options = future_options(scheduling = 2))
-
-# also create a version of the list without the h.c and PI metadata.
-list_of_eigenMS_results_tibble.only <- purrr::map(.x = list_of_eigenMS_results, 
-                                                  .f = ~purrr::map(.x = .x, .f = ~.x$result_table))
 
 ```
 
@@ -1535,31 +1510,39 @@ future_map2(.x = list_of_reimported_cycloess_normalised_tibbles, .y = list_of_ne
 
 ## calculate the log-fold change from MSC
 
-### create cryptic function to calculate logFC separately for each encode
+### create cryptic function to re-calculate the (now normalised) ratio (logFC) w.r.t MSC timepoint
 
 ```{r}
 
-make_logfc_separate_encode_already.log2 <- function(input_table) {
+recalculate_silac_ratio_from_intensity_tibble <- function(input_table) {
   
   # DEBUG ###
   # input_table <- list_of_eigenMS_results_tibble.only[[1]][[1]]
   ###########
   
   output_table_temp <- input_table %>% 
-    # add column for the average of each SILAC encode
-    add_column("ud_1_24_average" = input_table[, grep(x = colnames(input_table), pattern = "ud_1_24")] %>% 
-                 apply(MARGIN = 1, FUN = function(X) {mean(2^X, na.rm = TRUE) %>% log2} )) %>%
-    add_column("ud_30_6_average" = input_table[, grep(x = colnames(input_table), pattern = "ud_30_6")] %>% 
-                 apply(MARGIN = 1, FUN = function(X) {mean(2^X, na.rm = TRUE) %>% log2} ))
+    dplyr::mutate_at(.vars = "1h|IB", .funs = function(x) {x - input_table$`ud_1_24|IB`} ) %>%
+    dplyr::mutate_at(.vars = "1d|IB", .funs = function(x) {x - input_table$`ud_1_24|IB`} ) %>%
+    
+    dplyr::mutate_at(.vars = "1h|IB2", .funs = function(x) {x - input_table$`ud_1_24|IB2`} ) %>%
+    dplyr::mutate_at(.vars = "1d|IB2", .funs = function(x) {x - input_table$`ud_1_24|IB2`} ) %>%
+    
+    dplyr::mutate_at(.vars = "1h|KR", .funs = function(x) {x - input_table$`ud_1_24|KR`} ) %>%
+    dplyr::mutate_at(.vars = "1d|KR", .funs = function(x) {x - input_table$`ud_1_24|KR`} ) %>%
+    
+    dplyr::mutate_at(.vars = "30m|IB", .funs = function(x) {x - input_table$`ud_30_6|IB`} ) %>%
+    dplyr::mutate_at(.vars = "6h|IB", .funs = function(x) {x - input_table$`ud_30_6|IB`} ) %>%
+    
+    dplyr::mutate_at(.vars = "30m|IB2", .funs = function(x) {x - input_table$`ud_30_6|IB2`} ) %>%
+    dplyr::mutate_at(.vars = "6h|IB2", .funs = function(x) {x - input_table$`ud_30_6|IB2`} ) %>%
+    
+    dplyr::mutate_at(.vars = "30m|KR", .funs = function(x) {x - input_table$`ud_30_6|KR`} ) %>%
+    dplyr::mutate_at(.vars = "6h|KR", .funs = function(x) {x - input_table$`ud_30_6|KR`} )
   
-  # MINUS LOG FOR LOG FC
-  ## calculate logFC for 1/24
-  output_table_temp_1_24 <- dplyr::bind_cols(output_table_temp[, "id"], dplyr::select(output_table_temp, contains("1h") | contains("1d")) %>% dplyr::select(!contains("ud")) %>% dplyr::mutate_all(.funs = function(x) {x - output_table_temp$ud_1_24_average} ))
+  # get rid of ud columns
+  output_table <- output_table_temp %>% dplyr::select(!contains("ud"))
   
-  ## calculate logFC for 30/6
-  output_table_temp_30_6 <- dplyr::bind_cols(output_table_temp[, "id"], dplyr::select(output_table_temp, contains("30m") | contains("6h")) %>% dplyr::select(!contains("ud")) %>% dplyr::mutate_all(.funs = function(x) {x - output_table_temp$ud_30_6_average} ))
-  
-  output_table <- dplyr::full_join(output_table_temp_1_24, output_table_temp_30_6)
+  return(output_table)
   
 }
 
@@ -1571,9 +1554,9 @@ Log fold-change is log(A) -log(B) = log(A/B)
 
 ```{r}
 
-list_of_reimported_cycloess_normalised_tibbles_logFC <- list_of_reimported_cycloess_normalised_tibbles %>% future_map(.f = ~purrr::map(.x = .x, .f = ~make_logfc_separate_encode_already.log2(.x)), .progress = TRUE)
+list_of_reimported_cycloess_normalised_tibbles_logFC <- list_of_reimported_cycloess_normalised_tibbles %>% future_map(.f = ~purrr::map(.x = .x, .f = ~recalculate_silac_ratio_from_intensity_tibble(.x)), .progress = TRUE)
 
-list_of_eigenMS_results_logFC <- list_of_eigenMS_results_tibble.only %>% future_map(.f = ~purrr::map(.x = .x, .f = ~make_logfc_separate_encode_already.log2(.x)), .progress = TRUE)
+list_of_eigenMS_results_logFC <- list_of_eigenMS_results_tibble.only %>% future_map(.f = ~purrr::map(.x = .x, .f = ~recalculate_silac_ratio_from_intensity_tibble(.x)), .progress = TRUE)
 
 ```
 

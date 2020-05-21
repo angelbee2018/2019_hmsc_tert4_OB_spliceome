@@ -3183,7 +3183,9 @@ list_tidied_annotation <- list_matched_annotation %>%
 tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_event_ID", "splicemode", "vector_matched_transcript_ids", "transcript_features")] %>% as_tibble) %>%
   rbindlist %>% 
   as_tibble %>%
-  setNames(c("AS_event_ID", "splicemode", "transcript_ids_with_annotation", "transcript_features"))
+  setNames(c("AS_event_ID", "splicemode", "transcript_ids_with_annotation", "transcript_features")) %>% 
+  ## add in gene symbols
+  dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "Gene")], ., by = "AS_event_ID")
 # write table
 write.table(x = tibble_final_transcript_feature_annotation, file = paste(results_dir, "table_junction_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -3192,7 +3194,9 @@ tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("
   purrr::discard(.p = ~.x$biomart_annotations %>% nrow == 0) %>%
   purrr::map(~purrr::modify_at(.x = .x, .at = "biomart_annotations", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble) %>%
   rbindlist %>% 
-  as_tibble
+  as_tibble %>% 
+  ## add in gene symbols
+  dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "Gene")], ., by = "AS_event_ID")
 # write table
 write.table(x = tibble_final_biomart_annotation, file = paste(results_dir, "table_junction_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -3201,7 +3205,9 @@ tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_e
   purrr::discard(.p = ~.x$PTMs %>% nrow == 0) %>%
   purrr::map(~purrr::modify_at(.x = .x, .at = "PTMs", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble) %>%
   rbindlist %>% 
-  as_tibble
+  as_tibble %>% 
+  ## add in gene symbols
+  dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "Gene")], ., by = "AS_event_ID")
 # write table
 write.table(x = tibble_final_PTM_annotation, file = paste(results_dir, "table_junction_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -3211,7 +3217,9 @@ tibble_final_annotation_supp <- list_tidied_annotation %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length != 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = ~.x %>% purrr::map(~paste(.x, collapse = ",")) %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", "protein_relative_differential_coords")))) %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length == 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = function(.x) {return("NA")} ) %>% splice("ensembl_peptide_id" = "NA")) %>%
   purrr::map(~.x %>% flatten %>% as_tibble) %>%
-  purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist %>% as_tibble
+  purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist %>% as_tibble %>% 
+  ## add in gene symbols
+  dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "Gene")], ., by = "AS_event_ID")
 # write table
 write.table(x = tibble_final_annotation_supp, file = paste(results_dir, "table_junction_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -3269,12 +3277,15 @@ vector_unique_interpro_ids <- tibble_protein_level_summary_count$unique_interpro
 
 # create tally of each unique instance of interpro ID per AS_event_ID
 tibble_interpro_id_tally_per_ASeventID <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% .[order(.$tally), ] %>% dplyr::arrange(desc(tally))
+# create interpro to matched gene mapping
+tibble_interpro_ID_to_matched_gene_mapping <- tibble_final_biomart_annotation %>% dplyr::group_by(interpro) %>% dplyr::summarise("genes" = paste(Gene %>% unique %>% mixedsort, collapse = ",")) %>% setNames(c("interpro_id", "genes"))
 # fetch descriptions of interpro ID
 tibble_interpro_ID_to_description_mapping <- getBM(filters = "interpro", values = tibble_interpro_id_tally_per_ASeventID$interpro_id, attributes = c("interpro", "interpro_description"), mart = ensembl_mart) %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
 # add column for plotting
 tibble_interpro_ID_to_description_mapping <- tibble_interpro_ID_to_description_mapping %>% add_column("interpro_identifier" = paste(tibble_interpro_ID_to_description_mapping$interpro_description, " (", tibble_interpro_ID_to_description_mapping$interpro_id, ")", sep = ""))
-# tibble join
+# tibble joins
 tibble_interpro_id_tally_per_ASeventID <- dplyr::right_join(tibble_interpro_ID_to_description_mapping, tibble_interpro_id_tally_per_ASeventID, by = "interpro_id")
+tibble_interpro_id_tally_per_ASeventID <- dplyr::right_join(tibble_interpro_ID_to_matched_gene_mapping, tibble_interpro_id_tally_per_ASeventID, by = "interpro_id")
 # plot
 ggplot(tibble_interpro_id_tally_per_ASeventID %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
   geom_col(fill = "dodgerblue2") +

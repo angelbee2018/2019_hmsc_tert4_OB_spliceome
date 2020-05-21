@@ -4147,7 +4147,9 @@ list_tidied_annotation <- list_matched_annotation %>%
 tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff_exon_coords", "splicemode", "vector_matched_transcript_ids", "transcript_features")] %>% as_tibble) %>%
   rbindlist %>% 
   as_tibble %>%
-  setNames(c("diff_exon_coords", "splicemode", "transcript_ids_with_annotation", "transcript_features"))
+  setNames(c("diff_exon_coords", "splicemode", "transcript_ids_with_annotation", "transcript_features")) %>% 
+  ## add in gene symbols
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -4156,7 +4158,9 @@ tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("
   purrr::discard(.p = ~.x$biomart_annotations %>% nrow == 0) %>%
   purrr::map(~purrr::modify_at(.x = .x, .at = "biomart_annotations", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble) %>%
   rbindlist %>% 
-  as_tibble
+  as_tibble %>% 
+  ## add in gene symbols
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_biomart_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -4165,7 +4169,9 @@ tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff
   purrr::discard(.p = ~.x$PTMs %>% nrow == 0) %>%
   purrr::map(~purrr::modify_at(.x = .x, .at = "PTMs", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble) %>%
   rbindlist %>% 
-  as_tibble
+  as_tibble %>% 
+  ## add in gene symbols
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_PTM_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -4175,7 +4181,9 @@ tibble_final_annotation_supp <- list_tidied_annotation %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length != 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = ~.x %>% purrr::map(~paste(.x, collapse = ",")) %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", "protein_relative_differential_coords")))) %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length == 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = function(.x) {return("NA")} ) %>% splice("ensembl_peptide_id" = "NA")) %>%
   purrr::map(~.x %>% flatten %>% as_tibble) %>%
-  purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist %>% as_tibble
+  purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist %>% as_tibble %>% 
+  ## add in gene symbols
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_dir, "table_exon_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
   
@@ -4212,12 +4220,15 @@ vector_unique_interpro_ids <- tibble_protein_level_summary_count$unique_interpro
 
 # create tally of each unique instance of interpro ID per diff_exon_coords
 tibble_interpro_id_tally_per_diff.exon <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% .[order(.$tally), ] %>% dplyr::arrange(desc(tally))
+# create interpro to matched gene mapping
+tibble_interpro_ID_to_matched_gene_mapping <- tibble_final_biomart_annotation %>% dplyr::group_by(interpro) %>% dplyr::summarise("genes" = paste(matched_gene_names %>% unique %>% mixedsort, collapse = ",")) %>% setNames(c("interpro_id", "genes"))
 # fetch descriptions of interpro ID
 tibble_interpro_ID_to_description_mapping <- getBM(filters = "interpro", values = tibble_interpro_id_tally_per_diff.exon$interpro_id, attributes = c("interpro", "interpro_description"), mart = ensembl_mart) %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
 # add column for plotting
 tibble_interpro_ID_to_description_mapping <- tibble_interpro_ID_to_description_mapping %>% add_column("interpro_identifier" = paste(tibble_interpro_ID_to_description_mapping$interpro_description, " (", tibble_interpro_ID_to_description_mapping$interpro_id, ")", sep = ""))
 # tibble join
 tibble_interpro_id_tally_per_diff.exon <- dplyr::right_join(tibble_interpro_ID_to_description_mapping, tibble_interpro_id_tally_per_diff.exon, by = "interpro_id")
+tibble_interpro_id_tally_per_diff.exon <- dplyr::right_join(tibble_interpro_ID_to_matched_gene_mapping, tibble_interpro_id_tally_per_diff.exon, by = "interpro_id")
 # plot
 ggplot(tibble_interpro_id_tally_per_diff.exon %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
   geom_col(fill = "dodgerblue2") +
@@ -4231,7 +4242,7 @@ ggplot(tibble_interpro_id_tally_per_diff.exon %>% head(90), aes(x = reorder(inte
  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
 
-write.table(x = tibble_interpro_id_tally_per_ASeventID, file = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_interpro_id_tally_per_diff.exon, file = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 message("total number of unique exons with any sort of protein-level annotation: ", tibble_final_biomart_annotation$diff_exon_coords %>% unique %>% length, " (", tibble_final_biomart_annotation$diff_exon_coords %>% unique %>% length *100/nrow(tibble_final_transcript_feature_annotation), "% of those which have any transcript annotation)")
 

@@ -2467,16 +2467,35 @@ library(limma)
 ```{r}
 
 # i manually set this to prevent silent error if i were to do the alternative (which would be extracting the colnames straight from one element from the list.)
+ratio_colnames <- c("1h_vs_ud|IB", "1d_vs_ud|IB", "30m_vs_ud|IB", "6h_vs_ud|IB", "1h_vs_ud|IB2", "1d_vs_ud|IB2", "30m_vs_ud|IB2", "6h_vs_ud|IB2", "1h_vs_ud|KR", "1d_vs_ud|KR", "30m_vs_ud|KR", "6h_vs_ud|KR")
 
+ratio_names <- gsub(x = ratio_colnames, 
+                    pattern = "(.*)\\|(.*)", 
+                    replacement = "\\1") %>% 
+  factor(x = ., levels = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"))
+
+# replicate_names <- gsub(x = ratio_colnames, 
+#                     pattern = "(.*)\\|(.*)", 
+#                     replacement = "\\2") %>% 
+#   factor(x = ., levels = vector_replicate_names)
+
+limma_design_matrix <- model.matrix(~ 0 + ratio_names)
+
+# colnames(limma_design_matrix) <- levels(ratio_names)
+
+# create pairwise contrasts combinations
+# tibble_pairwise_ratio_combos <- combn(levels(ratio_names), m = 2) %>% t %>% as_tibble
+# 
+# vector_pairwise_ratio_combos_edited <- paste(tibble_pairwise_ratio_combos$V1, " - ", tibble_pairwise_ratio_combos$V2, sep = "")
 
 # make pairwise contrasts
-# pairwise_contrasts <- makeContrasts("ratio_names1h_vs_ud - ratio_names30m_vs_ud", 
-#                                     "ratio_names6h_vs_ud - ratio_names30m_vs_ud", 
-#                                     "ratio_names1d_vs_ud - ratio_names30m_vs_ud",
-#                                     "ratio_names6h_vs_ud - ratio_names1h_vs_ud", 
-#                                     "ratio_names1d_vs_ud - ratio_names1h_vs_ud", 
-#                                     "ratio_names1d_vs_ud - ratio_names6h_vs_ud", 
-#                                     levels = limma_design_matrix)
+pairwise_contrasts <- makeContrasts("ratio_names1h_vs_ud - ratio_names30m_vs_ud", 
+                                    "ratio_names6h_vs_ud - ratio_names30m_vs_ud", 
+                                    "ratio_names1d_vs_ud - ratio_names30m_vs_ud",
+                                    "ratio_names6h_vs_ud - ratio_names1h_vs_ud", 
+                                    "ratio_names1d_vs_ud - ratio_names1h_vs_ud", 
+                                    "ratio_names1d_vs_ud - ratio_names6h_vs_ud", 
+                                    levels = limma_design_matrix)
 # 
 # colnames(pairwise_contrasts) <- gsub(x = colnames(pairwise_contrasts), pattern = "ratio_names", replacement = "")
 # rownames(pairwise_contrasts) <- gsub(x = rownames(pairwise_contrasts), pattern = "ratio_names", replacement = "")
@@ -2519,72 +2538,45 @@ list_of_eigenMS_limma_results <- purrr::map2(.x = list_of_eigenMS_results_quanti
     
     setwd(paste(R_processing_results_dir, "limma_results/", sep = ""))
     
-    tibble_values_only <- b1 %>% dplyr::select(-id) 
+    tibble_values_only_filtered_less_than_x_replicates <- b1 
     
-    # create DESIGN MATRIX
-    ratio_colnames <- colnames(tibble_values_only)
+    # %>% 
+    #   filter_less_than_x_valid_replicates(unfiltered_tibble = ., variable_levels = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"), maximum_na_per_row = maximum_na_observations_per_timepoint)
     
-    ratio_names <- gsub(x = ratio_colnames, 
-                        pattern = "(.*)\\|(.*)", 
-                        replacement = "\\1") %>% 
-      factor(x = ., levels = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"))
+    tibble_values_only_filtered_less_than_x_replicates_values_only <- tibble_values_only_filtered_less_than_x_replicates %>% 
+      dplyr::select(-id)
     
-    # replicate_names <- gsub(x = ratio_colnames, 
-    #                     pattern = "(.*)\\|(.*)", 
-    #                     replacement = "\\2") %>% 
-    #   factor(x = ., levels = vector_replicate_names)
+    fit <- lmFit(tibble_values_only_filtered_less_than_x_replicates_values_only, limma_design_matrix)
     
-    limma_design_matrix <- model.matrix(~ 0 + ratio_names)
+    fit.contrasts <- contrasts.fit(fit, pairwise_contrasts)
     
-    # colnames(limma_design_matrix) <- levels(ratio_names)
+    ebayes <- eBayes(fit.contrasts, trend = TRUE)
     
-    # create pairwise contrasts combinations
-    tibble_pairwise_ratio_combos <- combn(levels(ratio_names), m = 2) %>% t %>% as_tibble
-    vector_pairwise_ratio_combos_edited <- paste("ratio_names", tibble_pairwise_ratio_combos$V1, " - ", "ratio_names", tibble_pairwise_ratio_combos$V2, sep = "")
+    # process and write the fitted coefficients
+    tibble_fitted_coefficients <- ebayes$coefficients %>% as_tibble
+    ## rename columns to remove "ratio_names"
+    colnames(tibble_fitted_coefficients) <- gsub(x = colnames(tibble_fitted_coefficients), pattern = "ratio_names", replacement = "")
+    ## add back the id column for identification
+    tibble_fitted_coefficients <- tibble_fitted_coefficients %>% add_column("id" = tibble_values_only_filtered_less_than_x_replicates$id, .before = 1)
+    ## write table of fitted coefficients
+    write.table(x = tibble_fitted_coefficients, file = paste("./table_limma_fitted_SILAC_ratios_missing.obs.per.ratio", maximum_na_observations_per_timepoint, "_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
     
-    # loop thru each pairwise contrast
-    list_pairwise_contrasts <- list()
+    toptable <- topTable(ebayes, adjust.method = "BH", coef = ncol(limma_design_matrix), number = nrow(tibble_values_only_filtered_less_than_x_replicates_values_only)) %>% as.matrix %>% as_tibble(rownames = "row_number")
+    # adj.P.Val
+    # P.Value
     
-    for (combo in vector_pairwise_ratio_combos_edited) {
-      list_pairwise_contrasts <- purrr::splice(list_pairwise_contrasts, limma::makeContrasts(combo, levels = limma_design_matrix))
-    }
+    # get tibble of significant items
+    tibble_sig_items <- tibble_values_only_filtered_less_than_x_replicates[toptable %>% dplyr::filter(P.Value < pvalue_cutoff & abs(logFC) > log2(fold_change_cutoff)) %>% .$row_number %>% as.numeric, ] %>% 
+      dplyr::bind_cols(., toptable %>% dplyr::filter(P.Value < pvalue_cutoff & abs(logFC) > log2(fold_change_cutoff)) %>% dplyr::select(-row_number))
+    ## write table of significant items with limma toptable info tagged on.
+    write.table(x = tibble_sig_items, file = paste("./table_limma_anysig_entries_missing.obs.per.ratio", maximum_na_observations_per_timepoint, "_", a2, "_", b2, "_pvalue", pvalue_cutoff, "_fc", fold_change_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
     
-    list_limma_fit <- purrr::map2(.x = list_pairwise_contrasts, .y = vector_pairwise_ratio_combos_edited, .f = function(.x, .y) {
-      
-      # DEBUG ###
-      .x <- list_pairwise_contrasts[[1]]
-      .y <- vector_pairwise_ratio_combos_edited[[1]]
-      ###########
-      
-      pairwise_contrast <- .x
+    # non_sig_items <- tibble_values_only_filtered_less_than_x_replicates[-(toptable %>% dplyr::filter(P.Value < 0.05) %>% .$row_number %>% as.numeric), ]
     
-      fit <- lmFit(tibble_values_only, limma_design_matrix)
-      
-      fit.contrasts <- contrasts.fit(fit, pairwise_contrast)
-      
-      ebayes <- eBayes(fit.contrasts, trend = TRUE)
-      
-      # process and write the fitted coefficients
-      tibble_fitted_coefficients <- ebayes$coefficients %>% as_tibble
-      ## rename columns to remove "ratio_names"
-      colnames(tibble_fitted_coefficients) <- gsub(x = colnames(tibble_fitted_coefficients), pattern = "ratio_names", replacement = "")
-      ## add back the id column for identification
-      tibble_fitted_coefficients <- tibble_fitted_coefficients %>% add_column("id" = b1$id, .before = 1)
-      
-      toptable <- topTable(ebayes, adjust.method = "BH", number = nrow(tibble_values_only)) %>% as.matrix %>% as_tibble(rownames = "row_number")
-      # rename the toptable column names in preparation for dplyr table join
-      colnames(toptable)[!colnames(toptable) %in% "row_number"] <- paste(.y, "_", colnames(toptable)[!colnames(toptable) %in% "row_number"], sep = "")
-      
-      # get tibble of significant items
-      # adj.P.Val
-      # P.Value
-      tibble_sig_items <- b1[toptable %>% dplyr::filter(!!as.name(paste(.y, "_", "P.Value", sep = "")) < pvalue_cutoff & abs(!!as.name(paste(.y, "_", "logFC", sep = ""))) > log2(fold_change_cutoff)) %>% .$row_number %>% as.numeric, ] %>% 
-        dplyr::bind_cols(., toptable %>% dplyr::filter(!!as.name(paste(.y, "_", "P.Value", sep = "")) < pvalue_cutoff & abs(!!as.name(paste(.y, "_", "logFC", sep = ""))) > log2(fold_change_cutoff)) %>% dplyr::select(-row_number))
-      
-      # PLOTS #####
+    # PLOTS #####
     ## p-value distribution
-    pdf(file = paste("./qualityplot_limma_pvalue_distribution_", a2, "_", b2, "_", .y %>% str_remove_all("ratio_names") %>% str_remove_all(" ") %>% str_replace(pattern = "\\-", replacement = "_vs_"), ".txt", sep = ""))
-    plot(density(toptable[, paste(.y, "_", "P.Value", sep = "")] %>% unlist %>% na.omit), main = paste("LIMMA p-value distribution\n", .y, sep = ""))
+    pdf(file = paste("./qualityplot_limma_pvalue_distribution_missing.obs.per.ratio", maximum_na_observations_per_timepoint, "_", a2, "_", b2, ".txt", sep = ""))
+    plot(density(toptable$P.Value %>% na.omit), main = "LIMMA p-value distribution")
     dev.off()
     
     ## volcano plot
@@ -2595,7 +2587,7 @@ list_of_eigenMS_limma_results <- purrr::map2(.x = list_of_eigenMS_results_quanti
     #   abline(v = log2(fold_change_cutoff), col = "red", lty = 2)
     
     # my own volcano plot
-    ggplot(data = toptable %>% na.omit, mapping = aes(x = !!as.name(paste(.y, "_", "logFC", sep = "")), y = -(!!as.name(paste(.y, "_", "P.Value", sep = "")) %>% log10))) +
+    ggplot(data = toptable %>% na.omit, mapping = aes(x = logFC, y = -(P.Value %>% log10))) +
       geom_point(size = 2) +
       ggtitle(paste("Volcano Plot for LIMMA", a2, b2, sep = "\n")) +
       guides(size = FALSE) + 
@@ -2607,23 +2599,8 @@ list_of_eigenMS_limma_results <- purrr::map2(.x = list_of_eigenMS_results_quanti
       geom_vline(xintercept = log2(fold_change_cutoff), col = "red", lty = 2) +
       theme_bw() +
       theme(text = element_text(family = "Helvetica")) +
-      ggsave(filename = paste("./volcano_plot_limma_anysig_", a2, "_", b2, "_pvalue", pvalue_cutoff, "_fc", fold_change_cutoff, "_", .y %>% str_remove_all("ratio_names") %>% str_remove_all(" ") %>% str_replace(pattern = "\\-", replacement = "_vs_"), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 25, units = "cm") +
-      ggsave(filename = paste("./volcano_plot_limma_anysig_", a2, "_", b2, "_pvalue", pvalue_cutoff, "_fc", fold_change_cutoff, "_", .y %>% str_remove_all("ratio_names") %>% str_remove_all(" ") %>% str_replace(pattern = "\\-", replacement = "_vs_"), ".svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 25, units = "cm")
-      
-      return(list(
-        "tibble_sig_items" = tibble_sig_items,
-        "tibble_fitted_coefficients" = tibble_fitted_coefficients
-      ))
-      
-    } ) %>% set_names(vector_pairwise_ratio_combos_edited)
-    
-    ## write table of fitted coefficients
-    tibble_fitted_coefficients <- list_limma_fit %>% purrr::map(~.x$tibble_fitted_coefficients) %>% purrr::reduce(dplyr::full_join)
-    write.table(x = tibble_fitted_coefficients, file = paste("./table_limma_fitted_SILAC_ratios_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
-    
-    ## write table of significant items with limma toptable info tagged on.
-    tibble_sig_items <- list_limma_fit %>% purrr::map(~.x$tibble_sig_items) %>% purrr::reduce(dplyr::full_join)
-    write.table(x = tibble_sig_items, file = paste("./table_limma_anysig_entries_", a2, "_", b2, "_pvalue", pvalue_cutoff, "_fc", fold_change_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+      ggsave(filename = paste("./volcano_plot_limma_anysig_missing.obs.per.ratio", maximum_na_observations_per_timepoint, "_", a2, "_", b2, "_pvalue", pvalue_cutoff, "_fc", fold_change_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 25, units = "cm") +
+      ggsave(filename = paste("./volcano_plot_limma_anysig_missing.obs.per.ratio", maximum_na_observations_per_timepoint, "_", a2, "_", b2, "_pvalue", pvalue_cutoff, "_fc", fold_change_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 25, units = "cm")
     
     return(list(
       "tibble_fitted_coefficients" = tibble_fitted_coefficients,

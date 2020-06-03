@@ -29,9 +29,10 @@ Wide table of absolute PSI (complete timepoints) - (separate/sum) -----> SOM
 
 ```{r}
 
+
 library(tidyverse)
 library(gtools)
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 library(data.table)
 
@@ -56,7 +57,7 @@ library(genefilter)
 library(ComplexHeatmap)
 
 library(biomaRt)
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
+ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "asia.ensembl.org")
 # , version = 98
 
 library(systemPipeR)
@@ -67,14 +68,14 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/media/Ubuntu/sharedfolder/"
+# shared_dir <- "Z:/"
 
-psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
-# psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
+# psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
+psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
 
-R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
-# R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
+# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
+R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
 
 if(! dir.exists(R_processing_results_dir) ) {
   dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -86,15 +87,15 @@ if(! dir.exists(R_processing_results_dir) ) {
 
 vector_OBseries_timepoints <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 
-vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
-# vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+# vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
-# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
+tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 ```
 
@@ -993,15 +994,25 @@ list_ref_matching_exon_entries_IR <- future_imap(.x = wide_tibble_of_all_unique_
 list_ref_matching_exon_entries_IR_annotated <- future_imap(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_differential_exon", "as_tibble")))
 
 # for non-IR events, match exons.
-list_ref_matching_exon_entries_not_IR <- future_imap(.x = wide_tibble_of_all_unique_exon_coords_array.tree_not_IR, .f = ~list(
-  "reference_gtf_match" = extract_overlapping.exons(.x, tibble_ref_gtf, .y), 
-  "reconstructed_gtf_match" = extract_overlapping.exons(.x, tibble_recon_gtf, .y), 
-  "diff_exon_coords" = .x$diff_exon_coords,
-  "diff_exon_chr" = .x$diff_exon_chr,
-  "diff_exon_start" = .x$diff_exon_start,
-  "diff_exon_end" = .x$diff_exon_end,
-  "splicemode" = .x$splicemode), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_overlapping.exons")))
+list_ref_matching_exon_entries_not_IR <- future_imap(.x = wide_tibble_of_all_unique_exon_coords_array.tree_not_IR, .f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- wide_tibble_of_all_unique_exon_coords_array.tree_not_IR[[1]]
+  # a2 <- 1
+  ###########
+  
+  # cat("\nnow processing:", a2)
+  
+  list(
+  "reference_gtf_match" = extract_overlapping.exons(a1, tibble_ref_gtf), 
+  "reconstructed_gtf_match" = extract_overlapping.exons(a1, tibble_recon_gtf), 
+  "diff_exon_coords" = a1$diff_exon_coords,
+  "diff_exon_chr" = a1$diff_exon_chr,
+  "diff_exon_start" = a1$diff_exon_start,
+  "diff_exon_end" = a1$diff_exon_end,
+  "splicemode" = a1$splicemode) %>% return
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_overlapping.exons")))
 
 list_ref_matching_exon_entries_not_IR_annotated <- future_imap(.x = list_ref_matching_exon_entries_not_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_differential_exon", "as_tibble")))
 
@@ -1063,9 +1074,9 @@ list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x =
   # message("now processing entry number: ", .y)
   
   # DEBUG ###
-  .x <- list_ref_matching_exon_entries_all_array.tree_IR[[216]]
-  tibble_ref_gtf <- tibble_ref_gtf
-  tibble_recon_gtf <- tibble_recon_gtf
+  # .x <- list_ref_matching_exon_entries_all_array.tree_IR[[1]]
+  # tibble_ref_gtf <- tibble_ref_gtf
+  # tibble_recon_gtf <- tibble_recon_gtf
   ###########
   
   tibble_ref_gtf <<- tibble_ref_gtf
@@ -1162,10 +1173,14 @@ list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x =
   # refresh the matched ref and recon transcript names
   summarised_tibble_annotation[, "matched_ref_transcript_names"] <- if (tibble_all_confirmed_IR_entries_ref != "uninit") {
     tibble_all_confirmed_IR_entries_ref$transcript_id %>% paste(collapse = ",")
+  } else {
+    NA
   }
   
   summarised_tibble_annotation[, "matched_recon_transcript_names"] <- if (tibble_all_confirmed_IR_entries_recon != "uninit") {
     tibble_all_confirmed_IR_entries_recon$transcript_id %>% paste(collapse = ",")
+  } else {
+    NA
   }
   
   summarised_tibble_annotation[, "NMD_reference"] <- if (tibble_all_confirmed_IR_entries_ref == "uninit") {
@@ -1286,6 +1301,7 @@ pvalue_or_FDR <- "pvalue"
 dpsi_cutoff <- 10
 
 pvalue_cutoff <- 0.01
+
 
 ```
 

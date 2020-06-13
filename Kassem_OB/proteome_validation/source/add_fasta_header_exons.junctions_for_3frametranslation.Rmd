@@ -19,8 +19,9 @@ library(rtracklayer)
 # ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 99)
 
 library(furrr)
-future::plan(multiprocess)
-options(future.globals.maxSize = 30000000000, mc.cores = 4)
+options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
+plan(multiprocess)
+memory.limit(100000)
 
 ```
 
@@ -284,15 +285,20 @@ accepts:
 
 ```{r}
 
-JUM_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+# JUM_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+JUM_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
 
-differential_junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/5x5_SOM_2552_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt"
+# differential_junction_table_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_36279_entries_with_na.txt"
+differential_junction_table_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_36279_entries_with_na.txt"
+
 # 5x5_SOM_1663_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.2.txt
 
-UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+# UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM//run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
-output_dir_JUM <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/"
-output_file_name_JUM <- "junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15"
+# output_dir_JUM <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/"
+output_dir_JUM <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/"
+output_file_name_JUM <- "junction_table_OBseries_all"
 
 ```
 
@@ -384,13 +390,17 @@ case 4: junction is not in either ref nor reconstructed GTF: junction is discard
 
 set.seed(7)
 
-tibble_junction_table_array.tree <- tibble_junction_table %>% array_tree
+tibble_junction_table_array.tree <- tibble_junction_table %>% unique %>% array_tree
 
 # %>% .[sample(1:100, 20)]
 
-tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+# tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
-alltimepoints_reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+
+# alltimepoints_reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+alltimepoints_reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+
 
 tibble_alltimepoints_reconstructed_gtf <- rtracklayer::import(alltimepoints_reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
@@ -489,32 +499,25 @@ library(tidyverse)
 library(data.table)
 library(rtracklayer)
 
-# library(biomaRt)
-# ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 99)
-
-library(furrr)
-future::plan(multiprocess)
-options(future.globals.maxSize = 30000000000, mc.cores = 4)
-
 ```
 
 ## Set environment
 
 ```{r}
 
-output_dir_psisigma <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/"
+output_dir_psisigma <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/"
 
 if(! dir.exists(output_dir_psisigma) ) {
      dir.create(output_dir_psisigma, recursive = TRUE)}
 
-output_file_name_PSI.Sigma <- "exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na"
+output_file_name_PSI.Sigma <- "exon_table_OBseries_all"
 
 
-table_of_exon_coords_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_differential_exons_coords_10_anypvalue0.01_3272_exons_anysig_with_na.txt"
+table_of_exon_coords_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt"
 
-ref_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+ref_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 
-alltimepoints_reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+alltimepoints_reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
 
 splicemode_column_name <- "splicemode"
 IR_regex_string <- "IR"
@@ -612,6 +615,12 @@ tibble_alltimepoints_reconstructed_gtf <- rtracklayer::import(alltimepoints_reco
 ```{r}
 
 tibble_exon_coords <- read.delim(file = table_of_exon_coords_path, sep = "", stringsAsFactors = FALSE) %>% mutate_if(is.factor, as.character) %>% as_tibble
+
+tibble_exon_coords <- tibble_exon_coords %>% 
+  
+  dplyr::rename_at(.vars = c("diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand"), .funs = function(x) {c("chr", "start", "end", "strand") %>% return} ) %>% 
+  dplyr::distinct(diff_exon_coords, .keep_all = TRUE)
+
 
 ```
 

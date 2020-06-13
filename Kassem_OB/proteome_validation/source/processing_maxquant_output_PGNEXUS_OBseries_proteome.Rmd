@@ -19,6 +19,12 @@ library(tidyverse)
 windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
+library(furrr)
+options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
+plan(multiprocess)
+memory.limit(100000)
+
+
 library(ggplot2)
 # library(kohonen)
 # library(genefilter)
@@ -27,8 +33,9 @@ library(ggplot2)
 # library(svglite)
 # library(scales)
 
-# # library(biomaRt)
-# library(systemPipeR)
+library(biomaRt)
+ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "www.ensembl.org")
+library(systemPipeR)
 # library(GOstats)
 # library(PFAM.db)
 # library(bc3net)
@@ -38,18 +45,14 @@ library(data.table)
 library(seqinr)
 # library(Rfast)
 
-
-junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons_katana_differential/txt/"
-
-con_sp.hsa.canonical.isoforms_junc.exons_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons_katana_differential/txt/"
-
 # maxquant_junctions.3FT_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_maxquant/run_1_PGNEXUS_OBseries_allsamples_angel.junctions.3FT/txt/"
 
-R_processing_results <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/", sep="")
+R_processing_results_dir <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/", sep="")
 
-if(! dir.exists(R_processing_results) ) {
-     dir.create(R_processing_results, recursive = TRUE)}
+if(! dir.exists(R_processing_results_dir) ) {
+     dir.create(R_processing_results_dir, recursive = TRUE)}
 
+`3FT_results_dir` <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/three_frame_translation_results/"
 
 ```
 
@@ -319,12 +322,28 @@ average_replicates_by_column <- function(table, design_factor, min_replicates) {
 
 ```{r}
 
-list_maxquant_run_dirs <- list("junc.exons" = junc.exons_results_dir)
-list_output.table_categories <- list("evidence.txt", "msms.txt", "proteinGroups.txt", "Phospho (STY)Sites.txt")
+list_maxquant_run_dirs <- list("junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons/txt/",
+                               # "sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons/txt/",
+                               # "con_sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons/txt/",
+                               "con_sp.hsa.canonical.isoforms_trembl" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_trembl/txt/"
+                               )
+                               
+list_output.table_categories <- list("modification_specific_peptides" = "modificationSpecificPeptides.txt", 
+                                     "peptides" = "peptides.txt", 
+                                     "protein_groups" = "proteinGroups.txt",
+                                     "phosphosites" = "Phospho (STY)Sites.txt")
 
-list_for_maxquant_table_import <- purrr::cross2(list_maxquant_run_dirs, list_output.table_categories)
+# create combinations of files and runs
+list_for_maxquant_table_import <- purrr::map(.x = list_maxquant_run_dirs, .f = ~purrr::cross2(.x, list_output.table_categories))
+# also create corresponding combinations of names to annotate with
+list_of_nested_table_names <- purrr::map(.x = names(list_maxquant_run_dirs), .f = ~purrr::cross2(.x, names(list_output.table_categories)) %>% set_names(names(list_output.table_categories))) %>% set_names(names(list_maxquant_run_dirs))
 
-list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble)
+# read the tables into the environment
+list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~future_map(.x = .x, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("read.delim", "as_tibble"))))
+# , .options = future_options(globals = c("as_tibble"))
+
+# rename the lists at L2
+list_imported_maxquant_tibbles <- list_imported_maxquant_tibbles %>% purrr::map(.f = ~set_names(.x, names(list_output.table_categories)))
 
 ```
 
@@ -332,17 +351,9 @@ list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import
 
 ```{r}
 
-# at this stage, evidence.txt is in every 1, 2, 3, ... etc... indices
-# msms.txt is 4, 5, 6, ...
-
-vector_evidence.txt_list.indices <- c(1:length(list_maxquant_run_dirs))
-
-vector_msms.txt_list.indices <- c((length(list_maxquant_run_dirs) + 1):(length(list_maxquant_run_dirs) * 2))
-
-vector_proteingroups.txt_list.indices <- c((length(list_maxquant_run_dirs) * 2 + 1):(length(list_maxquant_run_dirs) * 3))
-
-list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles %>% modify_at(.at = vector_evidence.txt_list.indices, 
-                                                                                       .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP))
+list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles %>% 
+  
+  purrr::map(.f = ~modify_at(.x = .x, .at = c("peptides", "protein_groups", "phosphosites"), .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP)) )
 
 ```
 
@@ -353,12 +364,6 @@ list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles %>% m
 ### rearrange the msms.txt tables for ggplot
 
 ```{r}
-
-# subset msms tables
-list_msms_tibbles <- list_imported_maxquant_tibbles_processed[vector_msms.txt_list.indices]
-
-# append database run columns then peptide class
-list_dbrun.info <- names(list_maxquant_run_dirs)
 
 # function to create peptide class column
 peptide_class_column <- function(msms_tibble) {
@@ -382,7 +387,7 @@ peptide_class_column <- function(msms_tibble) {
   
 }
 
-list_msms_tibbles <- purrr::map2(.x = list_msms_tibbles, .y = list_dbrun.info, .f = ~add_column(.x, "dbrun" = .y) %>% add_column("peptide_class" = peptide_class_column(.x)))
+list_msms_tibbles <- purrr::map2(.x = list_imported_maxquant_tibbles_processed %>% purrr::map(.f = ~.x$msms), .y = names(list_imported_maxquant_tibbles_processed), .f = ~add_column(.x, "dbrun" = .y) %>% add_column("peptide_class" = peptide_class_column(.x)))
 
 # melt into long tables for ggplot faceting by peptide class and database run
 long_tibble_evidence_tibbles_facet.peptideclass.dbrun <- list_msms_tibbles %>% rbindlist(fill = TRUE) %>% as_tibble
@@ -402,9 +407,9 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = peptide_cl
   ylab(expression(Number~of~total~hits)) +
   scale_fill_manual(limits = c("TRUE", "FALSE"), labels = c("PEP < 0.01", "PEP > 0.01"), values = c("blue2", "grey75"), name = "Hit significance") +
   theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_number.of.hits_per_peptide.class", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_number.of.hits_per_peptide.class", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_number.of.hits_per_peptide.class", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_number.of.hits_per_peptide.class", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = peptide_class, fill = PEP <= 0.01)) +
   geom_bar(aes(y = log10(..count..))) +
@@ -416,9 +421,9 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = peptide_cl
   # scale_y_continuous(trans = "log10") +
   scale_fill_manual(limits = c("TRUE", "FALSE"), labels = c("PEP < 0.01", "PEP > 0.01"), values = c("blue2", "grey75"), name = "Hit significance") +
   theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_number.of.hits_per_peptide.class_log10", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_number.of.hits_per_peptide.class_log10", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_number.of.hits_per_peptide.class_log10", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_number.of.hits_per_peptide.class_log10", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 ```
 
@@ -437,9 +442,9 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, color
   ylab("Frequency (smoothed)") +
   scale_color_manual(limits = c("swissprot_hits", "exon_3FT_hits", "junction_3FT_hits", "contaminants", "reversed_sequences"), labels = c("Swissprot hits", "Exons from 3FT", "Junctions from 3FT", "Contaminant", "Reversed sequence"), values = c("red", "salmon", "purple4", "grey75", "lawngreen"), name = "Peptide Hit Type") + 
   theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.absolute", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.absolute", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.absolute", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.absolute", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 # line - normalised counts
 ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, color = peptide_class)) +
@@ -452,14 +457,14 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, color
   ylab("Frequency (smoothed)") +
   scale_color_manual(limits = c("swissprot_hits", "exon_3FT_hits", "junction_3FT_hits", "contaminants", "reversed_sequences"), labels = c("Swissprot hits", "Exons from 3FT", "Junctions from 3FT", "Contaminant", "Reversed sequence"), values = c("red", "salmon", "purple4", "grey75", "lawngreen"), name = "Peptide Hit Type") + 
   theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.normalised", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.normalised", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.normalised", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_line.normalised", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 # bar
 ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, fill = peptide_class)) +
   geom_histogram(binwidth = 0.0005, aes(y = ..count..)) +
-  facet_wrap(~dbrun + peptide_class, scales = "free") +
+  facet_grid(dbrun ~ peptide_class, scales = "free") +
   ggtitle(expression(Comparison~of~peptide~p-value~(PEP)~distributions~(PEP <= 0.05~only))) +
   xlab(expression(PEP)) +
   # xlim(c(0, 1)) +
@@ -467,9 +472,24 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, fill 
   ylab("Frequency (smoothed)") +
   scale_fill_manual(limits = c("swissprot_hits", "exon_3FT_hits", "junction_3FT_hits", "contaminants", "reversed_sequences"), labels = c("Swissprot hits", "Exons from 3FT", "Junctions from 3FT", "Contaminant", "Reversed sequence"), values = c("red", "salmon", "purple4", "grey75", "lawngreen"), name = "Peptide Hit Type") + 
   theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_bar", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_bar", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_bar_absolute", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_bar_absolute", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+# bar
+ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, fill = peptide_class)) +
+  geom_histogram(binwidth = 0.0005, aes(y = ..density..)) +
+  facet_grid(dbrun ~ peptide_class, scales = "free") +
+  ggtitle(expression(Comparison~of~peptide~p-value~(PEP)~distributions~(PEP <= 0.05~only))) +
+  xlab(expression(PEP)) +
+  # xlim(c(0, 1)) +
+  scale_x_continuous(limits = c(-0.001, 0.051), breaks = c(-0.001, seq(0, 0.051, 0.005))) +
+  ylab("Frequency (smoothed)") +
+  scale_fill_manual(limits = c("swissprot_hits", "exon_3FT_hits", "junction_3FT_hits", "contaminants", "reversed_sequences"), labels = c("Swissprot hits", "Exons from 3FT", "Junctions from 3FT", "Contaminant", "Reversed sequence"), values = c("red", "salmon", "purple4", "grey75", "lawngreen"), name = "Peptide Hit Type") + 
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_bar_normalised", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.PEP.less.than.0.05_distribution_per_peptide.class_bar_normalised", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 ```
 
@@ -489,8 +509,8 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = Score + 1,
   scale_color_manual(limits = c("swissprot_hits", "exon_3FT_hits", "junction_3FT_hits", "contaminants", "reversed_sequences"), labels = c("Swissprot hits", "Exons from 3FT", "Junctions from 3FT", "Contaminant", "Reversed sequence"), values = c("red", "salmon", "purple4", "grey75", "lawngreen"), name = "Peptide Hit Type") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.score_distribution_per_peptide.class_absolute.counts", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.score_distribution_per_peptide.class_absolute.counts", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.score_distribution_per_peptide.class_absolute.counts", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.score_distribution_per_peptide.class_absolute.counts", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 # normalised counts
 ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = Score + 1, colour = peptide_class)) +
@@ -504,8 +524,8 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = Score + 1,
   scale_color_manual(limits = c("swissprot_hits", "exon_3FT_hits", "junction_3FT_hits", "contaminants", "reversed_sequences"), labels = c("Swissprot hits", "Exons from 3FT", "Junctions from 3FT", "Contaminant", "Reversed sequence"), values = c("red", "salmon", "purple4", "grey75", "lawngreen"), name = "Peptide Hit Type") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.score_distribution_per_peptide.class_normalised.counts", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_peptide.score_distribution_per_peptide.class_normalised.counts", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.score_distribution_per_peptide.class_normalised.counts", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_peptide.score_distribution_per_peptide.class_normalised.counts", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 ```
 
@@ -525,8 +545,8 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun %>% dplyr::distinct
   scale_y_continuous(trans = "log10", breaks = c(1, seq(30, max(long_tibble_evidence_tibbles_facet.peptideclass.dbrun$Score + 1), 30))) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results, "qualityplot_correlation_score_vs_PEP", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(R_processing_results, "qualityplot_correlation_score_vs_PEP", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_correlation_score_vs_PEP", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "qualityplot_correlation_score_vs_PEP", ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 ```
 
@@ -572,100 +592,148 @@ str(list_local_FDR)
 
 ```
 
-# Evaluation of splice junction spanning of tryptic peptides
+# Proteomic validation
 
-## Retrieve the parent peptide start and end positions of the matched peptides
+## Filter for PEP and score
 
 ```{r}
 
-# import the 3FT info table
-tibble_junctions_3FT_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/three_frame_translation_results/threeframetranslate_junctions_qvalue0.01_dpsi0.15_diff_3FT.summary.info.txt", sep = "\t", stringsAsFactors =  FALSE, row.names = NULL, header = TRUE) %>% as_tibble
+tibble_junc.exons_filtered <- list_imported_maxquant_tibbles_processed$junc.exons$peptides %>%
+  dplyr::filter(PEP <= 0.01 & Score >= 30 & str_detect(string = Leading.razor.protein, pattern = "^REV") == FALSE) %>%
+  type_convert
+
+# count the number of splice peptides identified.
+cat("\nnumber of junctions/exons validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% unique %>% length)
+
+cat("\nnumber of NON-AMBIGUOUS junctions/exons validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% .[-grep(x = tibble_junc.exons_filtered$Proteins, pattern = ";")] %>% unique %>% length)
+
+cat("\nnumber of NON-AMBIGUOUS junctions validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% .[-grep(x = tibble_junc.exons_filtered$Proteins, pattern = ";")] %>% .[grep(x = ., pattern = "junction")] %>% unique %>% length)
+
+cat("\nnumber of NON-AMBIGUOUS exons validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% .[-grep(x = tibble_junc.exons_filtered$Proteins, pattern = ";")] %>% .[grep(x = ., pattern = "exon")] %>% unique %>% length)
 
 ```
 
+## Gene set enrichment
+
+### import the FASTA identifier to gene mappings
+
 ```{r}
 
-# subset the identified peptides from msms.txt
-# PEP < 0.01, score is not 0
-tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt <- list_imported_maxquant_tibbles[[2]][grep(pattern = "Junction", x = list_imported_maxquant_tibbles[[2]]$Proteins), ] %>% .[.$PEP <= 0.01 & .$Score != 0, ]
+tibble_fasta_supp_info_exons <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
 
-# create a strsplit list based on the "Proteins" column
-list_proteins_column_split <- strsplit(tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt$Proteins, split = ";")
-# create a list of the number of times to repeat each row after the split is applied
-list_row_repetitions <- list_proteins_column_split %>% purrr::map(~length(.x))
-# turn the list into a vector of row indices to apply the "subsetting" operation on
-vector_row_repetitions_for_subsetting <- purrr::map2(.x = 1:nrow(tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt), .y = list_row_repetitions, .f = ~rep(.x, times = .y %>% paste)) %>% unlist
-# create the split table - it only has the replicated rows so far
-tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split <- tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt[vector_row_repetitions_for_subsetting, ]
-# fill in the Proteins column with the split. this is the final split.
-tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split[, "Proteins"] <- list_proteins_column_split %>% unlist
-# now clean up other proteins which were grouped together with the junctions
+tibble_fasta_supp_info_junctions <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+
+# bind rows
+tibble_fasta_supp_info <- dplyr::bind_rows(tibble_fasta_supp_info_exons, tibble_fasta_supp_info_junctions)
+
+```
+
+### Join gene names using the FASTA identifier
+
+```{r}
+
+tibble_junc.exons_filtered_with.gene.name <- dplyr::left_join(tibble_junc.exons_filtered, 
+                                                              dplyr::bind_rows(tibble_fasta_supp_info_exons[, c("identifier", "matched_gene_names")],
+                                                                               tibble_fasta_supp_info_junctions[, c("identifier", "matched_gene_names")]) %>% 
+                                                                setNames(c("Leading.razor.protein", "gene_name")))
+
+tibble_junc.exons_to_gene.name <- tibble_junc.exons_filtered_with.gene.name[, c("gene_name", "Leading.razor.protein", "Sequence")]
+
+cat("\nnumber of novel exons/junctions: ", is.na(tibble_junc.exons_to_gene.name %>% dplyr::distinct(Leading.razor.protein, .keep_all = TRUE)) %>% which %>% length)
+
+```
+
+# Tryptic peptide evaluation and visualisation
+
+## Import the details of 3FT - junctions and exons
+
+```{r}
+
+tibble_detailed_3FT_summary_JUM <- read.delim(file = paste(`3FT_results_dir`, "threeframetranslate_junctions_qvalue0.01_dpsi0.15_diff_3FT.summary.info.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+
+tibble_detailed_3FT_summary_PSIsigma <- read.delim(file = paste(`3FT_results_dir`, "threeframetranslate_exons_pvalue0.01_dpsi10_diff_3FT.summary.info.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+
+```
+
+## Evaluate junction spanning of tryptic peptides
+
+## Retrieve the parent peptide start and end positions of the matched peptides and test for spanning.
+
+```{r}
+
+# get only the junction entries from the filtered table 
+tibble_junc.exons_filtered_with.gene.name_split_juncs.only <- tibble_junc.exons_filtered_with.gene.name %>% 
+  # split_delimited_column_in_table(target_colname = "Proteins", split = ";", columns_to_deduplicate = "id") %>% 
+  dplyr::filter(str_detect(string = Leading.razor.protein, pattern = "junction")) %>%
+  dplyr::distinct(Leading.razor.protein, .keep_all = TRUE)
+
+# now clean up other proteins which were grouped together with the junctions - unnecessary if we're just dealing with the junc.exons.
 # we use grep to get the row indices which contain Junction "protein"
 # this is final.
-tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split <- tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split[grep(x = tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split$Proteins, pattern = "Junction"), ]
+# tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split <- tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split[grep(x = tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split$Proteins, pattern = "Junction"), ]
+
+# loop thru each identified tryptic peptide. match to the 3FT info.
+## subset to reduce parallel overhead
+tibble_detailed_3FT_summary_JUM_subset <- tibble_detailed_3FT_summary_JUM[, c("ORF_valid", "fasta_header", "window_start_AA_position", "window_end_AA_position", "junction_AA_position")]
+
+list_tryptic_junc_peptides_matched_to_3FT_summary <- future_imap(.x = tibble_junc.exons_filtered_with.gene.name_split_juncs.only %>% array_tree,
+                                                                 .f = function(a1, a2) {
+                                                                   
+                                                                   cat("\nnow processing: ", a2)
+                                                                   
+                                                                   list("tryptic_peptide_start" = a1$Start.position,
+                                                                        "tryptic_peptide_end" = a1$End.position,
+                                                                        "matched_3FT_summary_entry" = tibble_detailed_3FT_summary_JUM_subset[which(str_detect(string = tibble_detailed_3FT_summary_JUM_subset$ORF_valid, pattern = a1$Sequence) == TRUE & str_detect(string = tibble_detailed_3FT_summary_JUM_subset$fasta_header, pattern = a1$Leading.razor.protein) == TRUE), c("window_start_AA_position", "window_end_AA_position", "junction_AA_position")]) %>% return
+                                                                   
+                                                                 }, .progress = TRUE, .options = future_options(globals = c("tibble_detailed_3FT_summary_JUM_subset", "str_detect")))
+
+# officially test for junction-spanning.
+## it's considered spanning if there's at least one AA on both sides.
+list_tryptic_junc_peptides_spanning_logical_test <- list_tryptic_junc_peptides_matched_to_3FT_summary %>% purrr::map(.f = ~any(((.x$matched_3FT_summary_entry$window_start_AA_position + (.x$tryptic_peptide_start %>% trimws %>% as.numeric - 1)) <= (.x$matched_3FT_summary_entry$junction_AA_position - 1)) & ((.x$matched_3FT_summary_entry$window_start_AA_position + (.x$tryptic_peptide_end %>% trimws %>% as.numeric - 1)) >= (.x$matched_3FT_summary_entry$junction_AA_position + 1))
+                                                                                                                               ))
+
+# count of shame
+cat("\nWe have identified", which(list_tryptic_junc_peptides_spanning_logical_test %>% unlist == TRUE) %>% length, "peptides which span a splice junction.")
+
+# write the processed table.
+# write.table(tibble_PGNEXUS_MSMS_junction_peptides_with_SJ_crossing_info, file = paste(R_processing_results_dir, "PGNEXUS_MSMS_identified_JUM_q0.01_dpsi0.2_junc.peptides_with_SJ.info.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 ```
+
+## further explore what the junction-spanning peptides are
 
 ```{r}
 
-# we should now get the unique peptide sequence/junction ID combination. we take the highest score if peptide matches are redundant.
-tibble_PGNEXUS_MSMS_junction_peptides_unique <- tibble_subset_PGNEXUS_MSMS_peptides_from_proteingroups.txt_split[, c("Sequence", "Proteins", "Score")] %>% dplyr::arrange(., Score) %>% dplyr::distinct(., Sequence, Proteins, .keep_all = TRUE) %>% setNames(c("PGNEXUS_MSMS_sequence", "junction_ID", "MaxQuant_Score"))
-# we can now match up each peptide to its corresponding junction and use str_locate_all to retrieve the positions within the peptide
-# dplyr::left_join() automatically joins each MSMS identified peptide with every valid translation frame of its junction
-tibble_PGNEXUS_MSMS_junction_peptides_with_3FT_info <- dplyr::left_join(tibble_PGNEXUS_MSMS_junction_peptides_unique, tibble_junctions_3FT_info, by = "junction_ID")
-# loop thru each MSMS identified sequence, match it up with the virtual peptide sequence in the database and add MSMS.sequence.start and MSMS.sequence.end If there is no match, we introduce NA.
-tibble_PGNEXUS_MSMS_junction_peptides_with_start_end <- cbind(tibble_PGNEXUS_MSMS_junction_peptides_with_3FT_info, purrr::map2(.x = tibble_PGNEXUS_MSMS_junction_peptides_with_3FT_info$PGNEXUS_MSMS_sequence, .y = tibble_PGNEXUS_MSMS_junction_peptides_with_3FT_info$virtual_peptide_sequence, .f = ~stringr::str_locate_all(string = .y %>% paste, pattern = .x %>% paste)[[1]] %>% as_tibble %>% .[1, ]) %>% rbindlist %>% setNames(c("MSMS.sequence_database.virtual.peptide_start", "MSMS.sequence_database.virtual.peptide_end")))
-# remove na
-tibble_PGNEXUS_MSMS_junction_peptides_with_start_end <- tibble_PGNEXUS_MSMS_junction_peptides_with_start_end[-which(is.na(tibble_PGNEXUS_MSMS_junction_peptides_with_start_end$MSMS.sequence_database.virtual.peptide_start)), ]
-# O.K it didn't turn out to be useful. but keep the matches with the final trimmed virtual peptides because we might need them later. consider this a roundabout way to do filtering of the database info tibble.
-
-# function to turn + into F, - into R.
-turnplusintoF_turnminusintoR <- function(strand){
-  if (strand == "+") {
-    "F"
-  } else if (strand == "-") {
-      "R"
-  }
-  
-}
-
-# what we need to do is to re-translate the entire window based on the translation frame, strand and forward nucleotide sequences already there.
-# add column of peptide sequences of the whole window
-tibble_PGNEXUS_MSMS_junction_peptides_with_start_end <- tibble_PGNEXUS_MSMS_junction_peptides_with_start_end %>% add_column("full_window_peptide_sequence" = purrr::map(.x = tibble_PGNEXUS_MSMS_junction_peptides_with_start_end[, c("forward_nucleotides_from_coords", "strand", "translation_frame")] %>% array_tree, .f = ~seqinr::translate(seq = .x[["forward_nucleotides_from_coords"]] %>% unlist %>% strsplit(., split = ",") %>% unlist, frame = .x[["translation_frame"]] %>% unlist %>% paste %>% as.numeric, sens = turnplusintoF_turnminusintoR(.x[["strand"]] %>% unlist %>% paste)) %>% paste(collapse = "")) %>% unlist)
-# redo the matching of the MSMS identified peptides this time to the full peptide sequence of the window for real
-## loop thru each MSMS identified sequence, match it up with the virtual peptide sequence in the database and add MSMS.sequence.start and MSMS.sequence.end If there is no match, we introduce NA.
-tibble_PGNEXUS_MSMS_junction_peptides_with_start_end <- cbind(tibble_PGNEXUS_MSMS_junction_peptides_with_start_end, purrr::map2(.x = tibble_PGNEXUS_MSMS_junction_peptides_with_start_end$PGNEXUS_MSMS_sequence, .y = tibble_PGNEXUS_MSMS_junction_peptides_with_start_end$full_window_peptide_sequence, .f = ~stringr::str_locate_all(string = .y %>% paste, pattern = .x %>% paste)[[1]] %>% as_tibble %>% .[1, ]) %>% rbindlist %>% setNames(c("MSMS.sequence_full.window.peptide_start", "MSMS.sequence_full.window.peptide_end")))
-
-# append information on whether the MS/MS identified peptide crosses the splice junction or not.
-tibble_PGNEXUS_MSMS_junction_peptides_with_SJ_crossing_info <- tibble_PGNEXUS_MSMS_junction_peptides_with_start_end %>% add_column("MSMS_peptide_crosses_SJ" = purrr::map2(.x = tibble_PGNEXUS_MSMS_junction_peptides_with_start_end$MSMS.sequence_full.window.peptide_start, .y = tibble_PGNEXUS_MSMS_junction_peptides_with_start_end$MSMS.sequence_full.window.peptide_end, .f = ~((.x <= 16) & (.y >= 17))) %>% unlist) %>% as_tibble
-
-# count of shame
-cat("We have identified", which(tibble_PGNEXUS_MSMS_junction_peptides_with_SJ_crossing_info$MSMS_peptide_crosses_SJ == TRUE) %>% length, "peptides which span a splice junction.\n")
-
-# write the processed table.
-write.table(tibble_PGNEXUS_MSMS_junction_peptides_with_SJ_crossing_info, file = paste(R_processing_results, "PGNEXUS_MSMS_identified_JUM_q0.01_dpsi0.2_junc.peptides_with_SJ.info.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+tibble_junction_spanning_peptides_identifier.gene <- tibble_junc.exons_filtered_with.gene.name_split_juncs.only[which(list_tryptic_junc_peptides_spanning_logical_test %>% unlist == TRUE), c("gene_name", "Leading.razor.protein", "Sequence")]
 
 ```
 
-# Preprocessing for visualisation in IGV
+### GO enrichment for all junction spanning peptides + exonic peptides identified
+
+```{r}
+
+# join exonic peptides and junction-spanning peptides into the same table
+tibble_confirmed_junc.exons <- dplyr::bind_rows(tibble_junction_spanning_peptides_identifier.gene, tibble_junc.exons_to_gene.name[grep(x = tibble_junc.exons_to_gene.name$Leading.razor.protein, pattern = "exon"), ]) %>% 
+  dplyr::arrange(gene_name)
+
+# CONDUCT ENRICHMENT
+tibble_hyperGO_confirmed_junc.exons <- dplyr::bind_rows(GOHyperGAll(catdb = catdb, gocat = "MF", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ","), Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "BP", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ","), Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "CC", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ","), Nannot = 2) %>% GOHyperGAll_benjamini_correction) %>% as_tibble
+
+write.table(tibble_hyperGO_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_hyperGO_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+```
+
+## Preprocessing for visualisation in IGV
 
 Step 1: Import the details of 3FT - junctions and exons
 Step 2: Calculate the genome-relative positions of the identified tryptic peptides
 Step 3: Write a BLOCKED bed file (BED12 format)
 Step 4 (outside R): BEDtoBAM
 
-## Import the details of 3FT - junctions and exons
-
-```{r}
-
-tibble_detailed_3FT_summary_JUM_diff <- read.delim(file = paste(`3FT_results_dir`, "threeframetranslate_junctions_qvalue0.01_dpsi0.15_diff_3FT.summary.info.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
-
-tibble_detailed_3FT_summary_PSIsigma_diff <- read.delim(file = paste(`3FT_results_dir`, "threeframetranslate_exons_pvalue0.01_dpsi10_diff_3FT.summary.info.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
-
-```
-
-## calculate genome-relative ranges of all the nucleotides encoding the identified tryptic peptides
-### return a bedfile-like format
+### calculate genome-relative ranges of all the nucleotides encoding the identified tryptic peptides
+#### return a bedfile-like format
 
 ```{r}
 
@@ -723,10 +791,10 @@ purrr::map2(
           
           cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
           
-          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM_diff$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
-                                                      str_detect(string = tibble_detailed_3FT_summary_JUM_diff$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
+                                                      str_detect(string = tibble_detailed_3FT_summary_JUM$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
           
-          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM_diff[row_index_of_matched_3FT_table, ]
+          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table, ]
           
           # get translated transcript-relative AA coords
           translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
@@ -799,7 +867,7 @@ purrr::map2(
           # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
           return(tibble_block_info)      
           
-        }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM_diff", "tibble_junction_peptides_only", "first", "last")))
+        }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM", "tibble_junction_peptides_only", "first", "last")))
           
         # match exons #####
         ## retrieve the row index of the detailed 3FT table
@@ -813,10 +881,10 @@ purrr::map2(
           
           cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
           
-          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma_diff$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
-                                                      str_detect(string = tibble_detailed_3FT_summary_PSIsigma_diff$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
+                                                      str_detect(string = tibble_detailed_3FT_summary_PSIsigma$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
           
-          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma_diff[row_index_of_matched_3FT_table, ]
+          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma[row_index_of_matched_3FT_table, ]
           
           # get translated transcript-relative AA coords
           translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
@@ -895,91 +963,22 @@ purrr::map2(
         tibble_bedfile <- splice(list_bedfile_junctions_only, list_bedfile_exons_only) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
         
         # track line
-        # cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
+        # cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
         # 
         # append = TRUE
-        write.table(x = tibble_bedfile, file = paste(R_processing_results, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+        write.table(x = tibble_bedfile, file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
         
         # GO TO BEDTOOLS NOW ###
         # cd /media/Ubuntu/sharedfolder/bedtools2/bin/
-        # ./bedToBam -i /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/proteomic_alignment_junc.exons_peptides.bed -bed12 -g hg38.chrom.sizes_ensembl > /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/proteomic_alignment_junc.exons_peptides.bam
+        # ./bedToBam -i /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bed -bed12 -g hg38.chrom.sizes_ensembl > /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bam
         
-        # rtracklayer::export(object = tibble_bedfile, con = paste(R_processing_results, "bedfile_", a2, "_", b2, ".bed", sep = ""), format = "bedPE")
+        # rtracklayer::export(object = tibble_bedfile, con = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), format = "bedPE")
         # 
         # # add the QNAME for real this time
-        # tibble_bedfile2 <- read.delim(file = paste(R_processing_results, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
+        # tibble_bedfile2 <- read.delim(file = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
         
       } )
     
   } )
-
-```
-
-# Gene set enrichment
-
-## import the FASTA supplementary info
-
-```{r}
-
-tibble_fasta_supp_info_exons <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
-
-tibble_fasta_supp_info_junctions <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
-
-# bind rows
-tibble_fasta_supp_info <- dplyr::bind_rows(tibble_fasta_supp_info_exons, tibble_fasta_supp_info_junctions)
-
-```
-
-## GO enrichment for all junc.exons identified
-
-```{r}
-
-list_GOhyper_enrichment <- purrr::map2(.x = list_imported_maxquant_tibbles_processed["junc.exons"], 
-                                       .y =  names(list_imported_maxquant_tibbles_processed["junc.exons"]), 
-                                       .f = function(.x, .y) {
-                                         
-                                         # DEBUG ###
-                                         # .x <- list_imported_maxquant_tibbles_processed %>% .[["junc.exons"]]
-                                         # .y <- names(list_imported_maxquant_tibbles_processed["junc.exons"])
-                                         ###########
-                                         
-                                         a1 <- .x
-                                         a2 <- .y
-                                         
-                                         cat("now processing", a2, "at level 1\n")
-                                         
-                                         L2_list <- purrr::map2(.x = a1[c("peptides", "phosphosites", "protein_groups")], 
-                                                                names(a1[c("peptides", "phosphosites", "protein_groups")]), 
-                                                                .f = function(.x, .y) {
-                                                                  
-                                                                  # DEBUG ###
-                                                                  b1 <- list_imported_maxquant_tibbles_processed[["junc.exons"]][["peptides"]] %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
-                                                                  b2 <- names(list_imported_maxquant_tibbles_processed[["junc.exons"]]["peptides"])
-                                                                  ###########
-                                                                  
-                                                                  b1 <- .x %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
-                                                                  b2 <- .y
-                                                                  
-                                                                  cat("now processing", b2, "at level 2\n") 
-                                                                  
-                                                                  # extract all the identifiers of the detected junctions/exons
-                                                                  tibble_identifier_detected_junc.exons <- b1[, "Leading.razor.protein"] %>% setNames("identifier")
-                                                                  
-                                                                  # match to the supplementary FASTA info and extract the gene id
-                                                                  vec_gene_ids <- dplyr::semi_join(tibble_fasta_supp_info, tibble_identifier_detected_junc.exons, by = "identifier") %>% .$matched_gene_names %>% na.omit %>% unique %>% mixedsort
-                                                                  
-                                                                  # CONDUCT ENRICHMENT
-                                                                  tibble_GOhyper_result_MF <- GOHyperGAll(catdb = catdb, gocat = "MF", sample = vec_gene_ids, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% as_tibble
-                                                                  tibble_GOhyper_result_BP <- GOHyperGAll(catdb = catdb, gocat = "BP", sample = vec_gene_ids, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% as_tibble
-                                                                  tibble_GOhyper_result_CC <- GOHyperGAll(catdb = catdb, gocat = "CC", sample = vec_gene_ids, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% as_tibble
-                                                                  
-                                                                  return(list("GOhyper_result_MF" = tibble_GOhyper_result_MF,
-                                                                              "GOhyper_result_BP" = tibble_GOhyper_result_BP,
-                                                                              "GOhyper_result_CC" = tibble_GOhyper_result_CC,
-                                                                              "queried_gene_names" = vec_differential_gene_names))
-                                                                  
-                                                                } )
-                                         
-                                       } )
 
 ```

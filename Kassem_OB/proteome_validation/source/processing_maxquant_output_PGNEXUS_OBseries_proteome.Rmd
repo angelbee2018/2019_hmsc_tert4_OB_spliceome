@@ -53,6 +53,268 @@ if(! dir.exists(R_processing_results) ) {
 
 ```
 
+## define functions
+
+### FUNCTION TO PLOT PCA FOR TIMEPOINT AND REPLICATE
+
+```{r}
+
+plot_PCA_for_timepoint_and_replicate <- function(matrixtable, timepoint_order = NULL, replicate_order = NULL, PCA_depths_y = NULL, PCA_depths_x = NULL, save_dir = NULL, save_name = NULL, graph_title = NULL) {
+  
+  # DEBUG ###
+  # save_dir <- R_processing_results_dir
+  # save_name <- "raw_MQ_intensities"
+  # 
+  # graph_title <- paste(.y[[1]], "\n", .y[[2]], sep = "")
+  # 
+  # timepoint_order <- c("ud_1_24", "ud_30_6", "30m", "1h", "6h", "1d")
+  # replicate_order <- vector_replicate_names
+  # 
+  # PCA_depths_y <- c(2, 3, 4)
+  # PCA_depths_x <- c(1, 2, 3)
+  ###########
+  
+  PCA_result <- prcomp(matrixtable)
+  
+  ## measure PC variance #
+  PCA_stdev <- tibble("PC" = 1:(PCA_result[["sdev"]] %>% length), "stdev" = PCA_result[["sdev"]])
+  
+  PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
+  PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
+  
+  ggplot(PCA_variance) + 
+    geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+    scale_fill_gradientn(colours = heat.colors(n = (PCA_result[["sdev"]] %>% length))) +
+    ggtitle(paste("PCA variance distribution\n", graph_title, sep = "")) +
+    guides(size = FALSE) + 
+    xlab("PC") +
+    ylab("Variance explained (%)") +
+    theme_bw() +
+    theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+
+  ## measure PC loadings #
+  ## column names of the matrix need to be split by a "|", like this: timepoint|replicatenumber
+  PCA_loadings <- PCA_result[["rotation"]] %>% as_tibble(rownames = "sample")
+  PCA_loadings <- add_column(PCA_loadings, "timepoint" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\1") %>% factor(x = ., levels = timepoint_order))
+  PCA_loadings <- add_column(PCA_loadings, "replicatenumber" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\2") %>% factor(x = ., levels = replicate_order))
+  
+  # plot PCA for multiple depths all in one go.
+  purrr::map2(.y = PCA_depths_y, .x = PCA_depths_x, .f = function(.y, .x) {
+    
+    pc_y <- .y
+    pc_x <- .x
+    
+    ggplot(PCA_loadings) + 
+    geom_point(aes(y = !!(paste("PC", pc_y, sep = "") %>% as.name), x = !!(paste("PC", pc_x, sep = "") %>% as.name), shape = replicatenumber, color = timepoint, size = 2)) +
+    scale_fill_gradientn(name = "Timepoint", colours = rainbow(n = (PCA_loadings %>% nrow))) +
+    scale_shape_discrete(name = "Replicate") +
+    ggtitle(paste("PCA loadings\n", graph_title, sep = "")) +
+    guides(size = FALSE) + 
+    xlab(paste("PC", pc_x, " (", PCA_variance[pc_x, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+    ylab(paste("PC", pc_y, " (", PCA_variance[pc_y, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+    theme_bw() +
+    theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 25, units = "cm") +
+    ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 25, units = "cm")
+    
+    } )
+  
+}
+
+```
+
+### multiple test correction
+
+```{r}
+
+# function to do Benjamini-Hochberg FDR correction for Gene Ontology output tables from GOHyperGall
+
+## takes the output of the GOHyperGall GO enrichment table and over-writes the Padj column with benjamini-corrected values from the Phyper column
+## spits out the resulting table with modified single column.
+
+## NOTE: BENJAMINI PVALUES ABOVE 0.05 ARE RENAMED NA
+
+GOHyperGAll_benjamini_correction <- function(raw_GOHyperGAll_table)
+
+  {
+  
+  benjamini_GOHyperGAll_table <- raw_GOHyperGAll_table
+  
+  benjamini_GOHyperGAll_table <- benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$SampleMatch > 1, ]
+  
+  benjamini_GOHyperGAll_table[, "Padj"] <- p.adjust(p = benjamini_GOHyperGAll_table[, "Phyper"], method = "BH", n = length(benjamini_GOHyperGAll_table[, "Phyper"]))
+  
+  benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$Padj > 0.05, "Padj"] <- NA
+
+  return(benjamini_GOHyperGAll_table)
+  
+  }
+
+# the equivalent for bc3net::enrichment() output table
+
+bc3net_benjamini_correction <- function(raw_bc3net_table)
+
+  {
+  
+  benjamini_bc3net_table <- raw_bc3net_table
+  
+  benjamini_bc3net_table_processed <- benjamini_bc3net_table[benjamini_bc3net_table$genes > 1, ]
+  
+  if (nrow(benjamini_bc3net_table_processed) != 0) {
+  
+  benjamini_bc3net_table_processed[, "padj"] <- p.adjust(p = benjamini_bc3net_table_processed[, "pval"], method = "BH", n = length(benjamini_bc3net_table_processed[, "pval"]))
+  
+  benjamini_bc3net_table_processed[benjamini_bc3net_table_processed$padj > 0.05, "padj"] <- NA
+  
+  } else {
+    
+    benjamini_bc3net_table_processed <- benjamini_bc3net_table
+    
+    benjamini_bc3net_table_processed[, "padj"] <- NA
+    
+  }
+  
+  return(benjamini_bc3net_table_processed)
+  
+}
+
+```
+
+### FUNCTION TO CHANGE THE NAME OF ONE COLUMN WITH EXACT MATCH
+
+```{r}
+
+rename_column_exact <- function(input_tibble, target_column, output_colname) {
+  
+  output_tibble <- input_tibble
+  
+  colnames(output_tibble)[which(colnames(output_tibble) == target_column)] <- output_colname
+  
+  return(output_tibble)
+  
+}
+
+```
+
+### function to split a whole table by a delimiter in a column
+
+```{r}
+
+split_delimited_column_in_table <- function(input_table, target_colname, split, columns_to_deduplicate = NULL) {
+  
+  # DEBUG ###
+  # input_table <- tibble_phosphosites_with_protein_group_ids
+  # target_colname <- "Protein.group.IDs"
+  # split = "\\;"
+  # columns_to_deduplicate <- c("id", "1h_vs_ud|IB")
+  ###########
+  
+  # list-ify the target column
+  list_target_column_strsplit_per_element <- input_table[, target_colname] %>% unlist %>% strsplit(., split = split)
+  
+  # map length
+  vector_split_lengths <- list_target_column_strsplit_per_element %>% purrr::map(~length(.x)) %>% unlist(use.names = FALSE)
+  
+  # repeat table according to the split lengths
+  row_indices_of_table_repeated_by_split <- rep(x = 1:nrow(input_table), times = vector_split_lengths)
+  
+  input_table_repeated_by_split <- input_table[row_indices_of_table_repeated_by_split, ]
+  
+  # replace target column with split values
+  input_table_repeated_by_split[, target_colname] <- list_target_column_strsplit_per_element %>% unlist(use.names = FALSE)
+  
+  split_table <- input_table_repeated_by_split
+  
+  # if specified, append an index to a particular column
+  if (is.null(columns_to_deduplicate) == FALSE) {
+    
+    # get the duplicated row indices where split lengths > 1
+    indices_of_duplicates <- which(vector_split_lengths > 1)
+    
+    # get the repetition number where split lengths > 1
+    repetition_numbers_of_duplicates <- vector_split_lengths[which(vector_split_lengths > 1)]
+    
+    # list-ify the columns to be appended
+    list_deduplicated_columns <- input_table[, columns_to_deduplicate] %>% array_tree(margin = 2) %>% purrr::map(~array_tree(.x))
+    
+    # map over each column, split the target element and add _[0-9]+
+    list_deduplicated_columns_split <- purrr::map(.x = list_deduplicated_columns, .f = function(a1) {
+      
+      # map a subset each of the L2 (elements of a column)
+      a1[indices_of_duplicates] <- purrr::map2(.x = a1[indices_of_duplicates], .y = repetition_numbers_of_duplicates, 
+                  .f = ~rep(.x, times = .y) %>% unlist %>% paste(., 1:.y, sep = "_"))
+      
+      return(a1 %>% unlist)
+      
+    } )
+    
+    # tibblise
+    tibble_deduplicated_columns_split <- list_deduplicated_columns_split %>% as_tibble
+    
+    # add back every row onto the split table
+    for (dedupe_colname in columns_to_deduplicate) {
+      
+      split_table[, dedupe_colname] <- tibble_deduplicated_columns_split[, dedupe_colname]
+      
+    }
+    
+  }
+  
+  return(split_table %>% type_convert)
+  
+}
+
+```
+
+### FUNCTION TO TAKE THE AVERAGE OF ROWS OF A DATAFRAME ACCORDING TO A FACTOR WITH INFORMATION ABOUT THE COLUMN DESIGN
+
+```{r}
+
+average_replicates_by_column <- function(table, design_factor, min_replicates) {
+
+  # DEBUG ###
+  # table <- raw_tibble %>% dplyr::select(-id)
+  # design_factor <- factor(x = gsub(x = colnames(raw_tibble %>% dplyr::select(-id)), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE), levels = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"))
+  # min_replicates <- 1
+  ###########
+  
+  # subset and take average
+  # establish looping behaviour thru the levels
+  purrr::map(.x = levels(design_factor), .f = function(.x) {
+    
+    # DEBUG ###
+    # .x <- levels(design_factor) %>% .[[2]]
+    ###########
+    
+    table_subset <- table[, which(design_factor == .x)]
+    
+    # add mean and replicate numbers columns
+    table_column_averages <- table_subset %>% add_column("mean" = rowMeans(., na.rm = TRUE), 
+                                                         "replicates" = pmap(.l = list("x" = .[, 1] %>% unlist, "y" = .[, 2] %>% unlist, "z" = .[, 3] %>% unlist), .f = function(x, y, z) {length(c(x, y, z) %>% na.omit)}) %>% unlist)
+    
+    # delete the mean if the number of replicates is less than 2
+    table_column_averages[which(table_column_averages$replicates < min_replicates), "mean"] <- NA
+    
+    # only keep the mean column
+    tibble_mean <- table_column_averages[, "mean"]
+    
+    # rename column names
+    colnames(tibble_mean) <- paste(colnames(tibble_mean), "|", .x, sep = "")
+    
+    return(tibble_mean)
+    
+  } ) %>%
+    # join all mean columns and we're done
+    purrr::reduce(dplyr::bind_cols) %>%
+    
+    return
+    
+}
+
+```
+
 # read the tables into environment
 
 ```{r}
@@ -317,7 +579,7 @@ str(list_local_FDR)
 ```{r}
 
 # import the 3FT info table
-tibble_junctions_3FT_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_database_generation/angel_3FT_junctions/angel_junctions_3FT_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.2_3FT.summary.info.txt", sep = "\t", stringsAsFactors =  FALSE, row.names = NULL) %>% as_tibble
+tibble_junctions_3FT_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/three_frame_translation_results/threeframetranslate_junctions_qvalue0.01_dpsi0.15_diff_3FT.summary.info.txt", sep = "\t", stringsAsFactors =  FALSE, row.names = NULL, header = TRUE) %>% as_tibble
 
 ```
 
@@ -385,22 +647,339 @@ write.table(tibble_PGNEXUS_MSMS_junction_peptides_with_SJ_crossing_info, file = 
 
 ```
 
-## Preprocessing for visualisation in Samifier
+# Preprocessing for visualisation in IGV
 
-Expected format:
-Content-Type: application/x-Mascot; name="peptides"
+Step 1: Import the details of 3FT - junctions and exons
+Step 2: Calculate the genome-relative positions of the identified tryptic peptides
+Step 3: Write a BLOCKED bed file (BED12 format)
+Step 4 (outside R): BEDtoBAM
 
-q21_p1=0,705.406113,-0.000065,4,**EFGILK**,18,00000000,**25.95**,0000000001000002010,0,0;**"KPYK1_YEAST"**:0:**469**:**474**:1,"RL31B_YEAST":0:78:86
-
-peptide sequence, confidence score (maxquant score), protein name (junction name), MSMS peptide start position in protein, MSMS peptide end position in protein.
-
-Here, we will create:
-q00_p0=0,0,0,0,<SEQUENCE>,0,0,<MAXQUANT_SCORE>,0,0,0;<JUNCTION_ID>:0:<WINDOW_START>:<WINDOW_END>:1,"JUNCTION_JUM":0:0:0
+## Import the details of 3FT - junctions and exons
 
 ```{r}
 
+tibble_detailed_3FT_summary_JUM_diff <- read.delim(file = paste(`3FT_results_dir`, "threeframetranslate_junctions_qvalue0.01_dpsi0.15_diff_3FT.summary.info.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
 
-
+tibble_detailed_3FT_summary_PSIsigma_diff <- read.delim(file = paste(`3FT_results_dir`, "threeframetranslate_exons_pvalue0.01_dpsi10_diff_3FT.summary.info.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
 
 ```
 
+## calculate genome-relative ranges of all the nucleotides encoding the identified tryptic peptides
+### return a bedfile-like format
+
+```{r}
+
+# NOTE: this return nothing
+purrr::map2(
+  .x = list_imported_maxquant_tibbles_processed["junc.exons"], 
+  .y =  names(list_imported_maxquant_tibbles_processed["junc.exons"]), 
+  .f = function(.x, .y) {
+    
+    # DEBUG ###
+    .x <- list_imported_maxquant_tibbles_processed[["junc.exons"]]
+    .y <- names(list_imported_maxquant_tibbles_processed["junc.exons"])
+    ###########
+    
+    a1 <- .x
+    a2 <- .y
+    
+    cat("now processing", a2, "at level 1\n")
+    
+    L2_list <- purrr::map2(
+      .x = a1[c("peptides")], 
+      names(a1[c("peptides")]), 
+      .f = function(.x, .y) {
+        
+        # DEBUG ###
+        b1 <- list_imported_maxquant_tibbles_processed[["junc.exons"]][["peptides"]] %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
+        b2 <- names(list_imported_maxquant_tibbles_processed[["junc.exons"]]["peptides"])
+        ###########
+        
+        b1 <- .x %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
+        b2 <- .y
+        
+        cat("now processing", b2, "at level 2\n") 
+        
+        # split table by exons or junctions
+        tibble_junction_peptides_only <- b1[grep(x = b1$Leading.razor.protein, pattern = "junction_"), ]
+        tibble_exon_peptides_only <- b1[grep(x = b1$Leading.razor.protein, pattern = "exon_"), ]
+        
+        # to get the genome-relative coords of tryptic peptides, loop thru every tryptic peptide + fasta identifier combination
+        # extract the MQ outputted start/end positions: 
+        # 1. They are the valid-ORF-relative coords, 
+        # 2. then parent translated transcript-relative coords then,
+        # 3. use the translation frame and 3x length to get the nucleotide positions.
+        # 4. convert individual nt positions to genomic ranges
+        
+        # match junctions #####
+        ## retrieve the row index of the detailed 3FT table
+        ## match FASTA header and sequence
+        ## take the first match is fine.
+        list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
+          
+          # DEBUG ###
+          # a1 <- tibble_junction_peptides_only[5, ]
+          ###########
+          
+          cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+          
+          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM_diff$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
+                                                      str_detect(string = tibble_detailed_3FT_summary_JUM_diff$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+          
+          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM_diff[row_index_of_matched_3FT_table, ]
+          
+          # get translated transcript-relative AA coords
+          translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+          translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+          
+          # get transcript relative nt coords
+          ## NOTE: this is strand-dependent.
+          parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+          parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+          
+          # get genome-relative positions for every nt encoding the tryptic peptide
+          ## have to take the strand into account.
+          ### extract the genome-relative forward coords of every nt in the parent transcript
+          ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+          vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+          ### use the transcript-relative nt coords to match
+          ### then sort in increasing order for the next step
+          if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
+            
+            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+            
+          } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
+            
+            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+            
+          }
+          
+          # convert the individual nt positions to a set of ranges
+          ## achieve this by comparing n to n + 1
+          ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
+          tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
+                                      "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
+            add_column("difference" = .$n.plus.1 - .$n)
+          
+          ## if there are no gaps, then just take the genomic range as the start:end
+          if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+            
+            vec_blockCount <- 1
+            vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
+            vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+            
+          } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+            
+            vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
+            vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
+                                 tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
+            vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
+                               last(all_genome_relative_positions_of_tryptic_peptide))
+            vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+            
+          }
+          
+          # the block details are still vector at this point. 
+          # must paste collapse in order to use in the BED file.
+          tibble_block_info <- tibble(
+            "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
+            "start" = first(all_genome_relative_positions_of_tryptic_peptide),
+            "end" = last(all_genome_relative_positions_of_tryptic_peptide),
+            "name" = a1$Leading.razor.protein %>% paste %>% trimws,
+            "score" = a1$Score %>% as.numeric,
+            "strand"= tibble_matched_3FT_entry$matched_junction_strand,
+            "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
+            "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
+            "itemRgb" = "153,0,255",
+            "blockCount" = vec_blockCount %>% paste(collapse = ","),
+            "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
+            "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
+            "qName" = a1$Sequence %>% paste %>% trimws)
+          
+          # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+          return(tibble_block_info)      
+          
+        }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM_diff", "tibble_junction_peptides_only", "first", "last")))
+          
+        # match exons #####
+        ## retrieve the row index of the detailed 3FT table
+        ## match FASTA header and sequence
+        ## take the first match is fine.
+        list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
+          
+          # DEBUG ###
+          # a1 <- tibble_exon_peptides_only[5, ]
+          ###########
+          
+          cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
+          
+          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma_diff$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
+                                                      str_detect(string = tibble_detailed_3FT_summary_PSIsigma_diff$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+          
+          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma_diff[row_index_of_matched_3FT_table, ]
+          
+          # get translated transcript-relative AA coords
+          translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+          translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+          
+          # get transcript relative nt coords
+          ## NOTE: this is strand-dependent.
+          parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+          parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+          
+          # get genome-relative positions for every nt encoding the tryptic peptide
+          ## have to take the strand into account.
+          ### extract the genome-relative forward coords of every nt in the parent transcript
+          ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+          vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+          ### use the transcript-relative nt coords to match
+          ### then sort in increasing order for the next step
+          if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "+") {
+            
+            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+            
+          } else if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "-") {
+            
+            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+            
+          }
+          
+          # convert the individual nt positions to a set of ranges
+          ## achieve this by comparing n to n + 1
+          ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
+          tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
+                                      "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
+            add_column("difference" = .$n.plus.1 - .$n)
+          
+          ## if there are no gaps, then just take the genomic range as the start:end
+          if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+            
+            vec_blockCount <- 1
+            vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
+            vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+            
+          } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+            
+            vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
+            vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
+                                 tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
+            vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
+                               last(all_genome_relative_positions_of_tryptic_peptide))
+            vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+            
+          }
+          
+          # the block details are still vector at this point. 
+          # must paste collapse in order to use in the BED file.
+          tibble_block_info <- tibble(
+            "chrom" = tibble_matched_3FT_entry$matched_exon_chr,
+            "start" = first(all_genome_relative_positions_of_tryptic_peptide),
+            "end" = last(all_genome_relative_positions_of_tryptic_peptide),
+            "name" = a1$Leading.razor.protein %>% paste %>% trimws,
+            "score" = a1$Score %>% as.numeric,
+            "strand"= tibble_matched_3FT_entry$matched_exon_strand,
+            "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
+            "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
+            "itemRgb" = "153,0,0",
+            "blockCount" = vec_blockCount %>% paste(collapse = ","),
+            "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
+            "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
+            "qName" = a1$Sequence %>% paste %>% trimws)
+          
+          # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+          return(tibble_block_info)      
+          
+        }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma_diff", "first", "last")))
+        
+        # rbind and tibblise
+        tibble_bedfile <- splice(list_bedfile_junctions_only, list_bedfile_exons_only) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
+        
+        # track line
+        # cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
+        # 
+        # append = TRUE
+        write.table(x = tibble_bedfile, file = paste(R_processing_results, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+        
+        # GO TO BEDTOOLS NOW ###
+        # cd /media/Ubuntu/sharedfolder/bedtools2/bin/
+        # ./bedToBam -i /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/proteomic_alignment_junc.exons_peptides.bed -bed12 -g hg38.chrom.sizes_ensembl > /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/proteomic_alignment_junc.exons_peptides.bam
+        
+        # rtracklayer::export(object = tibble_bedfile, con = paste(R_processing_results, "bedfile_", a2, "_", b2, ".bed", sep = ""), format = "bedPE")
+        # 
+        # # add the QNAME for real this time
+        # tibble_bedfile2 <- read.delim(file = paste(R_processing_results, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
+        
+      } )
+    
+  } )
+
+```
+
+# Gene set enrichment
+
+## import the FASTA supplementary info
+
+```{r}
+
+tibble_fasta_supp_info_exons <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+
+tibble_fasta_supp_info_junctions <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+
+# bind rows
+tibble_fasta_supp_info <- dplyr::bind_rows(tibble_fasta_supp_info_exons, tibble_fasta_supp_info_junctions)
+
+```
+
+## GO enrichment for all junc.exons identified
+
+```{r}
+
+list_GOhyper_enrichment <- purrr::map2(.x = list_imported_maxquant_tibbles_processed["junc.exons"], 
+                                       .y =  names(list_imported_maxquant_tibbles_processed["junc.exons"]), 
+                                       .f = function(.x, .y) {
+                                         
+                                         # DEBUG ###
+                                         # .x <- list_imported_maxquant_tibbles_processed %>% .[["junc.exons"]]
+                                         # .y <- names(list_imported_maxquant_tibbles_processed["junc.exons"])
+                                         ###########
+                                         
+                                         a1 <- .x
+                                         a2 <- .y
+                                         
+                                         cat("now processing", a2, "at level 1\n")
+                                         
+                                         L2_list <- purrr::map2(.x = a1[c("peptides", "phosphosites", "protein_groups")], 
+                                                                names(a1[c("peptides", "phosphosites", "protein_groups")]), 
+                                                                .f = function(.x, .y) {
+                                                                  
+                                                                  # DEBUG ###
+                                                                  b1 <- list_imported_maxquant_tibbles_processed[["junc.exons"]][["peptides"]] %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
+                                                                  b2 <- names(list_imported_maxquant_tibbles_processed[["junc.exons"]]["peptides"])
+                                                                  ###########
+                                                                  
+                                                                  b1 <- .x %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
+                                                                  b2 <- .y
+                                                                  
+                                                                  cat("now processing", b2, "at level 2\n") 
+                                                                  
+                                                                  # extract all the identifiers of the detected junctions/exons
+                                                                  tibble_identifier_detected_junc.exons <- b1[, "Leading.razor.protein"] %>% setNames("identifier")
+                                                                  
+                                                                  # match to the supplementary FASTA info and extract the gene id
+                                                                  vec_gene_ids <- dplyr::semi_join(tibble_fasta_supp_info, tibble_identifier_detected_junc.exons, by = "identifier") %>% .$matched_gene_names %>% na.omit %>% unique %>% mixedsort
+                                                                  
+                                                                  # CONDUCT ENRICHMENT
+                                                                  tibble_GOhyper_result_MF <- GOHyperGAll(catdb = catdb, gocat = "MF", sample = vec_gene_ids, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% as_tibble
+                                                                  tibble_GOhyper_result_BP <- GOHyperGAll(catdb = catdb, gocat = "BP", sample = vec_gene_ids, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% as_tibble
+                                                                  tibble_GOhyper_result_CC <- GOHyperGAll(catdb = catdb, gocat = "CC", sample = vec_gene_ids, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% as_tibble
+                                                                  
+                                                                  return(list("GOhyper_result_MF" = tibble_GOhyper_result_MF,
+                                                                              "GOhyper_result_BP" = tibble_GOhyper_result_BP,
+                                                                              "GOhyper_result_CC" = tibble_GOhyper_result_CC,
+                                                                              "queried_gene_names" = vec_differential_gene_names))
+                                                                  
+                                                                } )
+                                         
+                                       } )
+
+```

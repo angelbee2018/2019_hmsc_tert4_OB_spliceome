@@ -16,7 +16,7 @@ library(gtools)
 library(extrafont)
 # font_import(paths = "~/.local/share/fonts/")
 loadfonts(device = "pdf")
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
 library(genefilter)
@@ -35,6 +35,7 @@ memory.limit(100000)
 library(data.table)
 
 library(crayon)
+library(VennDiagram)
 
 # library(biomaRt)
 # ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
@@ -70,9 +71,6 @@ results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/multiomi
 # tibble_ref_gtf_with_NMD_flagged_E3 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E3.gtf") %>% as_tibble
 # tibble_ref_gtf_with_NMD_flagged_E4 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E4.gtf") %>% as_tibble
 # tibble_ref_gtf_with_NMD_flagged_E5 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E5.gtf") %>% as_tibble
-
-# UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
-UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 ```
 
@@ -150,33 +148,138 @@ rename_column_exact <- function(input_tibble, target_column, output_colname) {
 
 ```
 
-# Comparison between JUM and PSI-Sigma
 
-## Calculate the number of junction/exons found in common
+## Import files
 
-### Import tables
+### JUM/PSI-Sigma section
+
+#### Import differential/constitutive/all detected tables
 
 ```{r}
 
 # JUM ###
-tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-# tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-# tibble_JUM_all_junctions_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_JUM_all_junctions_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 # PSI-Sigma ###
-tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-# tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_PSIsigma_all_exons_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_all_exons_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-# tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 ```
+
+#### Import gene ontology enrichment tables
+
+```{r}
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented GO terms for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented families for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_GOterms_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_PFAM_families_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+```
+
+### scRNA-Seq section
+
+#### Import Sierra DTU test results
+
+```{r}
+
+# Cluster-wise, simplified
+tibble_sierra_DTU_clusterwise_all_simplified <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/sierra/table_clusterwise_DTU_all_simplified.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+# tibble_sierra_DTU_clusterwise_all_simplified <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/sierra/table_clusterwise_DTU_all_simplified.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_sierra_DTU_clusterwise_all_simplified <- tibble_sierra_DTU_clusterwise_all_simplified %>% 
+  add_column("chr" = gsub(x = tibble_sierra_DTU_clusterwise_all_simplified$gene_peak_id, 
+                          pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                          replacement = "\\1"),
+             "start" = gsub(x = tibble_sierra_DTU_clusterwise_all_simplified$gene_peak_id, 
+                            pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                            replacement = "\\2"),
+             "end" = gsub(x = tibble_sierra_DTU_clusterwise_all_simplified$gene_peak_id, 
+                          pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                          replacement = "\\3"),
+             "strand" = gsub(x = tibble_sierra_DTU_clusterwise_all_simplified$gene_peak_id, 
+                             pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                             replacement = "\\4")) %>%
+  dplyr::mutate_at(.vars = "strand", .funs = function(x) {
+    lapply(x, FUN = function(x) {
+      
+      if (x == "-1") {
+        return("-")
+      } else if (x == "1") {
+        return("+")
+      }
+      
+    } ) %>% unlist %>% return
+    
+  } ) %>% type_convert
+
+# Pair-wise between clusters, simplified
+tibble_sierra_DTU_pairwise_clusters_all_simplified <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/sierra/table_DTU_pairwise_comparison_clusters_all_simplified.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+# tibble_sierra_DTU_pairwise_clusters_all_simplified <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/sierra/table_DTU_pairwise_comparison_clusters_all_simplified.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_sierra_DTU_pairwise_clusters_all_simplified <- tibble_sierra_DTU_pairwise_clusters_all_simplified %>% 
+  add_column("chr" = gsub(x = tibble_sierra_DTU_pairwise_clusters_all_simplified$gene_peak_id, 
+                          pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                          replacement = "\\1"),
+             "start" = gsub(x = tibble_sierra_DTU_pairwise_clusters_all_simplified$gene_peak_id, 
+                            pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                            replacement = "\\2"),
+             "end" = gsub(x = tibble_sierra_DTU_pairwise_clusters_all_simplified$gene_peak_id, 
+                          pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                          replacement = "\\3"),
+             "strand" = gsub(x = tibble_sierra_DTU_pairwise_clusters_all_simplified$gene_peak_id, 
+                             pattern = "^[^\\:]+\\:([^\\:]+)\\:([0-9]+)\\-([0-9]+)\\:(.*)", 
+                             replacement = "\\4")) %>%
+  dplyr::mutate_at(.vars = "strand", .funs = function(x) {
+    lapply(x, FUN = function(x) {
+      
+      if (x == "-1") {
+        return("-")
+      } else if (x == "1") {
+        return("+")
+      }
+      
+    } ) %>% unlist %>% return
+    
+  } ) %>% type_convert
+
+```
+
+### SNP and disease section
+
+#### import GWAS catalog
+
+```{r}
+
+tibble_ebi_gwas_catalog <- read_tsv(file = "Y:/eQTL_catalogue/gwas_catalog_v1.0.2-associations_e98_r2020-05-03.tsv", col_types = cols(.default = "c")) %>% 
+  # can't be bothered doing fancy strsplit for such a small amount of weirdo values - i'll just take the first value out of each one instead.
+  dplyr::mutate_at(.vars = c("CHR_ID", "CHR_POS"), .funs = function(x) {
+  
+  y <- strsplit(x, split = ";") %>% purrr::map(~strsplit(.x, split = " x ") %>% unlist %>% .[1]) %>% unlist
+  
+  return(y)
+  
+} ) %>% type_convert
+
+```
+
+# Comparison between JUM and PSI-Sigma
+
+## Calculate the number of junction/exons found in common
 
 ### Calculate intersections
 
@@ -312,20 +415,6 @@ cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma
 ```
 
 ## determine the genes in common per enrichment
-
-### import tables
-
-```{r}
-
-tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented GO terms for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
-
-tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented families for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
-
-tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_GOterms_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
-
-tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_PFAM_families_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
-
-```
 
 ### FUNCTION TO LOOK FOR OVERLAPS IN EACH GO-TERM BETWEEN TWO TABLES (GOhyperGall)
 
@@ -482,22 +571,6 @@ ggplot(data = tibble_ref_gtf_with_NMD_flagged_unique_transcripts[tibble_ref_gtf_
 # sQTL and disease ontology - JUM and PSI-Sigma
 
 ## Cross reference SNPs from the GWAS catalog
-
-### import GWAS catalog
-
-```{r}
-
-tibble_ebi_gwas_catalog <- read_tsv(file = "Y:/eQTL_catalogue/gwas_catalog_v1.0.2-associations_e98_r2020-05-03.tsv", col_types = cols(.default = "c")) %>% 
-  # can't be bothered doing fancy strsplit for such a small amount of weirdo values - i'll just take the first value out of each one instead.
-  dplyr::mutate_at(.vars = c("CHR_ID", "CHR_POS"), .funs = function(x) {
-  
-  y <- strsplit(x, split = ";") %>% purrr::map(~strsplit(.x, split = " x ") %>% unlist %>% .[1]) %>% unlist
-  
-  return(y)
-  
-} ) %>% type_convert
-
-```
 
 ### find SNPs which lie in AS regions.
 
@@ -708,3 +781,63 @@ list_permtest_results_PSIsigma <- future_map(.x = tibble_psisigma_diff.exon.coor
                                            }, .progress = TRUE ) %>% set_names(tibble_JUM_AS.event.ID_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`)
 
 ```
+# Bulk JUM, PSI-Sigma and scRNA-Seq Sierra !!! WARNING: TEMPORARILY ON HOLD !!!
+
+## Find extent of genes with differential AS in common between Sierra and JUM/PSI-Sigma
+
+```{r}
+
+vector_sierra_genes_clusterwise <- tibble_sierra_DTU_clusterwise_all_simplified$gene_name %>% unique %>% mixedsort %>% na.omit
+
+vector_JUM_diff_genes <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene %>% unique %>% mixedsort %>% na.omit
+
+vector_PSIsigma_diff_genes <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names %>% unique %>% mixedsort %>% na.omit
+
+cat("\nSierra total DS genes: ", vector_sierra_genes_clusterwise %>% length)
+cat("\nJUM total DS genes: ", vector_JUM_diff_genes %>% length)
+cat("\nPSI-Sigma total DS genes: ", vector_PSIsigma_diff_genes %>% length)
+
+cat("\nSierra and JUM DS genes overlap: ", intersect(vector_sierra_genes_clusterwise, vector_JUM_diff_genes) %>% length)
+cat("\nSierra and PSI-Sigma DS genes overlap: ", intersect(vector_sierra_genes_clusterwise, vector_PSIsigma_diff_genes) %>% length)
+
+venn.diagram(
+  x = list(vector_sierra_genes_clusterwise, 
+           vector_JUM_diff_genes),
+  category.names = c("Sierra" , "JUM"),
+  imagetype = "png",
+  filename = paste(results_dir, "venndiagram_DS_genes_overlap_sierra_vs_JUM.png", sep = ""),
+  output = TRUE,
+  # circles
+  lty = 'blank',
+  fill = c("goldenrod3", "mediumorchid4")
+)
+
+venn.diagram(
+  x = list(vector_sierra_genes_clusterwise, 
+           vector_PSIsigma_diff_genes),
+  category.names = c("Sierra" , "PSI-Sigma"),
+  imagetype = "png",
+  filename = paste(results_dir, "venndiagram_DS_genes_overlap_sierra_vs_PSIsigma.png", sep = ""),
+  output = TRUE,
+  # circles
+  lty = 'blank',
+  fill = c("goldenrod3", "brown4")
+)
+
+```
+
+## Find the extent of overlap between the Sierra differential peaks and JUM/PSI-Sigma
+
+```{r}
+
+# list-ify the JUM contributing junctions using array_tree then unpack using strsplit
+list_JUM_diff_junctions_array.tree <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[, c("contributing_junction_IDs", "chr", "start", "end", "strand")] %>% 
+  array_tree %>% 
+  purrr::map_depth(.depth = 2, .f = ~strsplit(.x, split = ";")) %>%
+  purrr::map(~.x %>% flatten %>% as_tibble)
+
+# match to Sierra's differential junctions
+
+```
+
+

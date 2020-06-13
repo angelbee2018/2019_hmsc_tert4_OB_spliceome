@@ -332,15 +332,12 @@ average_replicates_by_column <- function(table, design_factor, min_replicates) {
 ```{r}
 
 list_maxquant_run_dirs <- list("junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons/txt/",
-                               "sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons/txt/"
-                               # ,
+                               "sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons/txt/",
                                # "con_sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons/txt/",
-                               # "con_sp.hsa.canonical.isoforms_trembl" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_trembl/txt/"
+                               "con_sp.hsa.canonical.isoforms_trembl" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_trembl/txt/"
                                )
                                
-list_output.table_categories <- list("evidence" = "evidence.txt", 
-                                     "modification_specific_peptides" = "modificationSpecificPeptides.txt", 
-                                     "msms" = "msms.txt", 
+list_output.table_categories <- list("modification_specific_peptides" = "modificationSpecificPeptides.txt", 
                                      "peptides" = "peptides.txt", 
                                      "protein_groups" = "proteinGroups.txt",
                                      "phosphosites" = "Phospho (STY)Sites.txt")
@@ -351,7 +348,7 @@ list_for_maxquant_table_import <- purrr::map(.x = list_maxquant_run_dirs, .f = ~
 list_of_nested_table_names <- purrr::map(.x = names(list_maxquant_run_dirs), .f = ~purrr::cross2(.x, names(list_output.table_categories)) %>% set_names(names(list_output.table_categories))) %>% set_names(names(list_maxquant_run_dirs))
 
 # read the tables into the environment
-list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~future_map(.x = .x, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble, .progress = TRUE))
+list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~future_map(.x = .x, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, sep = "\t") %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("read.delim", "as_tibble"))))
 # , .options = future_options(globals = c("as_tibble"))
 
 # rename the lists at L2
@@ -365,15 +362,10 @@ list_imported_maxquant_tibbles <- list_imported_maxquant_tibbles %>% purrr::map(
 
 ```{r}
 
-# remove all peptides which have no MS/MS count from the evidence tables
-list_imported_maxquant_tibbles_processed_temp <- list_imported_maxquant_tibbles %>% purrr::map(
-  .f = ~purrr::modify_at(.x = .x, .at = "evidence", 
-                         .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP)))
-
 # remove all the columns with unnecessary ratio info
-list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles_processed_temp %>% 
+list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles %>% 
   
-  purrr::map(~modify_at(.x = .x, .at = c("evidence", "peptides", "protein_groups", "phosphosites"), .f = function(.x) {
+  purrr::map(~modify_at(.x = .x, .at = c("peptides", "protein_groups", "phosphosites"), .f = function(.x) {
   
   # .x <- list_imported_maxquant_tibbles_processed_temp[[1]][[1]]
   
@@ -398,6 +390,8 @@ list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles_proce
   return(filtered_table4)
   
 } ) )
+
+save(list_imported_maxquant_tibbles_processed, file = paste(R_processing_results_dir, "list_imported_maxquant_tibbles_processed.Rlist", sep = ""))
 
 ```
 
@@ -1513,7 +1507,7 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
         
         autodetected_h.c <- eigen_ms_first_normalisation_result$h.c
         
-        plan(transparent)
+        # plan(transparent)
         
         # sweep h.c. and export the results
         if (h.c_sweep != FALSE) {
@@ -1533,7 +1527,7 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
         }
         
         # loop thru all the h.c. values
-        list_lvl.2_result <- future_map(.x = h.c_values_to_run, .f = function(.x) {
+        list_lvl.2_result <- purrr::map(.x = h.c_values_to_run, .f = function(.x) {
           
           # DEBUG ###
           # .x <- 2
@@ -1788,7 +1782,7 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
                       "hc_value" = eigen_ms_first_normalisation_result$h.c,
                       "PI_value" = PI_value))
           
-        }, .progress = TRUE )
+        } )
         
         return(list_lvl.2_result %>% flatten)
         
@@ -1799,6 +1793,8 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
   })
 
 # , .progress = TRUE, .options = future_options(globals = c("plotRLE", "plotMDS", "ProteoMM", "zero_to_NA", "transform_non.na_to_log2", "R_processing_results_dir"))
+
+save(list_of_eigenMS_results, file = paste(R_processing_results_dir, "list_of_eigenMS_results.Rlist", sep = ""))
 
 plan(multiprocess)
 

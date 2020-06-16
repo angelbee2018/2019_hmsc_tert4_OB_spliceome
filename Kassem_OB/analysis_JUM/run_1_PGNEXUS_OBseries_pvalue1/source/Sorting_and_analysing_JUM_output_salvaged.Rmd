@@ -46,6 +46,8 @@ library(ggdendro)
 library(data.table)
 library(Rfast)
 
+OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+
 # shared_dir <- "/media/Ubuntu/sharedfolder/"
 shared_dir <- "Z:/"
 
@@ -66,9 +68,6 @@ if(! dir.exists(results_directory_figures) ) {
 
 UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 # UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
-
-vector_OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
-vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
 ```
 
@@ -1746,6 +1745,50 @@ dev.off()
 
 ```
 
+### plot graph of the cumulative changes
+
+#### create tibble of cumulative differential changes, excluding each timepoint successively
+
+```{r}
+
+tibble_cumulative_diff_changes <- tibble("timepoint" = 1:OBseries_timepoints, 
+                                         "cumulative_diff_changes" = 
+                                           c(0, 
+                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] <= 0.01), 
+                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] >= 0.15)) %>% length,
+                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length))
+
+```
+
+#### GGPLOT
+
+```{r}
+
+ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes, x = timepoint)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, colour = "purple3", method = "loess", se = FALSE, span = 0.74999) +
+  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nJUM") +
+  xlab("Timepoint") +
+  ylab("Cumulative differential changes") +
+  scale_x_discrete(limits = c(1:8), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 15, height = 15, units = "cm") +
+  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 15, height = 15, units = "cm")
+
+```
+
 ### dpsi
 
 ```{r}
@@ -1767,50 +1810,6 @@ plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_O
 axis(side = 2, at = seq(0, 1, by = 0.1))
 
 dev.off()
-
-```
-
-### plot graph of the cumulative changes
-
-#### create tibble of cumulative differential changes, excluding each timepoint successively
-
-```{r}
-
-tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
-                                         "cumulative_diff_changes" = 
-                                           c(0, 
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] <= 0.01), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] >= 0.15)) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length)) %>% 
-  add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
-
-```
-
-#### GGPLOT
-
-```{r}
-
-ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
-  geom_path(aes(group = "OBseries"), colour = "purple3") +
-  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nJUM (AS structures)") +
-  xlab("Timepoint") +
-  ylab("Cumulative differential changes (%)") +
-  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
-  theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
-  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
 
 ```
 
@@ -1837,29 +1836,10 @@ vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnames(PSI_leve
 vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = p_or_q_value)
 
 # filtering for FDR/pvalue
-PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% na.omit %>% as.numeric <= qpvalue_cutoff)}) == TRUE, ]
+PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qpvalue.col.nums], 1, function(x){any(x %>% as.numeric <= qpvalue_cutoff)}) == TRUE, ]
 
 # filtering for dPSI cutoff
-PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% na.omit %>% as.numeric) >= dPSI_cutoff)}) == TRUE, ]
-
-# plot magnitude of dpsi
-vector_differential_dpsi <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(contains("deltaPSI")) %>% unlist %>% na.omit
-
-pdf(paste(results_directory_figures, "plot_of_absolute_dpsi_changes_diff.pdf", sep = ""), width = 5, height = 5)
-plot(density((vector_differential_dpsi * 100) %>% abs, bw = 1), 
-     main = "Distribution of absolute magnitude of change in dpsi, JUM", 
-     xlab = "Absolute dPSI in any direction (%)",
-     ylab = "Frequency density",
-     col = "purple3", 
-     xaxt = "n",
-     xlim = c(0, 100)) + 
-  polygon(density((vector_differential_dpsi * 100) %>% abs, bw = 1),
-          col = alpha("purple3", 0.33),
-          border = FALSE,
-          xaxt = "n",
-          xlim = c(0, 100)) +
-  axis(side = 1, at = seq(0, 100, by = 20), labels = seq(0, 100, by = 20))
-dev.off()
+PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[apply(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums], 1, function(x){any(abs(x %>% as.numeric) >= dPSI_cutoff)}) == TRUE, ]
 
 # also write table of differential information for 12d vs. ud.
 PSI_levels_timeseries_OB_wide_with_na_ud.12d.only <- PSI_levels_timeseries_OB_wide_with_na[PSI_levels_timeseries_OB_wide_with_na$deltaPSI_BM_MSC_to_OB_12d.BM_MSC_to_OB_ud %>% as.numeric %>% abs >= dPSI_cutoff, ]
@@ -1877,8 +1857,6 @@ PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[,
 colnames(PSI_levels_timeseries_OB_wide_with_na) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
 
 # remove extra na
-OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
-
 PSI_levels_timeseries_OB_wide_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, OBseries_timepoints[2:length(OBseries_timepoints)]], 1, function(X) {all(is.na(X))}) %>% which(. == TRUE)
 
 PSI_levels_timeseries_OB_wide_with_na <- cbind(PSI_levels_timeseries_OB_wide_with_na, MSC = 0)

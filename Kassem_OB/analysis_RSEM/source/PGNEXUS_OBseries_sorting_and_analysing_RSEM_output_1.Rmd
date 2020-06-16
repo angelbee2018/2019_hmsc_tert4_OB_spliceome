@@ -14,7 +14,7 @@ output: html_document
 library(tidyverse)
 library(gtools)
 library(extrafont)
-loadfonts(device="win")
+loadfonts(device = "win")
 windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
@@ -67,6 +67,9 @@ vector_OBseries_timepoints <- read.delim(paste(OBseries_sampleandaccessionlists_
 
 # set the timepoint order
 vec_timepoint_order_OBseries <- c("BM_MSC_to_OB_ud", "BM_MSC_to_OB_6h", "BM_MSC_to_OB_12h", "BM_MSC_to_OB_24h", "BM_MSC_to_OB_3d", "BM_MSC_to_OB_6d", "BM_MSC_to_OB_9d", "BM_MSC_to_OB_12d")
+
+# edit to change the stupid 24h to 1d
+vec_timepoint_order_OBseries_edited <- gsub(x = vec_timepoint_order_OBseries, pattern = "24h", replacement = "1d")
 
 list_genecounts_OBseries <- purrr::map(.x = list_of_replicatenames_OBseries, .f = ~read.delim(file = paste(OBseries_rsem_results_dir, .x, ".genes.results", sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf")))
 
@@ -815,8 +818,8 @@ ggplot(PCA_gene_expectedcount_RUVr_loadings) +
   ylab(paste("PC2 (", PCA_gene_expectedcount_RUVr_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 30, units = "cm") +
-  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 30, units = "cm")
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVr_gene_expectedcount_originalconfig.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 20, units = "cm") +
+  ggsave(filename = paste(OBseries_qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_RUVr_gene_expectedcount_originalconfig.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 20, units = "cm")
 
 ggplot(PCA_gene_expectedcount_RUVr_loadings) + 
   geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
@@ -936,6 +939,46 @@ column_GLMsig_DEgenes_OBseries <- tibble_GLM_OBseries[tibble_GLM_OBseries_DEGrow
 
 ```
 
+##### plot graph of the cumulative changes
+
+###### create tibble of cumulative differential changes, excluding each timepoint successively and filtering by logFC.
+
+```{r}
+
+tibble_GLM_OBseries_filtered <- tibble_GLM_OBseries %>% dplyr::filter(FDR <= 0.01)
+
+tibble_cumulative_diff_changes <- tibble("timepoint" = vec_timepoint_order_OBseries_short_edited, 
+                                         "cumulative_diff_changes" = 
+                                           c(0, 
+                                             tibble_GLM_OBseries_filtered %>% dplyr::select(contains("logFC") & !contains("12d") & !contains("9d") & !contains("6d") & !contains("3d") & !contains("24h") & !contains("12h")) %>% array_tree %>% purrr::map(.f = ~any(abs(.x %>% trimws %>% as.numeric) >= 1)) %>% unlist %>% which(. == TRUE) %>% length,
+                                             tibble_GLM_OBseries_filtered %>% dplyr::select(contains("logFC") & !contains("12d") & !contains("9d") & !contains("6d") & !contains("3d") & !contains("24h")) %>% array_tree %>% purrr::map(.f = ~any(abs(.x %>% trimws %>% as.numeric) >= 1)) %>% unlist %>% which(. == TRUE) %>% length,
+                                             tibble_GLM_OBseries_filtered %>% dplyr::select(contains("logFC") & !contains("12d") & !contains("9d") & !contains("6d") & !contains("3d")) %>% array_tree %>% purrr::map(.f = ~any(abs(.x %>% trimws %>% as.numeric) >= 1)) %>% unlist %>% which(. == TRUE) %>% length,
+                                             tibble_GLM_OBseries_filtered %>% dplyr::select(contains("logFC") & !contains("12d") & !contains("9d") & !contains("6d")) %>% array_tree %>% purrr::map(.f = ~any(abs(.x %>% trimws %>% as.numeric) >= 1)) %>% unlist %>% which(. == TRUE) %>% length,
+                                             tibble_GLM_OBseries_filtered %>% dplyr::select(contains("logFC") & !contains("12d") & !contains("9d")) %>% array_tree %>% purrr::map(.f = ~any(abs(.x %>% trimws %>% as.numeric) >= 1)) %>% unlist %>% which(. == TRUE) %>% length,
+                                             tibble_GLM_OBseries_filtered %>% dplyr::select(contains("logFC") & !contains("12d")) %>% array_tree %>% purrr::map(.f = ~any(abs(.x %>% trimws %>% as.numeric) >= 1)) %>% unlist %>% which(. == TRUE) %>% length,
+                                             tibble_GLM_OBseries_filtered %>% dplyr::select(contains("logFC")) %>% array_tree %>% purrr::map(.f = ~any(abs(.x %>% trimws %>% as.numeric) >= 1)) %>% unlist %>% which(. == TRUE) %>% length)) %>% 
+  add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
+
+```
+
+###### GGPLOT
+
+```{r}
+
+ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
+  # geom_point() +
+  geom_path(aes(group = "OBseries"), colour = "steelblue1") +
+  ggtitle("Cumulative changes in the hMSC-TERT4 RNA expression\nOsteogenesis\nRSEM/EdgeR") +
+  xlab("Timepoint") +
+  ylab("Cumulative differential changes") +
+  scale_x_discrete(limits = vec_timepoint_order_OBseries_short_edited, labels = vec_timepoint_order_OBseries_short_edited) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_R_processing_results_dir, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
+  ggsave(filename = paste(OBseries_R_processing_results_dir, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
+
+```
+
 #### CREATION OF THE LOGCPM TABLE
 
 normalise ALL gene counts based on library and export
@@ -1035,6 +1078,8 @@ colnames(tibble_logCPM_OBseries_GLM_DEGs_averaged) <- gsub(x = colnames(tibble_l
 vec_timepoint_order_OBseries_short <- gsub(x = vec_timepoint_order_OBseries,
                                            pattern = "BM_MSC_to_OB_",
                                            replacement = "")
+
+vec_timepoint_order_OBseries_short_edited <- gsub(x = vec_timepoint_order_OBseries_short, pattern = "24h", replacement = "1d")
 
 # rearrange in chronological order 
 tibble_logCPM_OBseries_GLM_DEGs_averaged <- tibble_logCPM_OBseries_GLM_DEGs_averaged[, c("ensembl_gene_id", "external_gene_name", vec_timepoint_order_OBseries_short)]
@@ -1313,7 +1358,56 @@ purrr::map(.x = list_ont_x_highest.lowest, .f = function(a1) {
 
 ```{r}
 
-# melt the table of GOterms per timepoint
+# melt the table of GOterms per timepoint into separate columns for timepoints
+wide_tibble_hyperGO_per_timepoint <- reshape2::dcast(data = tibble_hyperGO_per_timepoint %>% dplyr::filter(Ont == "BP" & highest_or_lowest == "highest" & NodeSize <= 1000),
+                                                     formula = Term + Ont ~ timepoint, value.var = "Padj") %>% as_tibble
+
+wide_tibble_hyperGO_per_timepoint[is.na(wide_tibble_hyperGO_per_timepoint)] <- 1
+
+# remove GO Terms which are not sig in at least one timepoint.
+## vector of row indices where it's significant in at least one timepoint.
+vec_row_indices_anysig <- wide_tibble_hyperGO_per_timepoint[, vec_timepoint_order_OBseries_short] %>% array_tree %>% purrr::map(.f = ~any(.x <= 0.05)) %>% unlist %>% which(. == TRUE)
+
+wide_tibble_hyperGO_per_timepoint <- wide_tibble_hyperGO_per_timepoint[vec_row_indices_anysig, ]
+
+dist_result <- dist(wide_tibble_hyperGO_per_timepoint[, vec_timepoint_order_OBseries_short], method = "euclidean")
+hclust_result <- hclust(dist_result, method = "ward.D2")
+dendrogram <- as.dendrogram(hclust_result)
+
+# reorder the dendrogram so different patches are further away
+# matrix_rowmeans <- rowMeans(wide_tibble_hyperGO_per_timepoint[, vec_timepoint_order_OBseries_short], na.rm = T)
+matrix_PCA1_rowwise <- prcomp(wide_tibble_hyperGO_per_timepoint[, vec_timepoint_order_OBseries_short] %>% t) %>% .[["rotation"]] %>% .[, 1]
+dendrogram_reordered <- reorder(dendrogram, matrix_PCA1_rowwise)
+
+tibble_reordered <- wide_tibble_hyperGO_per_timepoint[dendrogram_reordered %>% unlist, ]
+
+# get the order of goterms due to the clustering
+vector_goterms_ordered <- tibble_reordered$Term
+
+# melt for ggplot 
+long_tibble_reordered <- reshape2::melt(tibble_reordered, variable.name = "timepoint", value.name = "Padj", id.vars = c("Term", "Ont")) %>% as_tibble
+
+# plot the main heatmap
+ggplot(long_tibble_reordered, aes(fill = -Padj)) +
+  geom_tile(aes(x = timepoint, y = Term)) +
+  ggtitle(paste("Heatmap of any significant BP GOterms per timepoint", sep = "")) +
+  scale_x_discrete(breaks = vec_timepoint_order_OBseries_short, labels = vec_timepoint_order_OBseries_short_edited, limits = vec_timepoint_order_OBseries_short) +
+  scale_y_discrete(breaks = vector_goterms_ordered[seq(from = 1, to = length(vector_goterms_ordered), by = 2)], labels = vector_goterms_ordered[seq(from = 1, to = length(vector_goterms_ordered), by = 2)], limits = vector_goterms_ordered) +
+  scale_fill_gradientn(colours = c("white", "yellow", "red", "black"), values = c(0, 0.33, 0.67, 1)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 20, lineheight = 0.75, colour = "black", margin = margin(r = 10)), legend.title.align = 0.5, axis.text.y = element_text(size = 0.5, lineheight = 0.75, colour = "black"), axis.title.y = element_text(margin = margin(r = 10)), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_R_processing_results_dir, "heatmap_BP_GOterms_per_timepoint_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 40, units = "cm", limitsize = FALSE)
+
+# plot select GO terms
+vector_goterms_to_plot <- c("response to unfolded protein", "mitotic cell cycle", "regulation of cell cycle G2/M phase transition", "regulation of cell cycle G1/S phase transition", "histone H3-K9 methylation", "regulation of voltage−gated calcium channel activity", "sodium ion transmembrane transport", "ossification", "response to glucocorticoid", "osteoblast differentiation", "extracellular matrix organization", "cell-matrix adhesion", "cell-cell adhesion", "actin cytoskeleton organization", "positive regulation of NIK/NF-kappaB signaling", "p38MAPK cascade", "Wnt signaling pathway", "Notch signaling pathway", "regulation of BMP signaling pathway", "negative regulation of cell death", "positive regulation of Wnt signaling pathway, planar cell polarity pathway", "integrin-mediated signaling pathway")
+
+ggplot(long_tibble_reordered, aes(fill = -Padj)) +
+  geom_tile(aes(x = timepoint, y = Term)) +
+  ggtitle(paste("Heatmap of select BP GOterms per timepoint", sep = "")) +
+  scale_x_discrete(breaks = vec_timepoint_order_OBseries_short, labels = vec_timepoint_order_OBseries_short_edited, limits = vec_timepoint_order_OBseries_short) +
+  scale_y_discrete(breaks = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)], labels = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)], limits = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)]) +
+  scale_fill_gradientn(colours = c("white", "yellow", "red", "black"), values = c(0, 0.33, 0.67, 1)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(lineheight = 0.75, colour = "black"), axis.title.y = element_text(), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(OBseries_R_processing_results_dir, "heatmap_BP_GOterms_per_timepoint_select.pdf", sep = ""), device = "pdf", dpi = 600, width = 17, height = 13, units = "cm", limitsize = FALSE)
 
 ```
 

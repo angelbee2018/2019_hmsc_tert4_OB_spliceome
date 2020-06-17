@@ -956,6 +956,77 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
 
 ```
 
+### FUNCTION TO PLOT PCA FOR TIMEPOINT AND REPLICATE
+
+```{r}
+
+plot_PCA_for_timepoint_and_replicate <- function(matrixtable, timepoint_order = NULL, replicate_order = NULL, PCA_depths_y = NULL, PCA_depths_x = NULL, save_dir = NULL, save_name = NULL, graph_title = NULL, width = 10, height = 10) {
+  
+  # DEBUG ###
+  # save_dir <- R_processing_results_dir
+  # save_name <- "raw_MQ_intensities"
+  # 
+  # graph_title <- paste(.y[[1]], "\n", .y[[2]], sep = "")
+  # 
+  # timepoint_order <- c("ud_1_24", "ud_30_6", "30m", "1h", "6h", "1d")
+  # replicate_order <- vector_replicate_names
+  # 
+  # PCA_depths_y <- c(2, 3, 4)
+  # PCA_depths_x <- c(1, 2, 3)
+  ###########
+  
+  PCA_result <- prcomp(matrixtable)
+  
+  ## measure PC variance #
+  PCA_stdev <- tibble("PC" = 1:(PCA_result[["sdev"]] %>% length), "stdev" = PCA_result[["sdev"]])
+  
+  PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
+  PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
+  
+  ggplot(PCA_variance) + 
+    geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
+    scale_fill_gradientn(colours = heat.colors(n = (PCA_result[["sdev"]] %>% length))) +
+    ggtitle(paste("PCA variance distribution\n", graph_title, sep = "")) +
+    guides(size = FALSE) + 
+    xlab("PC") +
+    ylab("Variance explained (%)") +
+    theme_bw() +
+    theme(text = element_text(family = "Helvetica")) +
+    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+  
+  ## measure PC loadings #
+  ## column names of the matrix need to be split by a "|", like this: timepoint|replicatenumber
+  PCA_loadings <- PCA_result[["rotation"]] %>% as_tibble(rownames = "sample")
+  PCA_loadings <- add_column(PCA_loadings, "timepoint" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\1") %>% factor(x = ., levels = timepoint_order))
+  PCA_loadings <- add_column(PCA_loadings, "replicatenumber" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\2") %>% factor(x = ., levels = replicate_order))
+  
+  # plot PCA for multiple depths all in one go.
+  purrr::map2(.y = PCA_depths_y, .x = PCA_depths_x, .f = function(.y, .x) {
+    
+    pc_y <- .y
+    pc_x <- .x
+    
+    ggplot(PCA_loadings) + 
+      geom_point(aes(y = !!(paste("PC", pc_y, sep = "") %>% as.name), x = !!(paste("PC", pc_x, sep = "") %>% as.name), shape = replicatenumber, color = timepoint, size = 2)) +
+      # scale_fill_gradientn(name = "Timepoint", colours = rainbow(n = (PCA_loadings %>% nrow))) +
+      scale_color_brewer(name = "Timepoint", palette = "Spectral", breaks = timepoint_order, limits = timepoint_order) +
+      scale_shape_discrete(name = "Replicate") +
+      ggtitle(paste("PCA loadings\n", graph_title, sep = "")) +
+      guides(size = FALSE) + 
+      xlab(paste("PC", pc_x, " (", PCA_variance[pc_x, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+      ylab(paste("PC", pc_y, " (", PCA_variance[pc_y, "variance_explained"] %>% signif(3), "%)", sep = "")) +
+      theme_bw() +
+      theme(text = element_text(family = "Helvetica")) +
+      ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".pdf", sep = ""), device = "pdf", dpi = 600, width = width, height = height, units = "cm") +
+      ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".svg", sep = ""), device = "svg", dpi = 600, width = width, height = height, units = "cm")
+    
+  } )
+  
+}
+
+```
+
 # Match all separate junctions to the reference and recon annotation
 
 We do this so that we can get NMD and and first/last exon info
@@ -1012,8 +1083,7 @@ list_of_detailed_tables <- future_map(.x = list_of_timepoint_comparisons_final, 
                                         set_names(list_of_AS_events), .progress = TRUE, .options = future_options(globals = c("list_of_AS_events", "results_dir", "tibble"))) %>% set_names(list_of_timepoint_comparisons_final)
 
 # bind rows for each comparison
-
-list_of_detailed_tables_2 <- purrr::map(.x = list_of_detailed_tables, .f = ~rbindlist(.x))
+list_of_detailed_tables_2 <- future_map(.x = list_of_detailed_tables, .f = ~rbindlist(.x), .progress = TRUE, .options = future_options(globals = c("rbindlist")))
 
 # rename the colnames to be not comparison-specific - we will add a comparison column later on
 
@@ -1032,6 +1102,61 @@ list_AS.structure.ID.processed <- vector_AS.structure.ID.processed %>% gsub(x = 
 ## then add the "Junction_" string back into the original table of all detailed tables
 unlist_AS.structure.ID.processed <- future_map(.x = list_AS.structure.ID.processed, .f = ~paste("Junction_", .x, sep = "") %>% paste(collapse = ","), .progress = TRUE, .options = future_options(globals = FALSE)) %>% unlist
 wide_tibble_of_all_detailed_tables_with_na <- wide_tibble_of_all_detailed_tables_with_na %>% add_column("contributing_junctions" = unlist_AS.structure.ID.processed, .after = "AS_structure_ID")
+
+save(wide_tibble_of_all_detailed_tables_with_na, file = paste(results_dir, "wide_tibble_of_all_detailed_tables_with_na.tibble", sep = ""))
+
+```
+
+### plot PCA using the detailed tables
+
+```{r}
+
+# remove NA values from the detailed tables
+## get the row indices of na 
+row.indices_of_not_na <- wide_tibble_of_all_detailed_tables_with_na %>% dplyr::select(contains("percentage_usage")) %>% add_column("index" = 1:nrow(.)) %>% na.omit %>% .$index
+## subset for non-na values only
+wide_tibble_of_all_detailed_tables_no_na <- wide_tibble_of_all_detailed_tables_with_na[row.indices_of_not_na, ]
+
+# subset the detailed tibble for comparisons against ud only and list-ify
+list_tibbles_of_all_detailed_tables_no_na <- wide_tibble_of_all_detailed_tables_no_na %>% 
+  dplyr::filter(str_detect(string = comparison, pattern = "ud") == TRUE) %>%
+  dplyr::group_split(comparison) 
+
+# rename each element
+names(list_tibbles_of_all_detailed_tables_no_na) <- list_tibbles_of_all_detailed_tables_no_na %>% purrr::map(.f = ~.x$comparison %>% unique %>% gsub(pattern = "^BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_ud", replacement = "\\1")) %>% unlist
+
+# subset each table
+list_tibbles_of_all_detailed_tables_for_PCA <- list_tibbles_of_all_detailed_tables_no_na %>% purrr::map(.f = ~.x %>% dplyr::select(AS_event_ID, splicemode, sub_junction_ID,  percentage_usage.4, percentage_usage.5, percentage_usage.6, percentage_usage.1, percentage_usage.2, percentage_usage.3)) %>%
+  # splice in the ud timepoint
+  purrr::splice("MSC" = list_tibbles_of_all_detailed_tables_no_na[[1]] %>% .[, c("AS_event_ID", "splicemode", "sub_junction_ID", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6")])
+
+names(list_tibbles_of_all_detailed_tables_for_PCA)[names(list_tibbles_of_all_detailed_tables_for_PCA) == "24h"] <- "1d"
+
+# rename each tibble in the list
+list_tibbles_of_all_detailed_tables_for_PCA <- purrr::map2(.x = list_tibbles_of_all_detailed_tables_for_PCA,
+                                                           .y = names(list_tibbles_of_all_detailed_tables_for_PCA),
+                                                           .f = ~setNames(.x, c("AS_event_ID", "splicemode", "sub_junction_ID", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", paste(.y, "r1", sep = "|"), paste(.y, "r2", sep = "|"), paste(.y, "r3", sep = "|"))))
+
+# reorder elements
+list_tibbles_of_all_detailed_tables_for_PCA <- list_tibbles_of_all_detailed_tables_for_PCA[vector_OBseries_timepoints_edited]
+
+# left join
+tibble_PCA <- list_tibbles_of_all_detailed_tables_for_PCA %>% purrr::reduce(dplyr::left_join)
+
+# discard superfluous columns
+tibble_PCA_matrix <- tibble_PCA %>% dplyr::select(contains("|")) %>% mutate_all(.funs = function(x) {gsub(x = x, pattern = "%", replacement = "")}) %>% type_convert
+
+# plot
+plot_PCA_for_timepoint_and_replicate(matrixtable = tibble_PCA_matrix %>% na.omit, 
+                                     graph_title = paste("PCA plot of PSI values, JUM", sep = ""),
+                                     PCA_depths_y = c(2, 3, 4),
+                                     PCA_depths_x = c(1, 2, 3),
+                                     timepoint_order = vector_OBseries_timepoints_edited,
+                                     replicate_order = c("r1", "r2", "r3"),
+                                     width = 14,
+                                     height = 12,
+                                     save_dir = results_directory_figures,
+                                     save_name = paste("PSI_values_JUM", sep = ""))
 
 ```
 

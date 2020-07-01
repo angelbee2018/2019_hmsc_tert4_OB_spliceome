@@ -56,7 +56,7 @@ library(genefilter)
 library(ComplexHeatmap)
 
 library(biomaRt)
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
+ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "asia.ensembl.org")
 # , version = 98
 
 library(systemPipeR)
@@ -1381,7 +1381,25 @@ cat("There are", tibble_differential_results_12d_vs_ud$matched_gene_names %>% un
 
 ```{r}
 
-# LSV PSI
+# all (LSV PSI)
+pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_LSV_all.pdf", sep = ""), width = 5, height = 5)
+plot(density(wide_tibble_of_psisigma_results_allcomparisons_final$dpsi %>% abs, bw = 1), 
+     main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (LSVs)", 
+     xlab = "Absolute dPSI in any direction (%)",
+     ylab = "Frequency density",
+     col = "firebrick4", 
+     xaxt = "n",
+     xlim = c(0, 100)) + 
+  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_final$dpsi %>% abs, bw = 1),
+          col = alpha("firebrick4", 0.33),
+          border = FALSE,
+          xaxt = "n",
+          xlim = c(0, 100)) +
+  axis(side = 1, at = seq(0, 100, by = 20), labels = seq(0, 100, by = 20))
+dev.off()
+
+
+# LSV PSI - differential
 pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_LSV_diff.pdf", sep = ""), width = 5, height = 5)
 plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LSV$dpsi %>% abs, bw = 1), 
      main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (LSVs)", 
@@ -1398,7 +1416,7 @@ plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LS
   axis(side = 1, at = seq(0, 100, by = 20), labels = seq(0, 100, by = 20))
 dev.off()
 
-# exon PSI
+# exon PSI - differential
 pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_exon_diff.pdf", sep = ""), width = 5, height = 5)
 plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(dpsi)) %>% .$exon_dpsi %>% abs), 
      main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (exons)", 
@@ -1539,7 +1557,7 @@ list_of_tibbles_absolute_PSI_average_subset_by_region <- future_map(.x = list_un
 
 # take the average PSI of each timepoint
 # we assume there are no more bugs which cause identical virtual splice variations to be duplicated. so therefore we do not need to take unique values.
-list_of_tibbles_absolute_PSI_average_subset_by_region_sum <- future_map(.x = list_of_tibbles_absolute_PSI_average_subset_by_region, 
+list_of_tables_absolute_PSI_average_subset_by_region_sum <- future_map(.x = list_of_tibbles_absolute_PSI_average_subset_by_region, 
                                                                         .f = ~cbind(.x[, -grep(x = colnames(.x), pattern = "absolute.psi")] %>% unique, 
                                                                                     apply(X = .x[, grep(x = colnames(.x), pattern = "absolute.psi")], MARGIN = 2, FUN = function(X) {
                                                                                       if (all(is.na(X))) {
@@ -1554,9 +1572,9 @@ list_of_tibbles_absolute_PSI_average_subset_by_region_sum <- future_map(.x = lis
                                                                                           
                                                                                         } 
                                                                                       
-                                                                                      }) %>% t) %>% as_tibble, .progress = TRUE, .options = future_options(globals = FALSE))
+                                                                                      }) %>% t), .progress = TRUE, .options = future_options(globals = FALSE))
 
-wide_tibble_of_absolute_PSI_averages_sum <- list_of_tibbles_absolute_PSI_average_subset_by_region_sum %>% rbindlist %>% as_tibble
+wide_tibble_of_absolute_PSI_averages_sum <- list_of_tables_absolute_PSI_average_subset_by_region_sum %>% rbindlist %>% as_tibble
 
 ```
 
@@ -1810,6 +1828,8 @@ somdata_5_by_5_OBseries <- som(som_5_by_5_OBseries_table_scaled.PSI_separate, gr
 
 wide_table_of_final_SOM_summary_5_by_5_OBseries_separate <- cbind(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate[, -grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate), pattern = "absolute.psi")], som_5_by_5_OBseries_table_scaled.PSI_separate, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]])
 
+
+
 ```
 
 #### convert the som table to a long form interprable by ggplot
@@ -1838,6 +1858,10 @@ long_table_of_final_SOM_summary_5_by_5_OBseries_separate[, "remainder_facet.x"] 
 
 long_table_of_final_SOM_summary_5_by_5_OBseries_separate[, "quotient_facet.y"] <- long_table_of_final_SOM_summary_5_by_5_OBseries_separate$cluster_minus_1 %/% 5
 
+# also create a tibble for the average line for each cluster
+long_table_of_final_SOM_summary_5_by_5_OBseries_separate_average.line <- long_table_of_final_SOM_summary_5_by_5_OBseries_separate %>% dplyr::group_by(cluster, timepoint, cluster_minus_1, remainder_facet.x, quotient_facet.y) %>% 
+  dplyr::summarise("avg_PSI_value" = mean(scaled_PSI_value))
+
 ```
 
 #### GGPLOT
@@ -1848,8 +1872,9 @@ all the genes
 
 # OB series
 
-ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries_separate, aes(x = timepoint, y = scaled_PSI_value)) +
-  geom_line(aes(group = paste(event_region_coords, diff_exon_coords, splicemode))) +
+ggplot() +
+  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries_separate, aes(x = timepoint, y = scaled_PSI_value, group = paste(event_region_coords, diff_exon_coords, splicemode)), alpha = 0.33) +
+  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries_separate_average.line, aes(x = timepoint, y = avg_PSI_value, group = cluster), colour = "white", size = 1) +
   scale_colour_manual(values = c("black")) +
   facet_grid(quotient_facet.y ~ remainder_facet.x) +
   ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate), "LSV PSI values during OB diff (any", pvalue_or_FDR, 
@@ -1863,7 +1888,9 @@ ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries_separate, aes(x = timepoi
  ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
  ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1941,6 +1968,10 @@ long_table_of_final_SOM_summary_5_by_5_OBseries_sum[, "remainder_facet.x"] <- lo
 
 long_table_of_final_SOM_summary_5_by_5_OBseries_sum[, "quotient_facet.y"] <- long_table_of_final_SOM_summary_5_by_5_OBseries_sum$cluster_minus_1 %/% 5
 
+# also create a tibble for the average line for each cluster
+long_table_of_final_SOM_summary_5_by_5_OBseries_sum_average.line <- long_table_of_final_SOM_summary_5_by_5_OBseries_sum %>% dplyr::group_by(cluster, timepoint, cluster_minus_1, remainder_facet.x, quotient_facet.y) %>% 
+  dplyr::summarise("avg_PSI_value" = mean(scaled_PSI_value))
+
 ```
 
 #### GGPLOT
@@ -1951,8 +1982,9 @@ all the genes
 
 # OB series
 
-ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries_sum, aes(x = timepoint, y = scaled_PSI_value)) +
-  geom_line(aes(group = paste(event_region_coords, diff_exon_coords, splicemode))) +
+ggplot() +
+  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries_sum, aes(x = timepoint, y = scaled_PSI_value, group = paste(diff_exon_coords, splicemode)), alpha = 0.33) +
+  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries_sum_average.line, aes(x = timepoint, y = avg_PSI_value, group = cluster), colour = "white", size = 1) +
   scale_colour_manual(values = c("black")) +
   facet_grid(quotient_facet.y ~ remainder_facet.x) +
   ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum), "exon PSI values during OB diff (any", pvalue_or_FDR, 
@@ -1966,7 +1998,9 @@ ggplot(long_table_of_final_SOM_summary_5_by_5_OBseries_sum, aes(x = timepoint, y
  ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
  ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_sum, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_sum, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_sum, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2014,7 +2048,7 @@ list_GO_categories <- c("MF", "BP", "CC") %>% array_tree
 list_of_GO_test_tibbles_anysig_with_na_raw <- purrr::map(.x = list_GO_categories, .f = ~systemPipeR::GOHyperGAll(catdb = catdb, gocat = .x, sample = vector_differential_genes_anysig_with_na, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% type_convert) %>% set_names(list_GO_categories)
 
 # filter out the top ~30 most significant GO terms for each node
-list_of_GO_test_tibbles_anysig_with_na_top.hits <- purrr::map(.x = list_of_GO_test_tibbles_anysig_with_na_raw, .f = ~dplyr::arrange(.x, Phyper) %>% head(n = 30))
+list_of_GO_test_tibbles_anysig_with_na_top.hits <- purrr::map(.x = list_of_GO_test_tibbles_anysig_with_na_raw, .f = ~dplyr::arrange(.x, Phyper) %>% head(n = 900) %>% dplyr::filter(NodeSize < 1500) %>% dplyr::mutate_at(.vars = "Term", .funs = function(x) {stringr::str_trunc(string = x, side = "right", width = 78) %>% return}))
 
 # print out the top hits of the GO enrichment
 purrr::map(.x = list_of_GO_test_tibbles_anysig_with_na_top.hits, .f = ~.x %>% print)
@@ -2030,19 +2064,21 @@ long_tibble_GO_test_anysig_with_na_top.hits <- list_of_GO_test_tibbles_anysig_wi
 
 # OB series
 
-ggplot(long_tibble_GO_test_anysig_with_na_top.hits, aes(x = reorder(Term, Phyper), y = SampleMatch)) +
-  geom_col(aes(fill = log(Padj))) +
-  scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-  facet_wrap(Ont ~ ., scales = "free") +
+ggplot(long_tibble_GO_test_anysig_with_na_top.hits, aes(x = reorder(Term, -Phyper), y = -log10(Phyper))) +
+  geom_col(aes(fill = SampleMatch)) +
+  scale_fill_distiller(name = "Number of genes enriched", type = "seq", palette = "Purples", direction = 1, aesthetics = "fill", na.value = "yellow") +
+  geom_hline(yintercept = -log10(0.05), lty = 2) +
+  coord_flip() +
+  facet_wrap(Ont ~ ., ncol = 3, scales = "free_y") +
   ggtitle(paste("Top 30 significantly over-represented GO terms for OB series for 
                 dPSI cutoff of", dpsi_cutoff, "and any sig", pvalue_or_FDR, pvalue_cutoff, "encompassing", number.of.genes_differential_anysig_with_na, "genes")) +
   xlab("GO term") +
-  ylab("Number of genes in GO term") +
+  ylab(expression(log["10"](P["b-hoch"]))) +
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype="solid", colour ="black"), text = element_text(family ="Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "top_30_GOterms_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "top_30 GOterms_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
+ ggsave(filename = paste(R_processing_results_dir, "top_30_GOterms_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 200, units = "cm", limitsize = FALSE) +
+ ggsave(filename = paste(R_processing_results_dir, "top_30 GOterms_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 200, units = "cm", limitsize = FALSE) 
 
 # write table of top 30 results
 write.table(x = long_tibble_GO_test_anysig_with_na_top.hits, file = paste(R_processing_results_dir, "top_30_GOterms_OB_series_dPSI_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.genes_differential_anysig_with_na, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
@@ -2083,6 +2119,19 @@ list_of_combinations_of_SOM_genes_and_GOterms_names <- cross2(.x = list_of_vecto
 # note: elements will look like: sep.PSI/MF, sum.PSI/MF, sep.PSI/BP, sum.PSI/BP etc...
 # gene ontology for each combination
 list_of_tibbles_SOM_hyperGOresult_clusterwise <- future_map(.x = list_of_combinations_of_SOM_genes_and_GOterms, .f = ~purrr::map2(.x = .x[[1]], .y = .x[[2]], .f = ~GOHyperGAll(catdb = catdb, gocat = .y, Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction %>% type_convert %>% as_tibble), .progress = TRUE)
+
+# write the table of top inf
+tibble_SOM_hyperGOresult_clusterwise_top_inf <- purrr::map2(.x = list_of_tibbles_SOM_hyperGOresult_clusterwise,
+                                                            .y = list_of_combinations_of_SOM_genes_and_GOterms_names,
+                                                            .f = function(a1, a2) {
+                                                              
+                                                              purrr::map2(.x = a1, .y = names(a1), .f = ~add_column(.x, 
+                                                                                                                   "cluster" = .y,
+                                                                                                                   "separate_or_sum_PSI" = a2[[1]] %>% strsplit(split = "_") %>% purrr::map(~.x[1]) %>% unlist)) %>% rbindlist %>% return
+                                                              
+                                                            } ) %>% rbindlist %>% as_tibble
+
+write.table(x = tibble_SOM_hyperGOresult_clusterwise_top_inf, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_OB_diff_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI", dpsi_cutoff, "_GO_topinf.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # filter gene ontology tables for top hits
 list_of_tibbles_SOM_hyperGOresult_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_SOM_hyperGOresult_clusterwise, .f = ~purrr::map(.x = .x, .f = ~dplyr::arrange(.x, Phyper) %>% head(n = 10)))
@@ -3168,50 +3217,6 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwi
 
 ```
 
-# REPEAT OF ANAYSES WITH PLAUSIBLE AS EVENTS ONLY
-
-## filtering out all the implausible AS events
-
-```{r}
-
-# function to fetch maximum AA length of each protein coding gene. AS regions cant be longer than this. very difficult to filter. in my experience, most exons are at most 200 nt but ok
-filtering_chr_strand_start_end_tibble_for_plausible_AS_events <- function(tibble_chr_strand_start_end) {
-  
-  # DEBUG ###
-  # tibble_chr_strand_start_end <- tibble_all_diff_exons_chr_strand_start_end
-  ###########
-  
-  a <- getBM(filters = "external_gene_name", values = tibble_chr_strand_start_end$Gene, attributes = c("external_gene_name", "transcript_length"), mart = ensembl_mart)
-  b <- a %>% group_by(external_gene_name) %>% na.omit %>% filter(transcript_length == max(transcript_length))
-  colnames(b) <- c("Gene", "transcript_length")
-  c <- dplyr::left_join(tibble_chr_strand_start_end, b, by = "Gene")
-  d <- c %>% dplyr::filter(width < transcript_length, .preserve = TRUE)
-  # retained introns and entire composite structures can be long. the other 4 have no excuse. the longest exon known in existence is 11555 bp long.
-  e <- d %>% dplyr::filter(width <= 11555) %>% unique
-  # e contains the final list of isoforms which have plausible AS length.
-  print(paste(nrow(e), "unique genes with plausible AS length after filtering"))
-  
-  return(e)
-  
-}
-
-## END filtering_chr_strand_start_end_tibble_for_plausible_AS_events
-
-```
-
-## filter all tables for plausible
-
-```{r}
-# 
-# # differential info table
-# wide_tibble_of_psisigma_results_allcomparisons_differential
-# 
-# 
-# # constitutive info table
-# tibble_constitutive_LSV_info
-
-```
-
 # Quality checks
 
 ## Set directory
@@ -3357,19 +3362,19 @@ tibble_all_exons_per_gene_freq_2 <- tibble_all_exons_per_gene_freq %>% group_by(
 
 ggplot(tibble_all_exons_per_gene_freq_2) + 
   geom_col(aes(y = NumberOfGenesWithExonNumber, x = no_exons)) +
-  geom_text(data = tibble_all_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 50)) +
-  ggtitle(paste("frequency distribution of exons per gene for all genes 
-                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  geom_text(data = tibble_all_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 300), angle = 90) +
+  ggtitle(paste("frequency distribution of exons per gene\n1:2 ratio = ", tibble_all_exons_per_gene_freq_2[1, 2]/tibble_all_exons_per_gene_freq_2[2, 2], sep = "")) +
   # scale_x_continuous(trans = "log2") +
-  xlim(c(0, 20)) +
+  ylim(c(0, max(tibble_all_exons_per_gene_freq_2$NumberOfGenesWithExonNumber) + 500)) +
+  scale_x_continuous(limits = c(0, 10), breaks = 1:10) +
   xlab("number of exons/gene") +
   ylab("number of genes") +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 8, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_all.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 8, units = "cm") 
 
-print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_all_exons_per_gene_freq_2[1, 2]/tibble_all_exons_per_gene_freq_2[2, 2]))
+# print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_all_exons_per_gene_freq_2[1, 2]/tibble_all_exons_per_gene_freq_2[2, 2]))
 
 ```
 
@@ -3388,19 +3393,19 @@ tibble_constitutive_exons_per_gene_freq_2 <- tibble_constitutive_exons_per_gene_
 # ggplot
 ggplot(tibble_constitutive_exons_per_gene_freq_2) + 
   geom_col(aes(y = NumberOfGenesWithExonNumber, x = no_exons)) +
-  geom_text(data = tibble_constitutive_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 50)) +
-  ggtitle(paste("frequency distribution of constitutive exons per gene for all genes 
-                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  geom_text(data = tibble_constitutive_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 300), angle = 90) +
+  ggtitle(paste("frequency distribution of exons per gene\n1:2 ratio = ", tibble_constitutive_exons_per_gene_freq_2[1, 2]/tibble_constitutive_exons_per_gene_freq_2[2, 2], sep = "")) +
   # scale_x_continuous(trans = "log2") +
-  xlim(c(0, 20)) +
+  ylim(c(0, max(tibble_constitutive_exons_per_gene_freq_2$NumberOfGenesWithExonNumber) + 500)) +
+  scale_x_continuous(limits = c(0, 10), breaks = 1:10) +
   xlab("number of exons/gene") +
   ylab("number of genes") +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 8, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 8, units = "cm") 
 
-print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_constitutive_exons_per_gene_freq_2[1, 2]/tibble_constitutive_exons_per_gene_freq_2[2, 2]))
+# print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_constitutive_exons_per_gene_freq_2[1, 2]/tibble_constitutive_exons_per_gene_freq_2[2, 2]))
 
 ```
 
@@ -3417,22 +3422,21 @@ tibble_differential_exons_per_gene_freq <- wide_tibble_of_psisigma_results_allco
 tibble_differential_exons_per_gene_freq_2 <- tibble_differential_exons_per_gene_freq %>% group_by(no_exons) %>% summarise(NumberOfGenesWithExonNumber = n())
 
 # ggplot
-
 ggplot(tibble_differential_exons_per_gene_freq_2) + 
   geom_col(aes(y = NumberOfGenesWithExonNumber, x = no_exons)) +
-  geom_text(data = tibble_differential_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 50)) +
-  ggtitle(paste("frequency distribution of differential exons per gene for all genes 
-                ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
+  geom_text(data = tibble_differential_exons_per_gene_freq_2, aes(label = NumberOfGenesWithExonNumber, y = NumberOfGenesWithExonNumber + 20, x = no_exons), position = position_nudge(y = 100), angle = 90) +
+  ggtitle(paste("frequency distribution of exons per gene\n1:2 ratio = ", tibble_differential_exons_per_gene_freq_2[1, 2]/tibble_differential_exons_per_gene_freq_2[2, 2], sep = "")) +
   # scale_x_continuous(trans = "log2") +
-  xlim(c(0, 20)) +
+  ylim(c(0, max(tibble_differential_exons_per_gene_freq_2$NumberOfGenesWithExonNumber) + 200)) +
+  scale_x_continuous(limits = c(0, 10), breaks = 1:10) +
   xlab("number of exons/gene") +
   ylab("number of genes") +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm") 
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 8, units = "cm") +
+  ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_exons_per_gene_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 8, units = "cm") 
 
-print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_differential_exons_per_gene_freq_2[1, 2]/tibble_differential_exons_per_gene_freq_2[2, 2]))
+# print(paste("Ratio of number of 1 exon genes : 2 exon genes =", tibble_differential_exons_per_gene_freq_2[1, 2]/tibble_differential_exons_per_gene_freq_2[2, 2]))
 
 ```
 
@@ -3442,45 +3446,52 @@ incl. NMD, first/last exon.
 
 ```{r}
 
+# band-aid: add columns for reference first/last exon.
+wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final %>% 
+  add_column("first_exon_reference" = grepl(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "first_exon"),
+             "last_exon_reference" = grepl(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "last_exon"))
+
 # category means splicemode + NMD status + first/last exon
 # also clean up the splicemode column
-tibble_exons_per_category_all <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_exons_all = n())
+tibble_exons_per_category_all <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% 
+  # , any_NMD
+  group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_all = n())
 
 all_exons_count <- tibble_exons_per_category_all$no_exons_all %>% sum(na.rm = TRUE)
-number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$any_NMD == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
-number_first_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$any_first_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
-number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$any_last_exon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+# number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$any_NMD == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_first_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$first_exon_reference == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$last_exon_reference == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_all_exons*100/all_exons_count, "% NMD exons overall.")
+# message("There are ", number_NMD_all_exons*100/all_exons_count, "% NMD exons overall.")
 message("There are ", number_first_exon_all_exons*100/all_exons_count, "% first exons overall.")
 message("There are ", number_last_exon_all_exons*100/all_exons_count, "% last exons overall.")
 
-tibble_exons_per_category_constitutive <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_exons_constitutive = n())
+tibble_exons_per_category_constitutive <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_constitutive = n())
 
 constitutive_exons_count <- tibble_exons_per_category_constitutive$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_first_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_first_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
-number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_last_exon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+# number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_first_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$first_exon_reference == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$last_exon_reference == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_constitutive_exons*100/constitutive_exons_count, "% NMD exons constitutive.")
+# message("There are ", number_NMD_constitutive_exons*100/constitutive_exons_count, "% NMD exons constitutive.")
 message("There are ", number_first_exon_constitutive_exons*100/constitutive_exons_count, "% first exons constitutive.")
 message("There are ", number_last_exon_constitutive_exons*100/constitutive_exons_count, "% last exons constitutive.")
 
-tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, any_NMD, any_first_exon, any_last_exon) %>% summarise(no_exons_differential = n())
+tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_differential = n())
 
 differential_exons_count <- tibble_exons_per_category_differential$no_exons_differential %>% sum(na.rm = TRUE)
-number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_NMD == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
-number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_first_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
-number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_last_exon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+# number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_NMD == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$first_exon_reference == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$last_exon_reference == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 
-message("There are ", number_NMD_differential_exons*100/differential_exons_count, "% NMD exons differential.")
+# message("There are ", number_NMD_differential_exons*100/differential_exons_count, "% NMD exons differential.")
 message("There are ", number_first_exon_differential_exons*100/differential_exons_count, "% first exons differential.")
 message("There are ", number_last_exon_differential_exons*100/differential_exons_count, "% last exons differential.")
 
 tibble_exons_per_category_summary <- list(tibble_exons_per_category_all, tibble_exons_per_category_constitutive, tibble_exons_per_category_differential) %>% purrr::reduce(dplyr::full_join)
 
 # melt the sample
-long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "any_NMD", "any_first_exon", "any_last_exon"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
+long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary, id.vars = c("splicemode", "first_exon_reference", "last_exon_reference"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
   # add the overall counts for each splicemode
   dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_exons_per_splicemode" = sum(number_of_exons_per_category %>% na.omit))
 
@@ -3493,28 +3504,28 @@ long_tibble_exons_per_category_summary_2 <- reshape2::melt(long_tibble_exons_per
 
 max_number_of_exons_per_splicemode <- max(long_tibble_exons_per_category_summary_2$number_of_exons_per_splicemode)
 max_percentage_exons_per_category <- max(long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ] %>% .$percentage_exons_per_category %>% na.omit)
-max_number_of_exons_per_splicemode_for_plot <- max_number_of_exons_per_splicemode
+max_number_of_exons_per_splicemode_for_plot <- max_number_of_exons_per_splicemode + 3000
 
 # ggplot
 ggplot() + 
-  geom_col(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_exons_per_splicemode, x = splicemode)) +
+  geom_col(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")] %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_exons_per_splicemode, x = splicemode)) +
   facet_wrap(~sample, scales = "free", labeller = labeller(sample = c(no_exons_all = "All exons", no_exons_constitutive = "Constitutive", no_exons_differential = "Differential"))) +
-  geom_label(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_exons_per_splicemode, y = number_of_exons_per_splicemode, x = splicemode), position = position_identity()) +
-  geom_jitter(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode_for_plot / max_percentage_exons_per_category , shape = NMD_first_last_exon), width = 0.1, height = 0) +
-  ggtitle(paste("Frequency distribution of exons per category 
+  geom_text(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_exons_per_splicemode, y = number_of_exons_per_splicemode, x = splicemode), angle = 90, position = position_nudge(x = 0, y = 2000)) +
+  geom_jitter(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode_for_plot / max_percentage_exons_per_category , shape = NMD_first_last_exon), width = 0.1, height = 0) + ggtitle(paste("Frequency distribution of exons per category 
                 ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
   xlab("Splicemode") +
-  scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage NMD/first/last exon per splicemode"))) +
-  scale_shape_manual(name = "Category", limits = c("any_NMD", "any_first_exon", "any_last_exon"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) + 
+  scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage first/last exon per splicemode"), breaks = seq(0, 100, 20))) +
+  scale_shape_manual(name = "Category", limits = c("first_exon_reference", "last_exon_reference"), labels = c("First exon", "Last exon"), values = c(1, 4, 19)) +
+  # scale_shape_manual(name = "Category", limits = c("any_NMD", "first_exon_reference", "last_exon_reference"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
-  ggsave(filename = paste(R_processing_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm") 
+  ggsave(filename = paste(R_processing_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 8, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 8, units = "cm") 
 
 # upset plot
 message("all exons")
-df <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -3527,8 +3538,8 @@ pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_pe
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
                       left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
-                                                                     "any_first_exon" = "Exon ontology",
-                                                                     "any_last_exon" = "Exon ontology",
+                                                                     "first_exon_reference" = "Exon ontology",
+                                                                     "last_exon_reference" = "Exon ontology",
                                                                      "A3SS" = "Splicemode",
                                                                      "A5SS" = "Splicemode",
                                                                      "IR" = "Splicemode",
@@ -3541,7 +3552,7 @@ ComplexHeatmap::UpSet(upset_combs,
 dev.off()
 
 message("all constitutive")
-df <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -3554,8 +3565,8 @@ pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_pe
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
                       left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
-                                                                     "any_first_exon" = "Exon ontology",
-                                                                     "any_last_exon" = "Exon ontology",
+                                                                     "first_exon_reference" = "Exon ontology",
+                                                                     "last_exon_reference" = "Exon ontology",
                                                                      "A3SS" = "Splicemode",
                                                                      "A5SS" = "Splicemode",
                                                                      "IR" = "Splicemode",
@@ -3568,7 +3579,9 @@ ComplexHeatmap::UpSet(upset_combs,
 dev.off()
 
 message("all differential")
-df <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "any_first_exon", "any_last_exon")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + any_first_exon + any_last_exon ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+# , "any_NMD"
+ # + any_NMD
 
 df[is.na(df)] = FALSE
 
@@ -3576,60 +3589,32 @@ upset_combs <- data.frame(df %>% dplyr::select(., -diff_exon_coords), row.names 
 
 print(set_size(upset_combs))
 
-pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 4, width = 10)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 3, width = 7)
 
-ComplexHeatmap::UpSet(upset_combs, 
-                      comb_order = order(-comb_size(upset_combs)), 
-                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
-                                                                     "any_first_exon" = "Exon ontology",
-                                                                     "any_last_exon" = "Exon ontology",
-                                                                     "A3SS" = "Splicemode",
-                                                                     "A5SS" = "Splicemode",
-                                                                     "IR" = "Splicemode",
-                                                                     "MES" = "Splicemode",
-                                                                     "MXS" = "Splicemode",
-                                                                     "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
-                                                      col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
-                                                      ))
+  ht <- ComplexHeatmap::UpSet(upset_combs, 
+                              comb_order = order(-comb_size(upset_combs)), 
+                              left_annotation = rowAnnotation("Set Type" = c(
+                                # "any_NMD" = "Exon ontology",
+                                "first_exon_reference" = "Reference location",
+                                "last_exon_reference" = "Reference location",
+                                "A3SS" = "Splicemode",
+                                "A5SS" = "Splicemode",
+                                "IR" = "Splicemode",
+                                "MES" = "Splicemode",
+                                "MXS" = "Splicemode",
+                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                col = list("Set Type" = c("Reference location" = "tomato1", "Splicemode" = "red4"))
+                              )) %>% draw
+  od <- column_order(ht)
+  cs <- comb_size(upset_combs)
+  decorate_annotation("Intersection\nsize", {
+    grid.text(cs[od], x = seq_along(cs), y = unit(cs[od], "native") + unit(2, "pt"), 
+              default.units = "native", just = c("left"), gp = gpar(fontsize = 10), rot = 90)
+  })
 
 dev.off()
 
 ```
-
-## frequency distribution of no. events detected per category
-
-```{r}
-
-junctions_per_category_all_freq <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode) %>% summarise(no_junctions_all = n())
-
-junctions_per_category_AS_plausible_freq <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05_AS_plausible %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode) %>% summarise(no_junctions_AS_plausible = n())
-
-junctions_per_category_summary <- dplyr::full_join(junctions_per_category_all_freq, junctions_per_category_AS_plausible_freq, by = "splicemode")
-
-junctions_per_category_summary_2 <- add_column(junctions_per_category_summary, "percentage_change_after_AS_plausible_filtering" = paste(signif((junctions_per_category_summary$no_junctions_AS_plausible - junctions_per_category_summary$no_junctions_all) * 100 / junctions_per_category_summary$no_junctions_all, 2), "%"))
-
-long_junctions_per_category_summary_2 <- reshape2::melt(junctions_per_category_summary_2, id.vars = "splicemode")
-
-long_junctions_per_category_summary_3 <- add_column(long_junctions_per_category_summary_2, "value_numeric" = gsub(x = long_junctions_per_category_summary_2$value, pattern = " %", replacement = "") %>% as.numeric)
-
-# ggplot
-
-ggplot(long_junctions_per_category_summary_3) + 
-geom_col(aes(y = value_numeric, x = splicemode)) +
-facet_wrap(~variable, scales = "free") +
-geom_label(data = long_junctions_per_category_summary_3, aes(label = value, y = value_numeric, x = splicemode)) +
-ggtitle(paste("frequency distribution of differentially spliced junctions per category 
-              ", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, sep = "")) +
-xlab("AS category") +
-ylab("Number of differential junctions") +
-theme_bw() +
-theme(text = element_text(family = "Helvetica")) +
-theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family ="Helvetica")) +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_category_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
-ggsave(filename = paste(qualitycheck_results_dir, "frequency_distribution_of_junctions_per_category_", p_or_q_value, qpvalue_cutoff, "_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm") 
-
-```
-
 ## graph the no. of exons detected vs. maximum transcript length
 
 ### fetch max. transcript lengths for genes in biomart
@@ -4244,7 +4229,7 @@ tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::
   as_tibble %>%
   setNames(c("diff_exon_coords", "splicemode", "transcript_ids_with_annotation", "transcript_features")) %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")] %>% na.omit %>% unique, ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -4255,7 +4240,7 @@ tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("
   rbindlist %>% 
   as_tibble %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")] %>% na.omit %>% unique, ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_biomart_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -4266,7 +4251,7 @@ tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff
   rbindlist %>% 
   as_tibble %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")] %>% na.omit %>% unique, ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_PTM_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -4278,7 +4263,7 @@ tibble_final_annotation_supp <- list_tidied_annotation %>%
   purrr::map(~.x %>% flatten %>% as_tibble) %>%
   purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist %>% as_tibble %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")], ., by = "diff_exon_coords")
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_gene_names")] %>% na.omit %>% unique, ., by = "diff_exon_coords")
 # write table
 write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_dir, "table_exon_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
   
@@ -4326,16 +4311,15 @@ tibble_interpro_id_tally_per_diff.exon <- dplyr::right_join(tibble_interpro_ID_t
 tibble_interpro_id_tally_per_diff.exon <- dplyr::right_join(tibble_interpro_ID_to_matched_gene_mapping, tibble_interpro_id_tally_per_diff.exon, by = "interpro_id")
 # plot
 ggplot(tibble_interpro_id_tally_per_diff.exon %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
-  geom_col(fill = "dodgerblue2") +
+  geom_col(fill = "firebrick4") +
   ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of differential exons", dpsi_cutoff, "and any sig", pvalue_or_FDR, pvalue_cutoff, "encompassing", nrow(tibble_protein_level_summary_count), "exons")) +
   xlab("Interpro identifier") +
   scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
   ylab("Number of hits") +
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 15, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 15, units = "cm") 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8), axis.text.y = element_text(size = 20), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) + ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 10, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 10, units = "cm") 
 
 write.table(x = tibble_interpro_id_tally_per_diff.exon, file = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -4348,5 +4332,27 @@ message("total number of unique exons overlapping a disordered region: ", length
 message("total number of unique exons overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 message("total number of unique exons overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 message("total number of unique exons overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+
+```
+
+### count PTM overlap numbers
+
+```{r}
+
+tibble_PTM_tally <- tibble_final_PTM_annotation %>% dplyr::distinct(diff_exon_coords, splicemode, PTM_type) %>% na.omit %>% dplyr::group_by(PTM_type) %>% dplyr::summarise("tally" = n())
+
+# plot
+ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
+  geom_col(fill = "firebrick4") +
+  geom_text(stat = "identity", nudge_y = 1, aes(label = tally), angle = 90, hjust = 0) +
+  ggtitle(paste("Tally of PTMs inside differentially spliced regions\nPSI-Sigma")) +
+  xlab("PTM type") +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Frequency") +
+  ylim(c(0, max(tibble_PTM_tally$tally) + 5)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 4, height = 8, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
 
 ```

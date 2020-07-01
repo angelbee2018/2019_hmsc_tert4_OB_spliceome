@@ -1488,65 +1488,6 @@ bam_subsets_dir <- paste("Y:/2019_rauch_data/scRNASeq/cellranger_results/split_b
 
 ```
 
-### Use subsetBam from Sierra - IT DOESN'T WORK.
-
-```{r eval=FALSE, include=FALSE}
-
-plan(multiprocess, workers = 4)
-
-purrr::map(.x = OBseries_timepoints, .f = function(a1) {
-  
-  # DEBUG ###
-  # a1 <- OBseries_timepoints[1]
-  ###########
-  
-  # extract information mapping each cluster to the cell ids contained
-  df_cell.ids_to_cluster_ud <- seurat_object_combined_filtered$seurat_clusters %>% 
-    as_tibble(rownames = "cell_identifier") %>%
-    setNames(c("cellbc", "celltype")) %>%
-    .[grep(x = .$cellbc, pattern = a1), ] %>%
-    dplyr::mutate_at(.vars = "celltype", .funs = function(x) {paste("cluster", x, sep = "_")} ) %>%  
-    dplyr::mutate_at(.vars = "cellbc", .funs = function(x) {gsub(x = x, pattern = "^(BM_MSC_to_OB_.*)\\_(.*)", replacement = "\\2")} ) %>% 
-    as.data.frame
-  
-  future_map(.x = df_cell.ids_to_cluster_ud$celltype %>% unique, 
-             .f = function(b1) {
-               
-               # DEBUG ###
-               # b1 <- df_cell.ids_to_cluster_ud$celltype %>% unique %>% .[1]
-               ###########
-               
-               set.seed(7)
-               
-               output_dir <- paste(bam_subsets_dir, a1, "/", sep = "")
-               
-               # create 3 pseudo-replicates by changing the "celltype" for each cluster at random
-               tibble_manifest_subset <- df_cell.ids_to_cluster_ud[df_cell.ids_to_cluster_ud$celltype == b1, ] %>% 
-                 ## shuffle rows 
-                 .[sample(1:nrow(.)), ]
-               ## assign replicates
-               tibble_manifest_subset[1:((nrow(tibble_manifest_subset)/3) %>% floor), "celltype"] <- paste(tibble_manifest_subset[1:((nrow(tibble_manifest_subset)/3) %>% floor), "celltype"] %>% unlist, "_pseudorep1", sep = "")
-               tibble_manifest_subset[((nrow(tibble_manifest_subset)/3) %>% floor + 1):((2*nrow(tibble_manifest_subset)/3) %>% floor), "celltype"] <- paste(tibble_manifest_subset[((nrow(tibble_manifest_subset)/3) %>% floor + 1):((2*nrow(tibble_manifest_subset)/3) %>% floor), "celltype"] %>% unlist, "_pseudorep2", sep = "")
-               tibble_manifest_subset[((2*nrow(tibble_manifest_subset)/3) %>% floor + 1):nrow(tibble_manifest_subset), "celltype"] <- paste(tibble_manifest_subset[((2*nrow(tibble_manifest_subset)/3) %>% floor + 1):nrow(tibble_manifest_subset), "celltype"] %>% unlist, "_pseudorep3", sep = "")
-               
-               if(! dir.exists(output_dir) ) {
-                 dir.create(output_dir, recursive = TRUE)}
-               
-               SplitBam(bam = paste("Y:/2019_rauch_data/scRNASeq/cellranger_results/", a1, "/outs/possorted_genome_bam.bam", sep = ""),
-                        cellbc.df = tibble_manifest_subset,
-                        outdir = output_dir)
-               
-             }, .progress = TRUE, .options = future_options(globals = c("SplitBam", "df_cell.ids_to_cluster_ud", "bam_subsets_dir", "a1")) )
-  
-} )
-
-# SplitBam(bam = "Y:/2019_rauch_data/scRNASeq/cellranger_results/merged.bam", 
-#          cellbc.df = df_cell.ids_to_cluster, 
-#          outdir = bam_subsets_dir,
-#          yieldSize = 1e7)
-
-```
-
 ### Write the .csv table describing the pseudo-samples mapping to the cell barcode (clusters)
 
 ```{r}

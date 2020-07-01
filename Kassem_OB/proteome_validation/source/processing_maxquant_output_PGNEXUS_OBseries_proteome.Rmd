@@ -47,7 +47,7 @@ library(seqinr)
 
 # maxquant_junctions.3FT_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_maxquant/run_1_PGNEXUS_OBseries_allsamples_angel.junctions.3FT/txt/"
 
-R_processing_results_dir <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/", sep="")
+R_processing_results_dir <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/", sep = "")
 
 if(! dir.exists(R_processing_results_dir) ) {
      dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -205,28 +205,40 @@ rename_column_exact <- function(input_tibble, target_column, output_colname) {
 
 ```{r}
 
-split_delimited_column_in_table <- function(input_table, target_colname, split, columns_to_deduplicate = NULL) {
+split_delimited_columns_in_table <- function(input_table, target_colname, split, columns_to_deduplicate = NULL) {
   
   # DEBUG ###
-  # input_table <- tibble_phosphosites_with_protein_group_ids
-  # target_colname <- "Protein.group.IDs"
+  # input_table <- test
+  # target_colname <- c("Proteins", "Positions.within.proteins", "Fasta.headers", "Leading.proteins")
   # split = "\\;"
-  # columns_to_deduplicate <- c("id", "1h_vs_ud|IB")
+  # columns_to_deduplicate <- c("id")
   ###########
   
   # list-ify the target column
-  list_target_column_strsplit_per_element <- input_table[, target_colname] %>% unlist %>% strsplit(., split = split)
+  list_target_column_strsplit_per_element <- input_table[, target_colname] %>% array_tree(margin = 2) %>% purrr::map(~.x %>% unlist %>% strsplit(., split = split))
   
   # map length
-  vector_split_lengths <- list_target_column_strsplit_per_element %>% purrr::map(~length(.x)) %>% unlist(use.names = FALSE)
+  vector_sum_lengths <- list_target_column_strsplit_per_element %>% purrr::map(~length(.x %>% unlist)) %>% unlist(use.names = FALSE) %>% unique
+  
+  # check. if the split lengths are different, then die.
+  if (length(vector_sum_lengths) != 1) {
+    
+    stop("split lengths are uneven across specified columns.")
+    
+  }
   
   # repeat table according to the split lengths
-  row_indices_of_table_repeated_by_split <- rep(x = 1:nrow(input_table), times = vector_split_lengths)
+  vector_split_lengths <- purrr::map_depth(.x = list_target_column_strsplit_per_element, .depth = 2, .f = ~length(.x)) %>% 
+    purrr::map(~unlist(.x)) %>%
+    purrr::pmap(.f = ~max(...)) %>%
+    unlist
+  
+  row_indices_of_table_repeated_by_split <- purrr::map2(.x = 1:nrow(input_table), .y = vector_split_lengths, .f = ~rep(x = .x, times = .y)) %>% unlist
   
   input_table_repeated_by_split <- input_table[row_indices_of_table_repeated_by_split, ]
   
   # replace target column with split values
-  input_table_repeated_by_split[, target_colname] <- list_target_column_strsplit_per_element %>% unlist(use.names = FALSE)
+  input_table_repeated_by_split[, target_colname] <- list_target_column_strsplit_per_element %>% purrr::map(~unlist(.x)) %>% purrr::reduce(cbind)
   
   split_table <- input_table_repeated_by_split
   
@@ -265,7 +277,7 @@ split_delimited_column_in_table <- function(input_table, target_colname, split, 
     
   }
   
-  return(split_table %>% type_convert)
+  return(split_table)
   
 }
 
@@ -322,13 +334,17 @@ average_replicates_by_column <- function(table, design_factor, min_replicates) {
 
 ```{r}
 
-list_maxquant_run_dirs <- list("junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons/txt/",
+list_maxquant_run_dirs <- list("2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/txt/",
+                               "2020_phosphoproteome_OBseries_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons/txt/",
                                # "sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons/txt/",
                                # "con_sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons/txt/",
-                               "con_sp.hsa.canonical.isoforms_trembl" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_trembl/txt/"
+                               "2012_PGNEXUS_proteome_con.sp.canonical.isoforms_katana" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_con.sp.canonical.isoforms_katana/txt/",
+                               "2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons_katana" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons_katana/txt/",
+                               "2012_PGNEXUS_proteome_junc.exons_katana" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_junc.exons_katana/txt/"
                                )
                                
 list_output.table_categories <- list("modification_specific_peptides" = "modificationSpecificPeptides.txt", 
+                                     "msms" = "msms.txt",
                                      "peptides" = "peptides.txt", 
                                      "protein_groups" = "proteinGroups.txt",
                                      "phosphosites" = "Phospho (STY)Sites.txt")
@@ -351,9 +367,10 @@ list_imported_maxquant_tibbles <- list_imported_maxquant_tibbles %>% purrr::map(
 
 ```{r}
 
-list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles %>% 
-  
-  purrr::map(.f = ~modify_at(.x = .x, .at = c("peptides", "protein_groups", "phosphosites"), .f = ~dplyr::filter(.x, MS.MS.count != 0) %>% dplyr::arrange(., PEP)) )
+list_imported_maxquant_tibbles_processed <- list_imported_maxquant_tibbles 
+
+# filtering by MS.MS.Count may not be reliable
+# %>% purrr::map(.f = ~modify_at(.x = .x, .at = c("peptides"), .f = ~dplyr::filter(.x, MS.MS.Count != 0) %>% dplyr::arrange(., PEP)) )
 
 ```
 
@@ -434,7 +451,7 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = peptide_cl
 # line - absolute counts
 ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, color = peptide_class)) +
   geom_density(aes(y = ..count..)) +
-  # facet_wrap(~dbrun + peptide_class, scales = "free") +
+  facet_wrap(~dbrun, scales = "free") +
   ggtitle(expression(Comparison~of~peptide~p-value~(PEP)~distributions~(PEP <= 0.05~only))) +
   xlab(expression(PEP)) +
   # xlim(c(0, 1)) +
@@ -449,12 +466,12 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, color
 # line - normalised counts
 ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun, aes(x = PEP, color = peptide_class)) +
   geom_density(aes(y = ..density..)) +
-  # facet_wrap(~dbrun + peptide_class, scales = "free") +
+  facet_wrap(~dbrun, scales = "free") +
   ggtitle(expression(Comparison~of~peptide~p-value~(PEP)~distributions~(PEP <= 0.05~only))) +
   xlab(expression(PEP)) +
   # xlim(c(0, 1)) +
   scale_x_continuous(limits = c(-0.005, 0.051), breaks = c(-0.005, seq(0, 0.051, 0.005))) +
-  ylab("Frequency (smoothed)") +
+  ylab("Frequency density (smoothed)") +
   scale_color_manual(limits = c("swissprot_hits", "exon_3FT_hits", "junction_3FT_hits", "contaminants", "reversed_sequences"), labels = c("Swissprot hits", "Exons from 3FT", "Junctions from 3FT", "Contaminant", "Reversed sequence"), values = c("red", "salmon", "purple4", "grey75", "lawngreen"), name = "Peptide Hit Type") + 
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
@@ -598,7 +615,7 @@ str(list_local_FDR)
 
 ```{r}
 
-tibble_junc.exons_filtered <- list_imported_maxquant_tibbles_processed$junc.exons$peptides %>%
+tibble_junc.exons_filtered <- list_imported_maxquant_tibbles_processed[c("2012_PGNEXUS_proteome_junc.exons_katana", "2020_phosphoproteome_OBseries_junc.exons")] %>% purrr::map2(.x = ., .y = names(.), ~.x$peptides %>% add_column("dbrun" = .y)) %>% rbindlist(fill = TRUE) %>% as_tibble %>% 
   dplyr::filter(PEP <= 0.01 & Score >= 30 & str_detect(string = Leading.razor.protein, pattern = "^REV") == FALSE) %>%
   type_convert
 
@@ -657,7 +674,7 @@ tibble_detailed_3FT_summary_PSIsigma <- read.delim(file = paste(`3FT_results_dir
 
 ## Evaluate junction spanning of tryptic peptides
 
-## Retrieve the parent peptide start and end positions of the matched peptides and test for spanning.
+### Retrieve the parent peptide start and end positions of the matched peptides and test for spanning.
 
 ```{r}
 
@@ -700,7 +717,7 @@ cat("\nWe have identified", which(list_tryptic_junc_peptides_spanning_logical_te
 
 ```
 
-## further explore what the junction-spanning peptides are
+### further explore what the junction-spanning peptides are
 
 ```{r}
 
@@ -708,7 +725,7 @@ tibble_junction_spanning_peptides_identifier.gene <- tibble_junc.exons_filtered_
 
 ```
 
-### GO enrichment for all junction spanning peptides + exonic peptides identified
+#### GO enrichment for all junction spanning peptides + exonic peptides identified
 
 ```{r}
 
@@ -716,12 +733,18 @@ tibble_junction_spanning_peptides_identifier.gene <- tibble_junc.exons_filtered_
 tibble_confirmed_junc.exons <- dplyr::bind_rows(tibble_junction_spanning_peptides_identifier.gene, tibble_junc.exons_to_gene.name[grep(x = tibble_junc.exons_to_gene.name$Leading.razor.protein, pattern = "exon"), ]) %>% 
   dplyr::arrange(gene_name)
 
+# write table
+write.table(tibble_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_brief.info_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
 # CONDUCT ENRICHMENT
-tibble_hyperGO_confirmed_junc.exons <- dplyr::bind_rows(GOHyperGAll(catdb = catdb, gocat = "MF", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ","), Nannot = 2) %>% GOHyperGAll_benjamini_correction,
-                                                        GOHyperGAll(catdb = catdb, gocat = "BP", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ","), Nannot = 2) %>% GOHyperGAll_benjamini_correction,
-                                                        GOHyperGAll(catdb = catdb, gocat = "CC", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ","), Nannot = 2) %>% GOHyperGAll_benjamini_correction) %>% as_tibble
+tibble_hyperGO_confirmed_junc.exons <- dplyr::bind_rows(GOHyperGAll(catdb = catdb, gocat = "MF", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "BP", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "CC", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction) %>% as_tibble
 
 write.table(tibble_hyperGO_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_hyperGO_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+# write the geneset
+write.table(tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, file = paste(R_processing_results_dir, "table_geneset_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 ```
 
@@ -732,253 +755,582 @@ Step 2: Calculate the genome-relative positions of the identified tryptic peptid
 Step 3: Write a BLOCKED bed file (BED12 format)
 Step 4 (outside R): BEDtoBAM
 
+### PEPTIDES
 ### calculate genome-relative ranges of all the nucleotides encoding the identified tryptic peptides
-#### return a bedfile-like format
+### return a bedfile-like format
 
 ```{r}
 
-# NOTE: this return nothing
-purrr::map2(
-  .x = list_imported_maxquant_tibbles_processed["junc.exons"], 
-  .y =  names(list_imported_maxquant_tibbles_processed["junc.exons"]), 
-  .f = function(.x, .y) {
+# split table by exons or junctions
+tibble_junction_peptides_only <- tibble_junc.exons_filtered[grep(x = tibble_junc.exons_filtered$Leading.razor.protein, pattern = "junction_"), ]
+tibble_exon_peptides_only <- tibble_junc.exons_filtered[grep(x = tibble_junc.exons_filtered$Leading.razor.protein, pattern = "exon_"), ]
+
+# to get the genome-relative coords of tryptic peptides, loop thru every tryptic peptide + fasta identifier combination
+# extract the MQ outputted start/end positions: 
+# 1. They are the valid-ORF-relative coords, 
+# 2. then parent translated transcript-relative coords then,
+# 3. use the translation frame and 3x length to get the nucleotide positions.
+# 4. convert individual nt positions to genomic ranges
+
+# match junctions #####
+## retrieve the row index of the detailed 3FT table
+## match FASTA header and sequence
+## take the first match is fine.
+list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- tibble_junction_peptides_only[5, ]
+  ###########
+  
+  cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+  
+  row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
+                                              str_detect(string = tibble_detailed_3FT_summary_JUM$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+  
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table, ]
+  
+  # get translated transcript-relative AA coords
+  translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  
+  # get transcript relative nt coords
+  ## NOTE: this is strand-dependent.
+  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  
+  # get genome-relative positions for every nt encoding the tryptic peptide
+  ## have to take the strand into account.
+  ### extract the genome-relative forward coords of every nt in the parent transcript
+  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+  ### use the transcript-relative nt coords to match
+  ### then sort in increasing order for the next step
+  if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
     
-    # DEBUG ###
-    .x <- list_imported_maxquant_tibbles_processed[["junc.exons"]]
-    .y <- names(list_imported_maxquant_tibbles_processed["junc.exons"])
-    ###########
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
     
-    a1 <- .x
-    a2 <- .y
+  } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
     
-    cat("now processing", a2, "at level 1\n")
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
     
-    L2_list <- purrr::map2(
-      .x = a1[c("peptides")], 
-      names(a1[c("peptides")]), 
-      .f = function(.x, .y) {
-        
-        # DEBUG ###
-        b1 <- list_imported_maxquant_tibbles_processed[["junc.exons"]][["peptides"]] %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
-        b2 <- names(list_imported_maxquant_tibbles_processed[["junc.exons"]]["peptides"])
-        ###########
-        
-        b1 <- .x %>% dplyr::filter(PEP <= 0.01 & Score >= 30) %>% .[-grep(x = .$Leading.razor.protein, pattern = "REV"), ]
-        b2 <- .y
-        
-        cat("now processing", b2, "at level 2\n") 
-        
-        # split table by exons or junctions
-        tibble_junction_peptides_only <- b1[grep(x = b1$Leading.razor.protein, pattern = "junction_"), ]
-        tibble_exon_peptides_only <- b1[grep(x = b1$Leading.razor.protein, pattern = "exon_"), ]
-        
-        # to get the genome-relative coords of tryptic peptides, loop thru every tryptic peptide + fasta identifier combination
-        # extract the MQ outputted start/end positions: 
-        # 1. They are the valid-ORF-relative coords, 
-        # 2. then parent translated transcript-relative coords then,
-        # 3. use the translation frame and 3x length to get the nucleotide positions.
-        # 4. convert individual nt positions to genomic ranges
-        
-        # match junctions #####
-        ## retrieve the row index of the detailed 3FT table
-        ## match FASTA header and sequence
-        ## take the first match is fine.
-        list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
-          
-          # DEBUG ###
-          # a1 <- tibble_junction_peptides_only[5, ]
-          ###########
-          
-          cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
-          
-          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
-                                                      str_detect(string = tibble_detailed_3FT_summary_JUM$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
-          
-          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table, ]
-          
-          # get translated transcript-relative AA coords
-          translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
-          translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
-          
-          # get transcript relative nt coords
-          ## NOTE: this is strand-dependent.
-          parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-          parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-          
-          # get genome-relative positions for every nt encoding the tryptic peptide
-          ## have to take the strand into account.
-          ### extract the genome-relative forward coords of every nt in the parent transcript
-          ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
-          vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
-          ### use the transcript-relative nt coords to match
-          ### then sort in increasing order for the next step
-          if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
-            
-            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-            
-          } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
-            
-            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-            
-          }
-          
-          # convert the individual nt positions to a set of ranges
-          ## achieve this by comparing n to n + 1
-          ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
-          tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
-                                      "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
-            add_column("difference" = .$n.plus.1 - .$n)
-          
-          ## if there are no gaps, then just take the genomic range as the start:end
-          if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
-            
-            vec_blockCount <- 1
-            vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
-            vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
-            
-          } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
-            
-            vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
-            vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
-                                 tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
-            vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
-                               last(all_genome_relative_positions_of_tryptic_peptide))
-            vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
-            
-          }
-          
-          # the block details are still vector at this point. 
-          # must paste collapse in order to use in the BED file.
-          tibble_block_info <- tibble(
-            "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
-            "start" = first(all_genome_relative_positions_of_tryptic_peptide),
-            "end" = last(all_genome_relative_positions_of_tryptic_peptide),
-            "name" = a1$Leading.razor.protein %>% paste %>% trimws,
-            "score" = a1$Score %>% as.numeric,
-            "strand"= tibble_matched_3FT_entry$matched_junction_strand,
-            "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
-            "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
-            "itemRgb" = "153,0,255",
-            "blockCount" = vec_blockCount %>% paste(collapse = ","),
-            "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
-            "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
-            "qName" = a1$Sequence %>% paste %>% trimws)
-          
-          # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-          return(tibble_block_info)      
-          
-        }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM", "tibble_junction_peptides_only", "first", "last")))
-          
-        # match exons #####
-        ## retrieve the row index of the detailed 3FT table
-        ## match FASTA header and sequence
-        ## take the first match is fine.
-        list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
-          
-          # DEBUG ###
-          # a1 <- tibble_exon_peptides_only[5, ]
-          ###########
-          
-          cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
-          
-          row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
-                                                      str_detect(string = tibble_detailed_3FT_summary_PSIsigma$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
-          
-          tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma[row_index_of_matched_3FT_table, ]
-          
-          # get translated transcript-relative AA coords
-          translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
-          translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
-          
-          # get transcript relative nt coords
-          ## NOTE: this is strand-dependent.
-          parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-          parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-          
-          # get genome-relative positions for every nt encoding the tryptic peptide
-          ## have to take the strand into account.
-          ### extract the genome-relative forward coords of every nt in the parent transcript
-          ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
-          vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
-          ### use the transcript-relative nt coords to match
-          ### then sort in increasing order for the next step
-          if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "+") {
-            
-            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-            
-          } else if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "-") {
-            
-            all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-            
-          }
-          
-          # convert the individual nt positions to a set of ranges
-          ## achieve this by comparing n to n + 1
-          ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
-          tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
-                                      "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
-            add_column("difference" = .$n.plus.1 - .$n)
-          
-          ## if there are no gaps, then just take the genomic range as the start:end
-          if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
-            
-            vec_blockCount <- 1
-            vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
-            vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
-            
-          } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
-            
-            vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
-            vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
-                                 tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
-            vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
-                               last(all_genome_relative_positions_of_tryptic_peptide))
-            vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
-            
-          }
-          
-          # the block details are still vector at this point. 
-          # must paste collapse in order to use in the BED file.
-          tibble_block_info <- tibble(
-            "chrom" = tibble_matched_3FT_entry$matched_exon_chr,
-            "start" = first(all_genome_relative_positions_of_tryptic_peptide),
-            "end" = last(all_genome_relative_positions_of_tryptic_peptide),
-            "name" = a1$Leading.razor.protein %>% paste %>% trimws,
-            "score" = a1$Score %>% as.numeric,
-            "strand"= tibble_matched_3FT_entry$matched_exon_strand,
-            "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
-            "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
-            "itemRgb" = "153,0,0",
-            "blockCount" = vec_blockCount %>% paste(collapse = ","),
-            "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
-            "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
-            "qName" = a1$Sequence %>% paste %>% trimws)
-          
-          # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-          return(tibble_block_info)      
-          
-        }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma_diff", "first", "last")))
-        
-        # rbind and tibblise
-        tibble_bedfile <- splice(list_bedfile_junctions_only, list_bedfile_exons_only) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
-        
-        # track line
-        # cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
-        # 
-        # append = TRUE
-        write.table(x = tibble_bedfile, file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
-        
-        # GO TO BEDTOOLS NOW ###
-        # cd /media/Ubuntu/sharedfolder/bedtools2/bin/
-        # ./bedToBam -i /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bed -bed12 -g hg38.chrom.sizes_ensembl > /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bam
-        
-        # rtracklayer::export(object = tibble_bedfile, con = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), format = "bedPE")
-        # 
-        # # add the QNAME for real this time
-        # tibble_bedfile2 <- read.delim(file = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
-        
-      } )
+  }
+  
+  # convert the individual nt positions to a set of ranges
+  ## achieve this by comparing n to n + 1
+  ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
+  tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
+                              "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
+    add_column("difference" = .$n.plus.1 - .$n)
+  
+  ## if there are no gaps, then just take the genomic range as the start:end
+  if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
     
-  } )
+    vec_blockCount <- 1
+    vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
+    vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+    
+  } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+    
+    vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
+    vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
+                         tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
+    vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
+                       last(all_genome_relative_positions_of_tryptic_peptide))
+    vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+    
+  }
+  
+  # the block details are still vector at this point. 
+  # must paste collapse in order to use in the BED file.
+  tibble_block_info <- tibble(
+    "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
+    "start" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "end" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "name" = a1$Leading.razor.protein %>% paste %>% trimws,
+    "score" = a1$Score %>% as.numeric,
+    "strand"= tibble_matched_3FT_entry$matched_junction_strand,
+    "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "itemRgb" = "153,0,255",
+    "blockCount" = vec_blockCount %>% paste(collapse = ","),
+    "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
+    "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
+    "qName" = a1$Sequence %>% paste %>% trimws)
+  
+  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+  return(tibble_block_info)      
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM", "tibble_junction_peptides_only", "first", "last")))
+
+# match exons #####
+## retrieve the row index of the detailed 3FT table
+## match FASTA header and sequence
+## take the first match is fine.
+list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- tibble_exon_peptides_only[5, ]
+  ###########
+  
+  cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
+  
+  row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
+                                              str_detect(string = tibble_detailed_3FT_summary_PSIsigma$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+  
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma[row_index_of_matched_3FT_table, ]
+  
+  # get translated transcript-relative AA coords
+  translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  
+  # get transcript relative nt coords
+  ## NOTE: this is strand-dependent.
+  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  
+  # get genome-relative positions for every nt encoding the tryptic peptide
+  ## have to take the strand into account.
+  ### extract the genome-relative forward coords of every nt in the parent transcript
+  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+  ### use the transcript-relative nt coords to match
+  ### then sort in increasing order for the next step
+  if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "+") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  } else if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "-") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  }
+  
+  # convert the individual nt positions to a set of ranges
+  ## achieve this by comparing n to n + 1
+  ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
+  tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
+                              "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
+    add_column("difference" = .$n.plus.1 - .$n)
+  
+  ## if there are no gaps, then just take the genomic range as the start:end
+  if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+    
+    vec_blockCount <- 1
+    vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
+    vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+    
+  } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+    
+    vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
+    vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
+                         tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
+    vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
+                       last(all_genome_relative_positions_of_tryptic_peptide))
+    vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+    
+  }
+  
+  # the block details are still vector at this point. 
+  # must paste collapse in order to use in the BED file.
+  tibble_block_info <- tibble(
+    "chrom" = tibble_matched_3FT_entry$matched_exon_chr,
+    "start" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "end" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "name" = a1$Leading.razor.protein %>% paste %>% trimws,
+    "score" = a1$Score %>% as.numeric,
+    "strand"= tibble_matched_3FT_entry$matched_exon_strand,
+    "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "itemRgb" = "153,0,0",
+    "blockCount" = vec_blockCount %>% paste(collapse = ","),
+    "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
+    "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
+    "qName" = a1$Sequence %>% paste %>% trimws)
+  
+  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+  return(tibble_block_info)      
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma_diff", "first", "last")))
+
+# rbind and tibblise
+tibble_bedfile <- splice(list_bedfile_junctions_only, list_bedfile_exons_only) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
+
+# track line
+# cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
+# 
+# append = TRUE
+write.table(x = tibble_bedfile, file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+# GO TO BEDTOOLS NOW ###
+# cd /media/Ubuntu/sharedfolder/bedtools2/bin/
+# ./bedToBam -i /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bed -bed12 -g hg38.chrom.sizes_ensembl > /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bam
+
+# rtracklayer::export(object = tibble_bedfile, con = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), format = "bedPE")
+# 
+# # add the QNAME for real this time
+# tibble_bedfile2 <- read.delim(file = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
 
 ```
+
+### PHOSPHOSITES
+### return a .mut mutation file.
+### actually, maybe not, since the phosphosites might be gapped.
+
+```{r}
+
+b1 <- list_imported_maxquant_tibbles_processed$`2020_phosphoproteome_OBseries_junc.exons`$phosphosites %>%
+  # filter for class I phosphosites
+  # remove the reverse hits or table split wont work
+  dplyr::filter(Localization.prob >= 0.75 & PEP <= 0.01 & Score >= 30 & Reverse != "+") %>%
+  # dedupe in preparation for the next step
+  split_delimited_columns_in_table(input_table = ., target_colname = c("Proteins", "Positions.within.proteins", "Fasta.headers"), split = ";", columns_to_deduplicate = "id") %>%
+  split_delimited_columns_in_table(input_table = ., target_colname = c("Leading.proteins"), split = ";", columns_to_deduplicate = "id") %>%
+  split_delimited_columns_in_table(input_table = ., target_colname = c("Peptide.IDs"), split = ";", columns_to_deduplicate = "id") %>%
+  type_convert %>%
+  # add the "sequence" information by joining with the peptides table so we can accurately match back to the FASTA
+  dplyr::left_join(., list_imported_maxquant_tibbles_processed$`2020_phosphoproteome_OBseries_junc.exons`$peptides %>% dplyr::rename("Peptide.IDs" = "id") %>% dplyr::select(Peptide.IDs, Sequence), by = "Peptide.IDs")
+
+# split table by exons or junctions
+tibble_junction_peptides_only <- b1[grep(x = b1$Leading.proteins, pattern = "^junction_"), ]
+tibble_exon_peptides_only <- b1[grep(x = b1$Leading.proteins, pattern = "^exon_"), ]
+
+# to get the genome-relative coords of tryptic peptides, loop thru every tryptic peptide + fasta identifier combination
+# extract the MQ outputted start/end positions: 
+# 1. They are the valid-ORF-relative coords, 
+# 2. then parent translated transcript-relative coords then,
+# 3. use the translation frame and 3x length to get the nucleotide positions.
+# 4. convert individual nt positions to genomic ranges
+
+# match junctions #####
+## retrieve the row index of the detailed 3FT table
+## match FASTA header and sequence
+## take the first match is fine.
+list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- tibble_junction_peptides_only[1, ]
+  ###########
+  
+  cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+  
+  row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
+                                              str_detect(string = tibble_detailed_3FT_summary_JUM$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+  
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table, ]
+  
+  # get translated transcript-relative AA coords
+  translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  
+  # get transcript relative nt coords
+  ## NOTE: this is strand-dependent.
+  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  
+  # get genome-relative positions for every nt encoding the tryptic peptide
+  ## have to take the strand into account.
+  ### extract the genome-relative forward coords of every nt in the parent transcript
+  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+  ### use the transcript-relative nt coords to match
+  ### then sort in increasing order for the next step
+  if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  }
+  
+  # convert the individual nt positions to a set of ranges
+  ## achieve this by comparing n to n + 1
+  ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
+  tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
+                              "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
+    add_column("difference" = .$n.plus.1 - .$n)
+  
+  ## if there are no gaps, then just take the genomic range as the start:end
+  if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+    
+    vec_blockCount <- 1
+    vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
+    vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+    
+  } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+    
+    vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
+    vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
+                         tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
+    vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
+                       last(all_genome_relative_positions_of_tryptic_peptide))
+    vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+    
+  }
+  
+  # the block details are still vector at this point. 
+  # must paste collapse in order to use in the BED file.
+  tibble_block_info <- tibble(
+    "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
+    "start" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "end" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "name" = a1$Leading.proteins %>% paste %>% trimws,
+    "score" = a1$Score %>% as.numeric,
+    "strand"= tibble_matched_3FT_entry$matched_junction_strand,
+    "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "itemRgb" = "255,187,0",
+    "blockCount" = vec_blockCount %>% paste(collapse = ","),
+    "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
+    "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
+    "qName" = a1$Sequence %>% paste %>% trimws)
+  
+  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+  return(tibble_block_info)      
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM", "tibble_junction_peptides_only", "first", "last")) )
+
+# match exons #####
+## retrieve the row index of the detailed 3FT table
+## match FASTA header and sequence
+## take the first match is fine.
+list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- tibble_exon_peptides_only[4, ]
+  ###########
+  
+  cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
+  
+  row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
+                                              str_detect(string = tibble_detailed_3FT_summary_PSIsigma$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+  
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma[row_index_of_matched_3FT_table, ]
+  
+  # get translated transcript-relative AA coords
+  translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  
+  # get transcript relative nt coords
+  ## NOTE: this is strand-dependent.
+  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  
+  # get genome-relative positions for every nt encoding the tryptic peptide
+  ## have to take the strand into account.
+  ### extract the genome-relative forward coords of every nt in the parent transcript
+  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+  ### use the transcript-relative nt coords to match
+  ### then sort in increasing order for the next step
+  if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "+") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  } else if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "-") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  }
+  
+  # convert the individual nt positions to a set of ranges
+  ## achieve this by comparing n to n + 1
+  ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
+  tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
+                              "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
+    add_column("difference" = .$n.plus.1 - .$n)
+  
+  ## if there are no gaps, then just take the genomic range as the start:end
+  if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+    
+    vec_blockCount <- 1
+    vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
+    vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+    
+  } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+    
+    vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
+    vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
+                         tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
+    vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
+                       last(all_genome_relative_positions_of_tryptic_peptide))
+    vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+    
+  }
+  
+  # the block details are still vector at this point. 
+  # must paste collapse in order to use in the BED file.
+  tibble_block_info <- tibble(
+    "chrom" = tibble_matched_3FT_entry$matched_exon_chr,
+    "start" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "end" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "name" = a1$Leading.proteins %>% paste %>% trimws,
+    "score" = a1$Score %>% as.numeric,
+    "strand"= tibble_matched_3FT_entry$matched_exon_strand,
+    "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
+    "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
+    "itemRgb" = "255,187,0",
+    "blockCount" = vec_blockCount %>% paste(collapse = ","),
+    "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
+    "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
+    "qName" = a1$Sequence %>% paste %>% trimws)
+  
+  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+  return(tibble_block_info)      
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma", "first", "last")))
+
+# rbind and tibblise
+tibble_bedfile <- splice(list_bedfile_junctions_only, list_bedfile_exons_only) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
+
+# track line
+# cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
+# 
+# append = TRUE
+write.table(x = tibble_bedfile %>% dplyr::distinct(chrom, start, end, name, .keep_all = TRUE), file = paste(R_processing_results_dir, "proteomic_alignment_2020_phosphoproteome_phosphosites.bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+# GO TO BEDTOOLS NOW ###
+# cd /media/Ubuntu/sharedfolder/bedtools2/bin/
+# ./bedToBam -i /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bed -bed12 -g hg38.chrom.sizes_ensembl > /media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results_dir/proteomic_alignment_junc.exons_peptides.bam
+
+# rtracklayer::export(object = tibble_bedfile, con = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), format = "bedPE")
+# 
+# # add the QNAME for real this time
+# tibble_bedfile2 <- read.delim(file = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
+
+```
+
+### export a tibble of all genome-relative coords for evaluation of phosphosite in differential regions
+
+```{r}
+
+# to get the genome-relative coords of tryptic peptides, loop thru every tryptic peptide + fasta identifier combination
+# extract the MQ outputted start/end positions: 
+# 1. They are the valid-ORF-relative coords, 
+# 2. then parent translated transcript-relative coords then,
+# 3. use the translation frame and 3x length to get the nucleotide positions.
+# 4. convert individual nt positions to genomic ranges
+
+# match junctions #####
+## retrieve the row index of the detailed 3FT table
+## match FASTA header and sequence
+## take the first match is fine.
+list_genome.relative.positions_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- tibble_junction_peptides_only[1, ]
+  ###########
+  
+  cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+  
+  row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
+                                              str_detect(string = tibble_detailed_3FT_summary_JUM$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+  
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table, ]
+  
+  # get translated transcript-relative AA coords
+  translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  
+  # get transcript relative nt coords
+  ## NOTE: this is strand-dependent.
+  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  
+  # get genome-relative positions for every nt encoding the tryptic peptide
+  ## have to take the strand into account.
+  ### extract the genome-relative forward coords of every nt in the parent transcript
+  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+  ### use the transcript-relative nt coords to match
+  ### then sort in increasing order for the next step
+  if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  }
+  
+  # the block details are still vector at this point. 
+  # must paste collapse in order to use in the BED file.
+  tibble_position_info <- tibble(
+    "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
+    "genome_relative_positions_phosphosite" = paste(all_genome_relative_positions_of_tryptic_peptide, collapse = ","),
+    "identifier" = a1$Leading.proteins %>% paste %>% trimws,
+    "strand"= tibble_matched_3FT_entry$matched_junction_strand,
+    "protein_sequence_tryptic_peptide" = a1$Sequence %>% paste %>% trimws)
+  
+  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+  return(tibble_position_info)      
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM", "tibble_junction_peptides_only", "first", "last")) )
+
+# match exons #####
+## retrieve the row index of the detailed 3FT table
+## match FASTA header and sequence
+## take the first match is fine.
+list_genome.relative.positions_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- tibble_exon_peptides_only[4, ]
+  ###########
+  
+  cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
+  
+  row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
+                                              str_detect(string = tibble_detailed_3FT_summary_PSIsigma$ORF_valid, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
+  
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma[row_index_of_matched_3FT_table, ]
+  
+  # get translated transcript-relative AA coords
+  translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$valid_ORF_3FT_peptide_protein_relative_start %>% trimws %>% as.numeric) - 1
+  
+  # get transcript relative nt coords
+  ## NOTE: this is strand-dependent.
+  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  
+  # get genome-relative positions for every nt encoding the tryptic peptide
+  ## have to take the strand into account.
+  ### extract the genome-relative forward coords of every nt in the parent transcript
+  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+  ### use the transcript-relative nt coords to match
+  ### then sort in increasing order for the next step
+  if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "+") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  } else if (tibble_matched_3FT_entry$matched_exon_strand %>% trimws %>% paste == "-") {
+    
+    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+  }
+  
+  # the block details are still vector at this point. 
+  # must paste collapse in order to use in the BED file.
+  tibble_position_info <- tibble(
+    "chrom" = tibble_matched_3FT_entry$matched_exon_chr,
+    "genome_relative_positions_phosphosite" = paste(all_genome_relative_positions_of_tryptic_peptide, collapse = ","),
+    "identifier" = a1$Leading.proteins %>% paste %>% trimws,
+    "strand"= tibble_matched_3FT_entry$matched_exon_strand,
+    "protein_sequence_tryptic_peptide" = a1$Sequence %>% paste %>% trimws)
+  
+  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+  return(tibble_position_info)      
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma", "first", "last")))
+
+# rbind and tibblise
+tibble_genome.relative.positions <- splice(list_genome.relative.positions_junctions_only, list_genome.relative.positions_exons_only) %>% rbindlist %>% as_tibble
+
+# write table.
+write.table(x = tibble_genome.relative.positions, file = paste(R_processing_results_dir, "genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+```
+

@@ -4003,7 +4003,7 @@ list_ref_entries_matched_to_constituent_junctions <- list_constituent_junctions_
   
 # GENERATE GENOME-RELATIVE COORDS FOR EVERY DIFFERENTIAL POSITION.
 # also generate genome-relative coords for every CDS position of transcripts with a matched exon. this is necessary because we need to deal with gaps.
-list_genome_relative_differential_coords <- future_map(.x = list_ref_entries_matched_to_constituent_junctions, .f = function(.x) {
+list_genome_relative_exonic_coords <- future_map(.x = list_ref_entries_matched_to_constituent_junctions, .f = function(.x) {
   
   # DEBUG ###
   # .x <- list_ref_entries_matched_to_constituent_junctions[[2]]
@@ -4053,6 +4053,90 @@ list_genome_relative_differential_coords <- future_map(.x = list_ref_entries_mat
     
     # drop exons that don't have any differential regions.
     purrr::discard(.x = ., .p = ~length(.x$vector_genomic_coords_of_all_differential_exon_positions) == 0)
+
+# take only the differential exonic positions
+# first pluck positions by chromosome
+# to get differential positions, we reason that when we sort coordinates, the tally frequencies will show up as "islands" with a certain local maximum. For every island, simply remove the locally most frequent coordinate, and the resulting vector of genome-relative positions will only be differential, ready for filtering.
+## get chromosomes
+vector_of_chromosomes_to_pluck <- list_genome_relative_differential_coords %>% purrr::map(~.x$diff_exon_chr) %>% unlist %>% unique
+
+## pluck exonic positions by chromosome and unlist
+list_plucked_differential_exonic_positions_by_chromosome <- purrr::map(.x = vector_of_chromosomes_to_pluck, .f = function(a1) {
+  
+  # DEBUG ###
+  # a1 <- 5
+  ###########
+  
+  cat("\nnow processing chr:", a1, "\n")
+  
+  # pluck all the exonic positions
+  vector_all_exonic_positions <- purrr::keep(.x = list_genome_relative_differential_coords, .p = ~.x$diff_exon_chr == a1) %>%
+    purrr::map(~.x$vector_genomic_coords_of_all_differential_exon_positions) %>%
+    unlist %>%
+    mixedsort
+  
+  # tibblise and tally each of the positions
+  # determine the boundaries between tallies of 1 and 2+ by adding a difference-to-the-next-row column and difference-from-previous
+  tibble_all_exonic_positions_tally <- vector_all_exonic_positions %>% 
+    tibble::enframe(name = NULL, value = "exonic_position") %>%
+    dplyr::group_by(exonic_position) %>%
+    dplyr::summarise("tally" = n()) %>%
+    tibble::add_column("tally_difference_to_next" = c((.$tally %>% .[-1]), NA) - .$tally,
+                       "tally_difference_from_previous" = .$tally - c(NA, (.$tally %>% .[-length(.)])))
+  
+  # these are the start row indices of the islands
+  row.indices_island_starts <- which(tibble_all_exonic_positions_tally$tally == 1 & tibble_all_exonic_positions_tally$tally_difference_to_next > 0) + 1
+  # these are the end row indices of the islands
+  row.indices_island_ends <- which(tibble_all_exonic_positions_tally$tally == 1 & tibble_all_exonic_positions_tally$tally_difference_from_previous < 0) - 1
+  
+  # deal with the case if the middle of an island is either at the very start or end.
+  # in those cases, we'll have to add in the start as the first row or the end as the last row.
+  if (tibble_all_exonic_positions_tally[1, ] %>% .$tally > 1) {
+    
+    row.indices_island_starts <- c(1, row.indices_island_starts)
+    
+  } 
+  
+  if (tibble_all_exonic_positions_tally[nrow(tibble_all_exonic_positions_tally), ] %>% .$tally > 1) {
+    
+    row.indices_island_ends <- c(row.indices_island_ends, nrow(tibble_all_exonic_positions_tally))
+    
+  }
+  
+  # BEHAVIOUR: for tally == 1, we automatically keep it.
+  ## next, we looop thru each island, take the max tally, remove all positions which have the max tally and keep the rest. 
+  ## mix together and finished :)
+  
+  ### loop thru each island. remove positions with max local tally.
+  vector_island_positions_to_keep <- purrr::map2(.x = row.indices_island_starts,
+                                                 .y = row.indices_island_ends,
+                                                 .f = function(a1, a2) {
+                                                   
+                                                   max_tally <- tibble_all_exonic_positions_tally[a1:a2, "tally"] %>% unlist %>% max
+                                                   
+                                                   vector_island_positions_which_are_not_max_tally <- tibble_all_exonic_positions_tally[a1:a2, ] %>% .[.$tally != max_tally, "exonic_position"] %>% unlist
+                                                   
+                                                   return(vector_island_positions_which_are_not_max_tally)
+                                                   
+                                                 } ) %>% unlist
+  
+  ### these are the tally 1 positions
+  vector_tally_1_positions <- tibble_all_exonic_positions_tally[tibble_all_exonic_positions_tally$tally == 1, "exonic_position"] %>% unlist
+  
+  # return all the differential positions
+  c(vector_tally_1_positions, vector_island_positions_to_keep) %>% as.vector %>% sort %>% return
+  
+} ) %>% set_names(vector_of_chromosomes_to_pluck)
+
+# then filter each genome-relative exonic coordinate to give true differential coordinates.
+list_genome_relative_differential_coords <- purrr::map(.x = list_genome_relative_exonic_coords,
+                                                       .f = function(a1) {
+                                                         
+                                                         list_a1_modified <- purrr::modify_at(.x = a1, 
+                                                                                              .at = "vector_genomic_coords_of_all_differential_exon_positions", 
+                                                                                              .f = ~intersect(.x, list_plucked_differential_exonic_positions_by_chromosome[[a1$diff_exon_chr]]))
+                                                         
+                                                       } )
 
 # MATCH DIFFERENTIAL GENOME-RELATIVE COORDS TO EACH CDS REGION CORRESPONDING TO PROTEIN ID
 # THEN EXTRACT THE PROTEIN-RELATIVE COORDS
@@ -4257,7 +4341,7 @@ write.table(x = tibble_final_PTM_annotation, file = paste(R_processing_results_d
 
 # extract the other supporting information and tibblise
 tibble_final_annotation_supp <- list_tidied_annotation %>% 
-  purrr::map(~.x[c("diff_exon_coords", "splicemode", "vector_genomic_coords_of_all_differential_exon_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")]) %>%
+  purrr::map(~.x[c("diff_exon_coords", "splicemode", "vector_genomic_coords_of_all_differential_exon_positions", "vector_genomic_coords_of_all_differential_CDS_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")]) %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length != 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = ~.x %>% purrr::map(~paste(.x, collapse = ",")) %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", "protein_relative_differential_coords")))) %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length == 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = function(.x) {return("NA")} ) %>% splice("ensembl_peptide_id" = "NA")) %>%
   purrr::map(~.x %>% flatten %>% as_tibble) %>%

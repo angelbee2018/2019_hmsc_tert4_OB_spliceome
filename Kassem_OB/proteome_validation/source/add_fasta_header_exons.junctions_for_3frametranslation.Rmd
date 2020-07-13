@@ -747,3 +747,30 @@ exon_bed_table <- tibble_exon_coords_matched_with_fasta_header[, c("chr", "start
 write.table(exon_bed_table, file = paste(output_dir_psisigma, output_file_name_PSI.Sigma, ".bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = FALSE)
 
 ```
+
+
+# FEATURES TO BE ADDED TO THE 3FT TOOL: 
+
+- deduplication of sub-string peptides
+- output of the average number of frames, total database size statistics etc...
+
+```{r}
+
+junctions_3FT_info <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/three_frame_translation_results/threeframetranslate_junctions_qvalue0.01_dpsi0.15_diff_3FT.summary.info.txt", row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+exons_3FT_info <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/three_frame_translation_results/threeframetranslate_exons_pvalue0.01_dpsi10_diff_3FT.summary.info.txt", row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+junctions_3FT_info_unique_peptide_info <- junctions_3FT_info %>% add_column("substring_or_not" = future_imap(.x = .$ORF_valid, .f = ~grepl(x = junctions_3FT_info$ORF_valid %>% .[-.y], pattern = .x) %>% any == TRUE, .progress = TRUE) %>% unlist)
+exons_3FT_info_unique_peptide_info <- exons_3FT_info %>% add_column("substring_or_not" = future_imap(.x = .$ORF_valid, .f = ~grepl(x = exons_3FT_info$ORF_valid %>% .[-.y], pattern = .x) %>% any == TRUE, .progress = TRUE) %>% unlist)
+
+junctions_3FT_info_unique_peptide_info_valid_and_unique <- junctions_3FT_info_unique_peptide_info %>% dplyr::filter(ORF_valid != "NONE_VALID" & substring_or_not != TRUE)
+exons_3FT_info_unique_peptide_info_valid_and_unique <- exons_3FT_info_unique_peptide_info %>% dplyr::filter(ORF_valid != "NONE_VALID" & substring_or_not != TRUE)
+
+tibble_exons_frame_tally <- exons_3FT_info_unique_peptide_info_valid_and_unique %>% dplyr::distinct(translation_frame, fasta_header) %>% dplyr::group_by(fasta_header) %>% dplyr::summarise("tally" = n())
+tibble_junctions_frame_tally <- junctions_3FT_info_unique_peptide_info_valid_and_unique %>% dplyr::distinct(translation_frame, fasta_header) %>% dplyr::group_by(fasta_header) %>% dplyr::summarise("tally" = n())
+
+cat("\naverage number of translation frames for UNIQUE exonic sequences: ", mean(tibble_exons_frame_tally$tally), "\n")
+cat("\naverage number of translation frames for UNIQUE junction sequences: ", mean(tibble_junctions_frame_tally$tally), "\n")
+
+```
+

@@ -893,9 +893,7 @@ dev.off()
 
 # generate a final wide table of all the pairwise comparison data
 
-no_of_timepoints_OBseries = 1:length(timepoints_OB %>% unique)
-
-timepoint_comparisons_OBseries <- combn(no_of_timepoints_OBseries, 2) %>% t
+timepoint_comparisons_OBseries <- combn(timepoints_OB %>% unique, 2) %>% t
 
 timepoint_comparison_1_OBseries <- timepoint_comparisons_OBseries[, 1] %>% array_tree
 timepoint_comparison_2_OBseries <- timepoint_comparisons_OBseries[, 2] %>% array_tree
@@ -940,6 +938,31 @@ column_GLMsig_DEgenes_OBseries <- tibble_GLM_OBseries[tibble_GLM_OBseries_DEGrow
 ```
 
 ##### plot graph of the cumulative changes
+
+###### use the pairwise tests to accomplish this.
+
+```{r}
+
+# generate a single tibble summarising all the pairwise tests
+tibble_all_pairwise_results <- purrr::map2(.x = list_edgeR_pairwise_topTags_OBseries, .y = paste(timepoint_comparisons_OBseries[, 1], timepoint_comparisons_OBseries[, 2], sep = "_vs_"), .f = ~.x$table %>% add_column(comparison = .y)) %>% rbindlist %>% as_tibble
+# filter by significant gene ids
+tibble_all_pairwise_results_significant_only <- dplyr::semi_join(tibble_all_pairwise_results, 
+                                                                 column_anysig_DEgenes_OBseries %>% dplyr::rename("genes" = "ensembl_gene_id"),
+                                                                 by = "genes")
+
+tibble_cumulative_diff_changes <- tibble("timepoint" = vec_timepoint_order_OBseries_short_edited, 
+                                         "cumulative_diff_changes" = 
+                                           c(0, 
+                                             tibble_all_pairwise_results_significant_only %>% dplyr::filter(!str_detect(comparison, "12d") & !str_detect(comparison, "9d") & !str_detect(comparison, "6d") & !str_detect(comparison, "3d") & !str_detect(comparison, "24h") & !str_detect(comparison, "12h") & FDR <= 0.01 & abs(logFC) >= 1) %>% nrow,
+                                             tibble_all_pairwise_results_significant_only %>% dplyr::filter(!str_detect(comparison, "12d") & !str_detect(comparison, "9d") & !str_detect(comparison, "6d") & !str_detect(comparison, "3d") & !str_detect(comparison, "24h") & FDR <= 0.01 & abs(logFC) >= 1) %>% nrow,
+                                             tibble_all_pairwise_results_significant_only %>% dplyr::filter(!str_detect(comparison, "12d") & !str_detect(comparison, "9d") & !str_detect(comparison, "6d") & !str_detect(comparison, "3d") & FDR <= 0.01 & abs(logFC) >= 1) %>% nrow,
+                                             tibble_all_pairwise_results_significant_only %>% dplyr::filter(!str_detect(comparison, "12d") & !str_detect(comparison, "9d") & !str_detect(comparison, "6d") & FDR <= 0.01 & abs(logFC) >= 1) %>% nrow,
+                                             tibble_all_pairwise_results_significant_only %>% dplyr::filter(!str_detect(comparison, "12d") & !str_detect(comparison, "9d") & FDR <= 0.01 & abs(logFC) >= 1) %>% nrow,
+                                             tibble_all_pairwise_results_significant_only %>% dplyr::filter(!str_detect(comparison, "12d") & FDR <= 0.01 & abs(logFC) >= 1) %>% nrow,
+                                             tibble_all_pairwise_results_significant_only %>% dplyr::filter(FDR <= 0.01 & abs(logFC) >= 1) %>% nrow)) %>% 
+                                           add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
+
+```
 
 ###### create tibble of cumulative differential changes, excluding each timepoint successively and filtering by logFC.
 
@@ -1080,7 +1103,7 @@ vec_timepoint_order_OBseries_short <- gsub(x = vec_timepoint_order_OBseries,
                                            replacement = "")
 
 vec_timepoint_order_OBseries_short_edited <- gsub(x = vec_timepoint_order_OBseries_short, pattern = "24h", replacement = "1d")
-vec_timepoint_order_OBseries_short_edited <- gsub(x = vec_timepoint_order_OBseries_short, pattern = "ud", replacement = "MSC")
+vec_timepoint_order_OBseries_short_edited <- gsub(x = vec_timepoint_order_OBseries_short_edited, pattern = "ud", replacement = "MSC")
 
 # rearrange in chronological order 
 tibble_logCPM_OBseries_GLM_DEGs_averaged <- tibble_logCPM_OBseries_GLM_DEGs_averaged[, c("ensembl_gene_id", "external_gene_name", vec_timepoint_order_OBseries_short)]

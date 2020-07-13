@@ -1228,8 +1228,8 @@ tibble_PCA_matrix <- tibble_PCA %>% dplyr::select(contains("|")) %>% mutate_all(
 # plot
 plot_PCA_for_timepoint_and_replicate(matrixtable = tibble_PCA_matrix %>% na.omit, 
                                      graph_title = paste("PCA plot of PSI values, JUM", sep = ""),
-                                     PCA_depths_y = c(2, 3, 4),
-                                     PCA_depths_x = c(1, 2, 3),
+                                     PCA_depths_y = c(1, 2, 3),
+                                     PCA_depths_x = c(2, 3, 4),
                                      timepoint_order = vector_OBseries_timepoints_edited,
                                      replicate_order = c("r1", "r2", "r3"),
                                      width = 14,
@@ -2006,50 +2006,6 @@ dev.off()
 
 ```
 
-### plot graph of the cumulative changes
-
-#### create tibble of cumulative differential changes, excluding each timepoint successively
-
-```{r}
-
-tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
-                                         "cumulative_diff_changes" = 
-                                           c(0, 
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] <= 0.01), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] >= 0.15)) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
-                                             intersect(which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "qvalue"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(PSI_levels_timeseries_OB_wide_with_na[, which(str_detect(colnames(PSI_levels_timeseries_OB_wide_with_na), "deltaPSI"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length)) %>% 
-  add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
-
-```
-
-#### GGPLOT
-
-```{r}
-
-ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
-  geom_path(aes(group = "OBseries"), colour = "purple3") +
-  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nJUM (AS structures)") +
-  xlab("Timepoint") +
-  ylab("Cumulative differential changes (%)") +
-  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
-  theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
-  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
-
-```
-
 ## filter tables for the specified cutoffs, both with and without NA.
 
 ### specify qpvalue, dpsi cutoff
@@ -2140,6 +2096,72 @@ row.names(PSI_levels_timeseries_OB_wide) <- NULL
 print(paste("There are", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
 
 write.table(x = PSI_levels_timeseries_OB_wide, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+### plot graph of the cumulative changes
+
+#### create tibble of cumulative differential changes, excluding each timepoint successively
+
+```{r eval=FALSE, include=FALSE}
+
+tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
+                                         "cumulative_diff_changes" = 
+                                           c(0, 
+                                             intersect(which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] <= 0.01), 
+                                                       which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] >= 0.15)) %>% length,
+                                             intersect(which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(wide_table_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_table_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length)) %>% 
+  add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
+
+```
+
+#### use dpsi only
+
+```{r eval=FALSE, include=FALSE}
+
+wide_tibble_all_splicemodes_differential_only <- dplyr::semi_join(wide_table_all_splicemodes_split_with_na_with_ref_annot, 
+                                                                 PSI_levels_timeseries_OB_wide_with_na,
+                                                                 by = c("AS_event_ID", "isoform_number")) %>% as_tibble
+
+tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
+                                         "cumulative_diff_changes" = 
+                                           c(0,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] %>% unlist %>% abs >= 0.15) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length)) %>% 
+  add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
+
+```
+
+#### GGPLOT
+
+```{r}
+
+ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
+  geom_path(aes(group = "OBseries"), colour = "purple3") +
+  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nJUM (AS structures)") +
+  xlab("Timepoint") +
+  ylab("Cumulative differential changes (%)") +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
+  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
 
 ```
 
@@ -3089,6 +3111,15 @@ tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibbl
 
 ```
 
+## Import all the non-homolog and non-superfamily entries from Interpro
+
+```{r}
+
+tibble_non_family_interpro_entries <- c("interpro_active.site_entries.tsv", "interpro_binding.site_entries.tsv", "interpro_conserved.site_entries.tsv", "interpro_domain_entries.tsv", "interpro_PTM_entries.tsv", "interpro_repeat_entries.tsv") %>% 
+  purrr::map(.f = ~read.delim(paste(shared_dir, .x, sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble) %>% rbindlist %>% as_tibble
+
+```
+
 ## transcript and domain analyses! :)
 
 NEW METHOD - USING CONSTITUENT JUNCTIONS
@@ -3577,43 +3608,48 @@ ggplot(data = subset_tibble_final_annotation_supp_with_frameshift_test) +
 ```{r}
 
 # transcript-level
-message("total number of unique differential LSVs with any sort of transcript-level annotation: ", tibble_final_transcript_feature_annotation$AS_event_ID %>% length)
+message("total number of unique differential LSVs with any sort of transcript-level annotation: ", tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length)
 
-message("percent of differential regions matched to protein coding transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "protein_coding") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
-message("percent of differential regions matched to an lncRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "lncRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
-message("percent of differential regions matched to a miRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "miRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+message("percent of differential regions matched to protein coding transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "protein_coding") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
+message("percent of differential regions matched to an lncRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "lncRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
+message("percent of differential regions matched to a miRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "miRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
 
-message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
-message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
-message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% length))
+message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
+message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
+message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
 
 # PROTEIN-LEVEL
-vector_unique_interpro_ids <- tibble_final_biomart_annotation$interpro %>% na.omit %>% unique
+# vector_unique_interpro_ids <- tibble_final_biomart_annotation$interpro %>% na.omit %>% unique
 
 tibble_protein_level_summary_count <- tibble_final_biomart_annotation %>% dplyr::group_by(AS_event_ID) %>% 
-  dplyr::summarise(overlaps_interpro_domain = all(is.na(interpro)) == FALSE,
-                   unique_interpro_ids = interpro %>% na.omit %>% unique %>% paste(collapse = ";"),
-                   overlaps_LCR = all(is.na(seg_start)) == FALSE,
-                   overlaps_disordered_region = all(is.na(mobidblite)) == FALSE,
-                   overlaps_ncoils = all(is.na(ncoils_start)) == FALSE,
-                   overlaps_signalp = all(is.na(signalp_start)) == FALSE,
-                   overlaps_tmhmm = all(is.na(tmhmm_start)) == FALSE)
+  dplyr::summarise("overlaps_interpro_domain" = all(is.na(interpro)) == FALSE & intersect(interpro, tibble_non_family_interpro_entries$Accession) %>% length != 0,
+                   "unique_interpro_ids" = interpro %>% na.omit %>% unique %>% paste(collapse = ";"),
+                   "overlaps_LCR" = all(is.na(seg_start)) == FALSE,
+                   "overlaps_disordered_region" = all(is.na(mobidblite)) == FALSE,
+                   "overlaps_ncoils" = all(is.na(ncoils_start)) == FALSE,
+                   "overlaps_signalp" = all(is.na(signalp_start)) == FALSE,
+                   "overlaps_tmhmm" = all(is.na(tmhmm_start)) == FALSE)
 
-vector_unique_interpro_ids <- tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort
+vector_unique_interpro_ids <- dplyr::semi_join(tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort %>% tibble::enframe(name = NULL, value = "vec"), tibble_non_family_interpro_entries$Accession %>% tibble::enframe(name = NULL, value = "vec"), by = "vec") %>% unlist
 
 # create tally of each unique instance of interpro ID per AS_event_ID
 tibble_interpro_id_tally_per_ASeventID <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% .[order(.$tally), ] %>% dplyr::arrange(desc(tally))
+
 # create interpro to matched gene mapping
 tibble_interpro_ID_to_matched_gene_mapping <- tibble_final_biomart_annotation %>% dplyr::group_by(interpro) %>% dplyr::summarise("genes" = paste(Gene %>% unique %>% mixedsort, collapse = ",")) %>% setNames(c("interpro_id", "genes"))
+# create interpro to matched AS_event_ID mapping
+tibble_interpro_ID_to_matched_ASeventID_mapping <- tibble_final_biomart_annotation %>% dplyr::group_by(interpro) %>% 
+  dplyr::summarise("AS_event_IDs" = paste(AS_event_ID %>% unique %>% mixedsort, collapse = ",")) %>% setNames(c("interpro_id", "AS_event_IDs"))
+
 # fetch descriptions of interpro ID
-tibble_interpro_ID_to_description_mapping <- getBM(filters = "interpro", values = tibble_interpro_id_tally_per_ASeventID$interpro_id, attributes = c("interpro", "interpro_description"), mart = ensembl_mart) %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
+tibble_interpro_ID_to_description_mapping <- tibble_non_family_interpro_entries[, c("Accession", "Name")] %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
 # add column for plotting
 tibble_interpro_ID_to_description_mapping <- tibble_interpro_ID_to_description_mapping %>% add_column("interpro_identifier" = paste(tibble_interpro_ID_to_description_mapping$interpro_description, " (", tibble_interpro_ID_to_description_mapping$interpro_id, ")", sep = ""))
 # tibble joins
 tibble_interpro_id_tally_per_ASeventID <- dplyr::right_join(tibble_interpro_ID_to_description_mapping, tibble_interpro_id_tally_per_ASeventID, by = "interpro_id")
 tibble_interpro_id_tally_per_ASeventID <- dplyr::right_join(tibble_interpro_ID_to_matched_gene_mapping, tibble_interpro_id_tally_per_ASeventID, by = "interpro_id")
 # plot
-ggplot(tibble_interpro_id_tally_per_ASeventID %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
+ggplot(tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)) %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
   geom_col(fill = "purple3") +
   ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of differential junctions", dPSI_cutoff, "and any sig", p_or_q_value, qpvalue_cutoff, "encompassing", nrow(tibble_protein_level_summary_count), "LSVs")) +
   xlab("Interpro identifier") +
@@ -3625,7 +3661,7 @@ ggplot(tibble_interpro_id_tally_per_ASeventID %>% head(90), aes(x = reorder(inte
  ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 10, units = "cm") +
  ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 10, units = "cm") 
 
-write.table(x = tibble_interpro_id_tally_per_ASeventID, file = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)), file = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 message("total number of unique LSVs with any sort of protein-level annotation: ", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length, " (", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length *100/nrow(tibble_final_transcript_feature_annotation), "% of those which have any transcript annotation)")
 

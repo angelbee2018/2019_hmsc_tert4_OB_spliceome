@@ -733,6 +733,12 @@ tibble_junction_spanning_peptides_identifier.gene <- tibble_junc.exons_filtered_
 tibble_confirmed_junc.exons <- dplyr::bind_rows(tibble_junction_spanning_peptides_identifier.gene, tibble_junc.exons_to_gene.name[grep(x = tibble_junc.exons_to_gene.name$Leading.razor.protein, pattern = "exon"), ]) %>% 
   dplyr::arrange(gene_name)
 
+cat("number of exons per gene: ")
+tibble_confirmed_junc.exons %>% dplyr::filter(str_detect(string = Leading.razor.protein, pattern = "exon")) %>% dplyr::distinct(Leading.razor.protein, .keep_all = TRUE) %>% group_by(gene_name) %>% dplyr::summarise("tally_ids_per_gene" = n()) %>% dplyr::arrange(desc(tally_ids_per_gene)) %>% na.omit %>% .$tally_ids_per_gene %>% mean %>% print
+
+cat("number of junctions per gene: ")
+tibble_confirmed_junc.exons %>% dplyr::filter(str_detect(string = Leading.razor.protein, pattern = "junction")) %>% dplyr::distinct(Leading.razor.protein, .keep_all = TRUE) %>% group_by(gene_name) %>% dplyr::summarise("tally_ids_per_gene" = n()) %>% dplyr::arrange(desc(tally_ids_per_gene)) %>% na.omit %>% .$tally_ids_per_gene %>% mean %>% print
+
 # write table
 write.table(tibble_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_brief.info_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 

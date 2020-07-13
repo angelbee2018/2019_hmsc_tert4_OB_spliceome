@@ -37,8 +37,8 @@ library(data.table)
 library(crayon)
 library(VennDiagram)
 
-library(biomaRt)
-ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
+# library(biomaRt)
+# ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "www.ensembl.org")
 library(systemPipeR)
 library(GOstats)
 library(PFAM.db)
@@ -243,7 +243,7 @@ split_delimited_column_in_table <- function(input_table, target_colname, split, 
 # input_vector: vector of numerical values to convert to ranges
 # metadata (optional): vector the same length as `input_vector` containing information such as chromosome.
 
-vector.of.positions_to_simple.ranges <- function(input_vector, metadata_vector) {
+convert_vector.of.positions_to_simple.ranges <- function(input_vector, metadata_vector) {
   
   # DEBUG ###
   # tibble_input_vector_and_metadata <- tibble_JUM_valid_phosphosites_with_overlap %>% 
@@ -251,18 +251,21 @@ vector.of.positions_to_simple.ranges <- function(input_vector, metadata_vector) 
   #   split_delimited_column_in_table(input_table = ., split = ",", target_colname = "genome_relative_positions_phosphosite")
   # input_vector <- tibble_input_vector_and_metadata$genome_relative_positions_phosphosite
   # metadata_vector <- tibble_input_vector_and_metadata$chrom
+  
+  # input_vector <- tibble_dbPTM_coords_and_chr$vec_all_genome_relative_coords_of_item
+  # metadata_vector <- tibble_dbPTM_coords_and_chr$chr
   ###########
   
   # tibblise and soft-convert to numeric.
   # throw error if still not numeric.
-  tibble_input_vector <- tibble::enframe(input_vector, value = "vec", name = NULL) %>% type_convert
+  tibble_input_vector <- tibble::enframe(input_vector, value = "vec", name = NULL) %>% type_convert 
   
   if (tibble_input_vector$vec %>% data.class != "numeric") {
     stop("check if the input vector is numeric")
   } 
   
   # join the metadata
-  tibble_input_vector_and_metadata <- dplyr::bind_cols(tibble_input_vector, metadata_vector)
+  tibble_input_vector_and_metadata <- dplyr::bind_cols(tibble_input_vector, metadata_vector %>% as_tibble)
   
   # subset and list-ify by metadata
   list_input_vector_subset_by_metadata <- tibble_input_vector_and_metadata %>% 
@@ -272,25 +275,32 @@ vector.of.positions_to_simple.ranges <- function(input_vector, metadata_vector) 
   # convert the individual nt positions to a set of ranges
   ## achieve this by comparing n to n + 1
   ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
-  list_blockdata <- purrr::map(.x = list_input_vector_subset_by_metadata, 
-                               .f = function(a1) {
+  list_blockdata <- purrr::imap(.x = list_input_vector_subset_by_metadata, 
+                               .f = function(a1, a2) {
                                  
                                  # DEBUG ###
-                                 a1 <- list_input_vector_subset_by_metadata[[15]]
+                                 # a1 <- list_input_vector_subset_by_metadata[[1]]
                                  ###########
+                                 
+                                 cat("\ndoing: ", a2)
+                                 
+                                 # sort input vector in increasing order
+                                 a1 <- a1 %>% dplyr::arrange(vec)
                                  
                                  tibble_n_n.plus.1 <- tibble("n" = a1$vec %>% head(n = length(a1$vec) - 1),
                                                              "n.plus.1" = a1$vec %>% .[-1]) %>% 
-                                   add_column("difference" = .$`n.plus.1` - .$`n`)
+                                   add_column("difference" = .$`n.plus.1` - .$`n`) %>%
+                                   dplyr::filter(difference != 0)
                                  
                                  ## if there are no gaps, then just take the genomic range as the start:end
-                                 if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+                                 if (tibble_n_n.plus.1$difference %>% unique %>% length == 1 & tibble_n_n.plus.1$difference %>% .[1] == 1) {
                                    
                                    vec_blockCount <- 1
                                    vec_blockSizes <- length(a1$vec)
                                    vec_blockStarts <- dplyr::first(a1$vec)
+                                   vec_blockEnds <- dplyr::last(a1$vec)
                                    
-                                 } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+                                 } else if ((tibble_n_n.plus.1$difference %>% unique %>% length == 1 & tibble_n_n.plus.1$difference %>% .[1] == 1) != TRUE) {
                                    
                                    vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
                                    vec_blockStarts <- c(dplyr::first(a1$vec), 
@@ -315,9 +325,9 @@ vector.of.positions_to_simple.ranges <- function(input_vector, metadata_vector) 
   
   list_tibbles_start_end <- purrr::map2(.x = list_blockdata, 
                                         .y = list_metadata,
-                                        .f = ~tibble("start" = .x$vec_blockStarts,
-                                                     "end" = .x$vec_blockEnds) %>% 
-                                          dplyr::bind_cols(., .y))
+                                        .f = ~list("tibble" = tibble("start" = .x$vec_blockStarts,
+                                                     "end" = .x$vec_blockEnds),
+                                                   "metadata" = .y) %>% flatten %>% as_tibble)
   
   tibble_start_end_metadata <- list_tibbles_start_end %>% rbindlist %>% as_tibble
   
@@ -327,7 +337,129 @@ vector.of.positions_to_simple.ranges <- function(input_vector, metadata_vector) 
 
 ```
 
+
+## generating enrichment catalog of PFAM protein families
+
+```{r}
+
+# PROTEINFAMILY
+polyA_RNAseq_background_pfam <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "pfam"), mart = ensembl_mart) %>% .[.$pfam != "",]
+
+# obtain description(definition, DE) for each PFAM ID
+
+PFAM_all_descriptions <- as.data.frame(PFAMDE[mappedkeys(PFAMDE)]) %>% setNames(., c("pfam", "family_description"))
+
+polyA_RNAseq_background_pfam <- dplyr::left_join(polyA_RNAseq_background_pfam, PFAM_all_descriptions, by = "pfam")
+
+polyA_RNAseq_background_pfam[, "family_description"] <- as.character(polyA_RNAseq_background_pfam[, "family_description"])
+
+write.table(x = polyA_RNAseq_background_pfam, file = paste(results_dir, "polyA_RNAseq_GO_background_PROTEINFAMILY.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+
+# create list of gene UNIVERSE
+
+reference_geneset_universe <- polyA_RNAseq_background_pfam$external_gene_name
+
+# create list containing collections of genes under their according family descriptions
+
+polyA_RNAseq_background_pfam_2 <- polyA_RNAseq_background_pfam
+
+polyA_RNAseq_background_pfam_2 <- polyA_RNAseq_background_pfam_2[, names(polyA_RNAseq_background_pfam_2) != "pfam"]
+
+list_of_pfam_descriptions <- polyA_RNAseq_background_pfam_2$family_description %>% unique %>% as.list
+
+list_of_pfam_gene_family_categories <- purrr::map(.x = list_of_pfam_descriptions, .f = ~as.list(polyA_RNAseq_background_pfam[polyA_RNAseq_background_pfam$family_description == .x, "external_gene_name"]))
+
+names(list_of_pfam_gene_family_categories) <- list_of_pfam_descriptions
+
+list_of_pfam_gene_family_categories <- list_of_pfam_gene_family_categories %>% purrr::map(~unlist(.x))
+
+```
+
+
+## import MBNL (HiTS-CLiP) and SRSF (FLASH-Seq) data and match with GTF information
+
+### set directories
+
+```{r}
+
+clipseq_dir <- "Z:/isoform_usage_project/CLIPseq_files/"
+
+FLASHseq_dir <- "Y:/2019_FLASHseq/results/R_processing_results/"
+
+```
+
+### prepare geneset categories
+
+```{r}
+
+# prepare enrichment categories for each upstream candidate RBP
+
+list_of_RBP_target_gene_categories_raw <- list(
+  "SRSF2 HiTS_CLiP HeLa_WT GSE111900 0.01FDR" = read.delim(paste(clipseq_dir, "SRSF2_hits.clip_GSE111900/geneset_srsf2_clip_GSE111900_WT_0.01FDR.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+                                               
+  "SRSF1 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR1-SRSF1.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF2 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR5-SRSF2.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF3 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR8-SRSF3.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF4 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR9-SRSF4.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF5 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR10-SRSF5.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF6 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR11-SRSF6.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF7 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR12-SRSF7.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  # "SRSF9 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR13-SRSF9.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  "SRSF11 FLASH_seq HEK293 GSE118265 PEP0.01" = read.delim(paste(FLASHseq_dir, "pureclip_peaks_SR14-SRSF11.bed_geneset_PEP0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector,
+  
+  "MBNL2 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/geneset_mbnl2_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
+  "MBNL1 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/geneset_mbnl1_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper),
+  "MBNL3 HiTS_CLiP MEF GSE60487 pvalue0.01" = read.delim(paste(clipseq_dir, "MBNL1.2.3_hits.clip_GSE60487/geneset_mbnl3_hits.clip_MEF_GSE60487_pvalue0.01.txt", sep = ""), header = FALSE, stringsAsFactors = FALSE) %>% unique %>% as.vector %>% lapply(toupper)
+  )
+
+list_of_RBP_target_gene_categories <- list_of_RBP_target_gene_categories_raw %>% flatten
+
+names(list_of_RBP_target_gene_categories) <- names(list_of_RBP_target_gene_categories_raw)
+
+```
+
 ## Import files
+
+### RNA expression section
+
+#### import expression tables of DE genes
+
+```{r}
+
+logCPM_OBseries_anysig_DEGs_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_2_eRNA/R_processing_results/edgeR_GLM_DEGs_logCPM.txt"
+
+```
+
+#### define functions
+
+```{r}
+
+## END filteratleast_x_reads_in_anytimepoint
+
+average_counts_from_triplicate <- function(input_matrix, no_annotation_cols) {
+  
+input_matrix <- input_matrix %>% as_tibble
+
+a <- seq(from = 1 + no_annotation_cols, to = (input_matrix %>% ncol) - 3 + 1, by = 3)
+b <- seq(from = 3 + no_annotation_cols, to = input_matrix %>% ncol, by = 3)
+c <- purrr::map2(a, b, ~.x:.y)
+
+# generate logical tests for each partition each row. does each timepoint have at least 5 junction reads in all replicates?
+d <- purrr::map(.x = c, .f = ~input_matrix[, .x])
+
+e <- purrr::map(.x = d, .f = ~apply(.x, 1, FUN = mean) %>% as_tibble %>% setNames(gsub(x = colnames(.x), pattern = "(.*)(_r[1-3])", replacement = "\\1_avg") %>% unique))
+
+f <- purrr::reduce(e, bind_cols) %>% as_tibble
+
+output_matrix <- bind_cols(input_matrix[, 1:no_annotation_cols], f)
+
+return(output_matrix)
+
+}
+
+## END average_counts_from_triplicate
+
+```
 
 ### JUM/PSI-Sigma section
 
@@ -349,11 +481,9 @@ tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kasse
 # tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/5x5_SOM_997_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15_long.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-
 # tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-
 # tibble_JUM_all_junctions_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 # PSI-Sigma ###
@@ -361,11 +491,9 @@ tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/
 # tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/5x5_SOM_2095_exons_exon.PSI_OB_diff_any_pvalue0.01_any_deltaPSI_greaterthan_10_long.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-
 # tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 tibble_PSIsigma_all_exons_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-
 # tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 ```
@@ -389,10 +517,14 @@ tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.del
 ```{r}
 
 # JUM ###
-tibble_JUM_junction_ontology_supp_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-
+# tibble_JUM_junction_ontology_supp_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # PSI-Sigma ###
-tibble_PSIsigma_exon_ontology_supp_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_exon_ontology_supp_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+# JUM ###
+tibble_JUM_junction_ontology_supp_info <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# PSI-Sigma ###
+tibble_PSIsigma_exon_ontology_supp_info <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 ```
 
@@ -401,14 +533,24 @@ tibble_PSIsigma_exon_ontology_supp_info <- read.delim("Z:/PGNEXUS_kassem_MSC/Kas
 ```{r}
 
 # JUM ###
-tibble_JUM_junction_ontology_transcripts <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_transcript_features_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-tibble_JUM_junction_ontology_biomart <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_biomart_domains_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-tibble_JUM_junction_ontology_PTM <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_PTMs_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_junction_ontology_transcripts <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_transcript_features_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_junction_ontology_biomart <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_biomart_domains_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_junction_ontology_PTM <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_PTMs_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 # PSI-Sigma ###
-tibble_PSIsigma_exon_ontology_transcripts <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_transcript_features_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-tibble_PSIsigma_exon_ontology_biomart <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_biomart_domains_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-tibble_PSIsigma_exon_ontology_PTM <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_PTMs_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_exon_ontology_transcripts <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_transcript_features_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_exon_ontology_biomart <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_biomart_domains_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_exon_ontology_PTM <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_PTMs_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+# JUM ###
+tibble_JUM_junction_ontology_transcripts <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_transcript_features_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_junction_ontology_biomart <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_biomart_domains_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_junction_ontology_PTM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/table_junction_ontology_matched_PTMs_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+# PSI-Sigma ###
+tibble_PSIsigma_exon_ontology_transcripts <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_transcript_features_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_PSIsigma_exon_ontology_biomart <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_biomart_domains_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_PSIsigma_exon_ontology_PTM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_exon_ontology_matched_PTMs_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 ```
 
@@ -496,9 +638,12 @@ tibble_non_family_interpro_entries <- c("interpro_active.site_entries.tsv", "int
 
 ```{r}
 
-tibble_2020.PO4_2012.proteome_valid_junc.exons <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_confirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_2020.PO4_2012.proteome_valid_junc.exons <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_confirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_2020.PO4_valid_phosphosites <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_2020.PO4_valid_phosphosites <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_2020.PO4_2012.proteome_valid_junc.exons <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_confirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_2020.PO4_valid_phosphosites <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
 
 ```
 
@@ -507,8 +652,12 @@ tibble_2020.PO4_valid_phosphosites <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_O
 ```{r}
 
 # tibble_fasta_supp_info_exons <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+tibble_fasta_supp_info_exons <- read.delim(file = "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_exons/exon_table_OB_diff_dpsi10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
 
-tibble_fasta_supp_info_junctions <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+
+# tibble_fasta_supp_info_junctions <- read.delim(file = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+tibble_fasta_supp_info_junctions <- read.delim(file = "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/angel_3FT_junctions/junction_table_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15.txt", sep = "\t", row.names = NULL, header = TRUE) %>% as_tibble
+
 
 ```
 
@@ -530,7 +679,7 @@ tibble_ebi_gwas_catalog <- read_tsv(file = "Y:/eQTL_catalogue/gwas_catalog_v1.0.
 
 ```
 
-# Comparison between JUM and PSI-Sigma
+# JUM and PSI-Sigma
 
 ## Calculate the number of junction/exons found in common
 
@@ -1180,6 +1329,8 @@ list_matchtest_som_sweep_byisoform <- purrr::map(wide_table_som_sweep_clusters %
 # calculate percentage consensus pairwise between any two items.
 list_percentage_consensus_per_item <- future_map(list_matchtest_som_sweep_byisoform, ~apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("apply", "wide_table_som_sweep_clusters", "as_tibble", "dplyr")))
 
+rm(list_matchtest_som_sweep_byisoform)
+
 # rbind to obtain consensus matrix
 matrix_consensus_matrix <- list_percentage_consensus_per_item %>% rbindlist %>% as.matrix
 rownames(matrix_consensus_matrix) <- wide_tibble_JUM_PSIsigma_PSI_timeseries_merged$id
@@ -1280,7 +1431,7 @@ write.table(x = tibble_pairwise_edges_filtered, file = paste(results_dir, "conse
 
 ```
 
-## GO TO CYTOSCAPE HERE
+### GO TO CYTOSCAPE HERE
 
 ### RETURN FROM CYTOSCAPE, CREATE CLUSTERED SCALED MQ RATIOS
 
@@ -1479,13 +1630,476 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwi
 
 ```
 
+## Consensus SOM: Expression co-clustering with JUM and PSI-Sigma
 
+### extract the RBPs, lncRNAs and snRNAs etc... from expression data and combine with PSI data
 
+```{r}
+
+logCPM_OBseries_anysig_DEGs_import <- read.delim(file = paste(logCPM_OBseries_anysig_DEGs_dir), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf")) %>% as_tibble
+
+ENSG_to_genesymbol_DEGs <- getBM(filters = "ensembl_gene_id", values = logCPM_OBseries_anysig_DEGs_import$ensembl_gene_id, attributes = c("ensembl_gene_id", "external_gene_name"), mart = ensembl_mart)
+
+# append official gene symbol to the DEG table and average the counts
+logCPM_OBseries_anysig_DEGs <- dplyr::right_join(ENSG_to_genesymbol_DEGs, logCPM_OBseries_anysig_DEGs_import, by = "ensembl_gene_id") %>% average_counts_from_triplicate(., 2)
+
+# reorder the columns to make them chronological
+
+logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs[, c("ensembl_gene_id", "external_gene_name", "logCPM_BM_MSC_to_OB_ud_avg", "logCPM_BM_MSC_to_OB_6h_avg", "logCPM_BM_MSC_to_OB_12h_avg", "logCPM_BM_MSC_to_OB_24h_avg", "logCPM_BM_MSC_to_OB_3d_avg", "logCPM_BM_MSC_to_OB_6d_avg", "logCPM_BM_MSC_to_OB_9d_avg", "logCPM_BM_MSC_to_OB_12d_avg")]
+
+colnames(logCPM_OBseries_anysig_DEGs) <- c("ensembl_gene_id", "external_gene_name", "ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+
+# subset CPM table by biological role
+
+  # RBPs
+column_RBP_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("protein_coding", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = c("ensembl_gene_id", "name_1006"), mart = ensembl_mart) %>% as_tibble %>% .[.$name_1006 == "RNA binding" | .$name_1006 == "spliceosomal complex", "ensembl_gene_id"]
+
+logCPM_OBseries_RBP <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_RBP_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("RBP", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+  # lncRNA
+column_lncRNA_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("lncRNA", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = "ensembl_gene_id", mart = ensembl_mart) %>% as_tibble
+
+logCPM_OBseries_lncRNA <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_lncRNA_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("lncRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+  # snRNA
+column_snRNA_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("snRNA", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = "ensembl_gene_id", mart = ensembl_mart) %>% as_tibble %>% mutate_if(is.logical, as.character)
+
+logCPM_OBseries_snRNA <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_snRNA_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("snRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+  # all TF complex 
+column_TFcomplex_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("protein_coding", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = c("ensembl_gene_id", "name_1006"), mart = ensembl_mart) %>% as_tibble %>% .[.$name_1006 == "transcription factor complex", "ensembl_gene_id"]
+
+logCPM_OBseries_TFcomplex <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_TFcomplex_genes_OBseries, by = "ensembl_gene_id") %>%
+  add_column(., diff_exon_coords = paste("TF complex", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", .after = 2)
+
+# combine all the individual logCPM tables into one subsetted expression dataset
+logCPM_OBseries_subset <- dplyr::bind_rows(logCPM_OBseries_RBP, logCPM_OBseries_lncRNA, logCPM_OBseries_snRNA, logCPM_OBseries_TFcomplex)
+
+# get rid of ENSG id
+logCPM_OBseries_subset <- logCPM_OBseries_subset[, -1]
+
+# rename column before next join
+
+colnames(logCPM_OBseries_subset)[1] <- "matched_gene_names"
+
+# add id column and get rid of the rest
+logCPM_OBseries_subset <- logCPM_OBseries_subset %>% 
+  add_column("id" = paste(.$matched_gene_names, .$splicemode, .$diff_exon_coords, sep = "|")) %>%
+  .[, c("id", vector_OBseries_timepoints_raw)] %>%
+  setNames(c("id", vector_OBseries_timepoints_edited))
+
+# combine logCPM and PSI values
+tibble_combinedexpr_logCPM_PSI_unscaled <- dplyr::bind_rows(wide_tibble_JUM_PSIsigma_PSI_timeseries_merged, logCPM_OBseries_subset)
+
+tibble_combinedexpr_logCPM_PSI_scaled <- tibble_combinedexpr_logCPM_PSI_unscaled
+
+# scale values
+tibble_combinedexpr_logCPM_PSI_scaled[, vector_OBseries_timepoints_edited] <- tibble_combinedexpr_logCPM_PSI_scaled[, vector_OBseries_timepoints_edited] %>% genescale(m = ., axis = 1, method = "Z")
+
+```
+
+### params
+
+```{r}
+
+mutual_consensus_cutoff <- 0.5
+
+# SET THESE TWO. script will sweep using the "dot product" of the two ranges.
+xdim_range_combinedexpr <- c(2, 3, 2, 4, 2, 5, 3, 2, 2, 7, 4, 8, 2, 9, 5, 2, 2, 11, 6, 3, 2, 13, 7, 2, 5, 10, 8, 16, 2, 17)
+ydim_range_combinedexpr <- c(3, 2, 4, 2, 5, 2, 4, 6, 7, 2, 4, 2, 9, 2, 4, 10, 11, 2, 4, 8, 13, 2, 4, 14, 6, 3, 4, 2, 17, 2)
+# evaluate coverage
+plot(density(purrr::map2(xdim_range_combinedexpr, ydim_range_combinedexpr, ~.x * .y) %>% unlist, bw = 0.1), main = "Coverage of SOM sweep")
+
+set.seed(7)
+
+random_seed_numbers <- sample(1:1E5, 5, replace = FALSE)
+
+list_seeds_and_dimensions_to_loop <- purrr::map2(.x = xdim_range_combinedexpr, .y = ydim_range_combinedexpr, .f = ~list(.x, .y)) %>% purrr::cross2(., random_seed_numbers) %>% purrr::map(~flatten(.x))
+
+```
+
+### execute ensemble SOM and create consensus matrix
+
+```{r}
+
+# EXECUTE CONSENSUS SOM 
+wide_table_som_sweep_clusters <- future_imap(.x = list_seeds_and_dimensions_to_loop, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_seeds_and_dimensions_to_loop[[1]]
+  ###########
+  
+  cat("\nprocessing", .y)
+  
+  set.seed(.x[[3]])
+  
+  som(tibble_combinedexpr_logCPM_PSI_scaled %>% dplyr::select(-id) %>% as.matrix, grid = somgrid(xdim = .x[[1]], ydim = .x[[2]], topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE, dist.fcts = "sumofsquares") %>% .[["unit.classif"]] %>% tibble::enframe(., name = NULL)
+  
+}, .progress = TRUE, .options = future_options(globals = c("tibble_combinedexpr_logCPM_PSI_scaled", "dplyr", "genescale", "som")) ) %>% as.data.frame
+
+# use "id" column as rownames
+rownames(wide_table_som_sweep_clusters) <- tibble_combinedexpr_logCPM_PSI_scaled$id
+
+# pairwise test between all items for every sweep to see if they were co-occurring
+list_matchtest_som_sweep_byisoform <- purrr::map(wide_table_som_sweep_clusters %>% array_tree, ~unlist(.x)) %>% 
+  future_map(.f = ~apply(X = wide_table_som_sweep_clusters, MARGIN = 1, FUN = function(X){.x == X}), .progress = TRUE, .options = future_options(globals = c("apply", "wide_table_som_sweep_clusters")))
+
+# calculate percentage consensus pairwise between any two items.
+list_percentage_consensus_per_item <- future_map(list_matchtest_som_sweep_byisoform, ~apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("apply", "wide_table_som_sweep_clusters", "as_tibble", "dplyr")))
+
+rm(list_matchtest_som_sweep_byisoform)
+
+# rbind to obtain consensus matrix
+matrix_consensus_matrix <- list_percentage_consensus_per_item %>% rbindlist %>% as.matrix
+rownames(matrix_consensus_matrix) <- tibble_combinedexpr_logCPM_PSI_scaled$id
+
+# re-order the consensus matrix
+matrix_consensus_matrix_dist_result <- matrix_consensus_matrix %>% parallelDist::parDist(method = "euclidean", threads = 16)
+matrix_consensus_matrix_hclust_result <- fastcluster::hclust(matrix_consensus_matrix_dist_result, method = "ward.D2")
+matrix_consensus_matrix_dendrogram <- as.dendrogram(matrix_consensus_matrix_hclust_result)
+# take rowmeans: cols/rows should get darker as you move right/down
+matrix_consensus_matrix_rowmeans <- rowMeans(matrix_consensus_matrix, na.rm = T)
+# matrix_consensus_matrix_PCA_loadings_byrow <- prcomp(matrix_consensus_matrix) %>% .[["rotation"]] %>% .[, 1]
+# matrix_consensus_matrix_singular_vectors_byrow <- apply(matrix_consensus_matrix, 1 , FUN = function(X) {svd(X) %>% .$d})
+
+matrix_consensus_matrix_dendrogram_reordered <- reorder(matrix_consensus_matrix_dendrogram, matrix_consensus_matrix_rowmeans)
+
+save(matrix_consensus_matrix_dendrogram_reordered, file = paste(results_dir, "matrix_consensus_matrix_dendrogram_reordered.matrix", sep = ""))
+
+ggdendrogram(matrix_consensus_matrix_dendrogram_reordered) +
+  xlab(b2) +
+  theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_dir, "dendrogram_som_consensus_matrix_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
+
+# retrieve the order of rows from the dendrogram
+matrix_consensus_matrix_dendrogram_reordered_order <- matrix_consensus_matrix_dendrogram_reordered %>% unlist
+# implement reorder
+tibble_consensus_matrix_reordered <- matrix_consensus_matrix[matrix_consensus_matrix_dendrogram_reordered_order, matrix_consensus_matrix_dendrogram_reordered_order] %>% as_tibble(rownames = "id")
+
+# write the consensus matrix table to file
+write.table(x = tibble_consensus_matrix_reordered, file = paste(results_dir, "heatmap_som_consensus_matrix_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+save(tibble_consensus_matrix_reordered, file = paste(results_dir, "tibble_consensus_matrix_reordered.tibble", sep = ""))
+load(file = paste(results_dir, "tibble_consensus_matrix_reordered.tibble", sep = ""))
+
+# tibble_consensus_matrix_reordered <- read.delim(file = paste(results_dir, "heatmap_som_consensus_matrix_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+
+# melt table for ggplot
+tibble_consensus_matrix_long <- reshape2::melt(tibble_consensus_matrix_reordered, id = c("id"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_at(.vars = c("id", "variable"), as.character)
+
+save(tibble_consensus_matrix_long, file = paste(results_dir, "tibble_consensus_matrix_long.tibble", sep = ""))
+load(file = paste(results_dir, "tibble_consensus_matrix_long.tibble", sep = ""))
+
+ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
+  geom_tile(aes(x = id, y = variable)) +
+  ggtitle(paste("Consensus matrix for co-clustering by PSI and logCPM\nJUM and PSI-Sigma + RSEM/EdgeR", sep = "")) +
+  scale_x_discrete(breaks = tibble_consensus_matrix_reordered$id, labels = tibble_consensus_matrix_reordered$id, limits = tibble_consensus_matrix_reordered$id) +
+  scale_y_discrete(breaks = tibble_consensus_matrix_reordered$id, labels = tibble_consensus_matrix_reordered$id, limits = tibble_consensus_matrix_reordered$id) +
+  scale_fill_gradientn(colours = c("lightblue2", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.25, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_dir, "heatmap_som_consensus_matrix_combined_JUM_PSIsigma.tiff", sep = ""), device = "tiff", dpi = 600, width = 30, height = 25, units = "cm", limitsize = FALSE)
+
+# CLUSTER DETERMINATION #####
+# loop along the consensus matrix variables
+list_ids_for_looping <- tibble_consensus_matrix_reordered$id %>% unique %>% array_tree
+
+# debugging purposes only 
+# list_ids_for_looping <- list_ids_for_looping[c(1:50, 1000:1050)]
+
+# for every item, retrieve its friends above a specified "mutual_consensus_cutoff"
+list_cooccurring_items <- future_map(.x = list_ids_for_looping, .f = ~tibble_consensus_matrix_long[tibble_consensus_matrix_long$variable == .x & tibble_consensus_matrix_long$cocluster_percentage >= mutual_consensus_cutoff, "id"], .progress = TRUE, .options = future_options(globals = c("tibble_consensus_matrix_long", "mutual_consensus_cutoff")))
+
+names(list_cooccurring_items) <- list_ids_for_looping
+
+# take pairwise intersections ###
+pairwise_comparisons_between_items <- combn(list_ids_for_looping %>% unlist, m = 2) %>% t %>% as_tibble
+colnames(pairwise_comparisons_between_items) <- c("comparison_1", "comparison_2")
+
+# each level 1 element is a comparison of each pairwise intersection
+vector_comparison_1 <- pairwise_comparisons_between_items$comparison_1
+vector_comparison_2 <- pairwise_comparisons_between_items$comparison_2
+
+# NOTE: EACH L1 ELEMENT OF THE LIST MUST BE A TIBBLE. IF IT ISN'T THE WHOLE THING IS STUFFED.
+
+list_itemwise_intersection <- future_map2(.x = vector_comparison_1, .y = vector_comparison_2, .f = ~dplyr::intersect(list_cooccurring_items[[.x]], list_cooccurring_items[[.y]]) %>% nrow, .progress = TRUE, .options = future_options(globals = c("list_cooccurring_items", "dplyr::intersect"))) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_intersection")
+
+list_itemwise_setdiff <- future_map2(.x = vector_comparison_1, .y = vector_comparison_2, .f = ~dplyr::setdiff(list_cooccurring_items[[.x]], list_cooccurring_items[[.y]]) %>% nrow, .progress = TRUE, .options = future_options(globals = c("list_cooccurring_items", "dplyr::setdiff"))) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_setdiff")
+
+# append the intersection and setdiff metrics onto the tibble of pairwise comparisons. this will be the edge table!!
+tibble_pairwise_edges_unfiltered <- bind_cols(pairwise_comparisons_between_items %>% as_tibble, list_itemwise_intersection[, 1], list_itemwise_setdiff[, 1])
+
+tibble_pairwise_edges_unfiltered <- add_column(tibble_pairwise_edges_unfiltered, "jaccard" = tibble_pairwise_edges_unfiltered$coclustering_intersection/(tibble_pairwise_edges_unfiltered$coclustering_setdiff + tibble_pairwise_edges_unfiltered$coclustering_intersection))
+
+write.table(x = tibble_pairwise_edges_unfiltered, file = paste(results_dir, "consensus_edge_table_anyintersection_consensus0.5_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# tibble_pairwise_edges_unfiltered <- read_delim(paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
+
+# filter for pairwise neighbours in common > 0
+tibble_pairwise_edges_filtered <- tibble_pairwise_edges_unfiltered[tibble_pairwise_edges_unfiltered$coclustering_intersection > 0, ]
+
+save(tibble_pairwise_edges_filtered, file = paste(results_dir, "tibble_pairwise_edges_filtered.tibble", sep = ""))
+
+pdf(file = paste(results_dir, "densityplot_PNC_distribution_combined_JUM_PSIsigma.pdf", sep = ""), width = 20, height = 15)
+plot(density(tibble_pairwise_edges_filtered$coclustering_intersection %>% as.numeric), 
+     main = paste("Density distribution of pairwise neighbours in common", sep = "\n"))
+dev.off()
+
+pdf(file = paste(results_dir, "densityplot_jaccard_distribution_combined_JUM_PSIsigma.pdf", sep = ""), width = 20, height = 15)
+plot(density(tibble_pairwise_edges_filtered$jaccard %>% as.numeric), 
+     main = paste("Density distribution of jaccard similarity", sep = "\n"))
+dev.off()
+
+write.table(x = tibble_pairwise_edges_filtered, file = paste(results_dir, "consensus_edge_table_intersection1_consensus0.5_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+### GO TO CYTOSCAPE HERE
+
+### RETURN FROM CYTOSCAPE, CREATE CLUSTERED SCALED MQ RATIOS
+
+```{r}
+
+# grep the corresponding cluster table from file
+filename_of_clusterGO_result <- list.files(path = results_dir, pattern = paste("consensus_combinedexpr.*tab$", sep = ""))
+
+tibble_cytoscape_result <- read.delim(paste(results_dir, filename_of_clusterGO_result, sep = ""), sep = "\t", header = TRUE, row.names = NULL) %>% setNames(c("cluster", "id")) %>% as_tibble
+
+tibble_cytoscape_result[, "cluster"] <- gsub(x = tibble_cytoscape_result$cluster, pattern = "Cluster ", replacement = "")
+
+tibble_cytoscape_result <- tibble_cytoscape_result %>% type_convert
+
+# split the cytoscape cluster result into a list, clusterwise
+list_cytoscape_cluster_results <- purrr::map(.x = tibble_cytoscape_result$cluster %>% unique, .f = ~tibble_cytoscape_result[tibble_cytoscape_result$cluster == .x, ] %>% dplyr::mutate_at(.vars = "id", as.character))
+
+# bind the standardised PSI information to the cluster information
+list_MQ_ratios_scaled_clustered <- purrr::map(.x = list_cytoscape_cluster_results, .f = ~dplyr::left_join(.x, tibble_combinedexpr_logCPM_PSI_scaled %>% type_convert %>% dplyr::mutate_at(.vars = "id", as.character), by = "id"))
+
+wide_tibble_consensus_clusters_MQ_ratios <- list_MQ_ratios_scaled_clustered %>% purrr::reduce(dplyr::bind_rows)
+
+cat("\nnumber of unique items originally: ", tibble_combinedexpr_logCPM_PSI_scaled$id %>% unique %>% length)
+cat("\nnumber of unique items after ClusterONE: ", wide_tibble_consensus_clusters_MQ_ratios$id %>% unique %>% length)
+
+# get a list of items which were chucked out by clusterONE
+tibble_items_chucked_out <- dplyr::anti_join(tibble_combinedexpr_logCPM_PSI_scaled$id %>% unique %>% tibble::enframe(name = NULL, value = "id"),
+                                             wide_tibble_consensus_clusters_MQ_ratios$id %>% unique %>% tibble::enframe(name = NULL, value = "id"), by = "id")
+
+# write the items that got chucked out
+write.table(x = tibble_items_chucked_out, file = paste(results_dir, "consensus_combinedexpr_items_chucked_out.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+# remove TSS from PSI-Sigma ids
+wide_tibble_consensus_clusters_MQ_ratios[, "id"] <- gsub(x = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "TSS\\|", replacement = "")
+# i fucked up the delimiting for expression
+wide_tibble_consensus_clusters_MQ_ratios[, "id"] <- gsub(x = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "_ENSG", replacement = "\\|ENSG")
+
+# demultiplex the id column
+wide_tibble_consensus_clusters_MQ_ratios <- dplyr::bind_cols(stringr::str_split_fixed(string = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "\\|", n = 6) %>% as_tibble %>% setNames(c("S1", "S2", "S3", "S4", "S5", "S6")),
+                                                             wide_tibble_consensus_clusters_MQ_ratios) %>%
+  # preallocate columns
+  add_column("method" = "NA",
+             "gene" = "NA", 
+             "item_id" = "NA", 
+             "category" = "NA", 
+             "sub_junction_start" = "NA",
+             "sub_junction_end" = "NA", 
+             "matched_strand" = "NA", .after = "S6")
+
+# shuffle the ids around
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "method"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "S1"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "method"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S2"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "gene"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "S2"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "gene"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S1"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "item_id"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "S3"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "item_id"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S4"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "category"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "S6"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "category"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "S4"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "category"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S3"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "sub_junction_start"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "S4"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "sub_junction_end"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "S5"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "matched_strand"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "S5"]
+
+wide_tibble_consensus_clusters_MQ_ratios <- wide_tibble_consensus_clusters_MQ_ratios %>%
+  dplyr::select(-S1, -S2, -S3, -S4, -S5, -S6) %>% 
+  type_convert %>%
+  dplyr::mutate_at(.vars = "cluster", as.character)
+
+# reorder the cluster factor for correct facet order
+wide_tibble_consensus_clusters_MQ_ratios[, "cluster"] <- factor(wide_tibble_consensus_clusters_MQ_ratios$cluster %>% mixedsort, levels = wide_tibble_consensus_clusters_MQ_ratios$cluster %>% unique %>% mixedsort)
+
+### convert the som table to a long form interprable by ggplot
+# reshaping into long table
+long_tibble_consensus_clusters_MQ_ratios <- reshape2::melt(wide_tibble_consensus_clusters_MQ_ratios, id.vars = c("id", "method", "gene", "item_id", "category", "sub_junction_start", "sub_junction_end", "matched_strand", "cluster"), variable.name = "timepoint", value.name = "scaled_level") %>% as_tibble
+
+# create the tibble of average line 
+long_tibble_consensus_clusters_average.line <- long_tibble_consensus_clusters_MQ_ratios %>% dplyr::group_by(cluster, timepoint) %>% 
+  dplyr::summarise("avg_level" = mean(scaled_level))
+
+# ggplot of consensus som PSI profiles
+ggplot() +
+  geom_line(data = long_tibble_consensus_clusters_MQ_ratios, aes(x = timepoint, y = scaled_level, group = id), alpha = 0.33) +
+  geom_line(data = long_tibble_consensus_clusters_average.line, aes(x = timepoint, y = avg_level, group = cluster), colour = "white", size = 1) +
+  scale_colour_manual(values = c("black")) +
+  facet_wrap(~cluster) +
+  ggtitle(paste("Time series profiles of spliceome PSI and expression logCPM\n",
+                "JUM, PSI-Sigma, EdgeR/RSEM\n", sep = "")) +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
+  xlab("Time-point") +
+  ylab("Scaled PSI or logCPM") +
+  # guides(colour = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype ="solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(results_dir, "consensus_combinedexpr_timeseries_profiles.pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
+  ggsave(filename = paste(results_dir, "consensus_combinedexpr_timeseries_profiles.svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+
+write.table(x = wide_tibble_consensus_clusters_MQ_ratios, file = paste(results_dir, "consensus_combinedexpr_timeseries_profiles_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+write.table(x = long_tibble_consensus_clusters_MQ_ratios, file = paste(results_dir, "consensus_combinedexpr_timeseries_profiles_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
+### Gene ontology of each SOM cluster
+
+#### preparation of separate data frames containing DIFFSPLICED gene sets of each cluster
+
+```{r}
+
+# create list of SOM clusters
+vector_SOM_clusters <- wide_tibble_consensus_clusters_MQ_ratios$cluster %>% unique %>% paste
+
+list_of_wide_consensus_PSI_levels_by_cluster <- purrr::map(.x = vector_SOM_clusters, .f = ~wide_tibble_consensus_clusters_MQ_ratios[wide_tibble_consensus_clusters_MQ_ratios$cluster == .x, ]) %>% set_names(vector_SOM_clusters)
+
+# take gene set for each cluster - all expr and PSI genes
+list_of_genesets_by_cluster <- purrr::map(.x = list_of_wide_consensus_PSI_levels_by_cluster, .f = ~.x[.x$method == "JUM" | .x$method == "PSIsigma", ] %>% .$gene %>% strsplit(split = ",") %>% unlist %>% unique)
+
+```
+
+#### GO enrichment
+
+```{r}
+
+# let's try to do all enrichment at once using purrr
+# generate combinations of gene sets and GO categories
+list_of_combinations_of_genesets_and_GOterms <- cross2(.x = list_of_genesets_by_cluster, .y = list("MF", "BP", "CC"))
+# generate corresponding names and table nrows
+list_of_combinations_of_genesets_and_GOterms_names <- cross2(.x = list_of_genesets_by_cluster %>% names, .y = list("MF", "BP", "CC"))
+
+# gene ontology for each combination
+list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise <- future_map2(.x = list_of_combinations_of_genesets_and_GOterms,
+                                                                       .y = list_of_combinations_of_genesets_and_GOterms_names,
+                                                                       .f = function(a1, a2) {
+                                                                         
+                                                                         cat("\nnow processing: ", a2[[1]], a2[[2]])
+                                                                         
+                                                                         GOHyperGAll(catdb = catdb, gocat = a2[[2]], Nannot = 2, sample = a1[[1]]) %>% GOHyperGAll_benjamini_correction %>% type_convert %>% as_tibble %>% add_column("cluster" = a2[[1]]) %>% return
+                                                                         
+                                                                       } , .progress = TRUE, .options = future_options(globals = c("GOHyperGAll", "catdb", "GOHyperGAll_benjamini_correction", "type_convert", "as_tibble", "add_column")))
+
+# rbind and tibblise
+tibble_consensus.SOM_hyperGOresult_clusterwise_combined_JUM_PSIsigma <- list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise %>% rbindlist %>% as_tibble
+
+write.table(x = tibble_consensus.SOM_hyperGOresult_clusterwise_combined_JUM_PSIsigma, file = paste(results_dir, "tibble_consensus.SOM_hyperGOresult_clusterwise_combinedexpr.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# ggplot
+# get list indices of the GO result tibbles that house the separate PSI info.
+purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~ggplot(.x, aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
+  geom_col(aes(fill = log10(Padj))) +
+  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented ", .y[[2]], " GO terms for each consensus cluster in OB series (", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], ")", sep = "")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("GO term") +
+  ylab("Number of genes in GO term") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+   
+purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+
+```
+
+### Family enrichment of each SOM cluster
+
+Separate and sum PSI
+
+```{r}
+
+list_of_tibbles_consensus.SOM_family.enrichment_clusterwise <- future_map2(.x = list_of_genesets_by_cluster, .y = names(list_of_genesets_by_cluster), .f = ~bc3net::enrichment(genes = .x, reference = reference_geneset_universe, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble %>% add_column(cluster = paste(.y)), .progress = TRUE, .options = future_options(globals = c("bc3net::enrichment", "reference_geneset_universe", "list_of_pfam_gene_family_categories", "bc3net_benjamini_correction", "filtering_genehits_from_background_catalogue", "type_convert", "as_tibble")))
+
+# rbind and write table
+tibble_consensus_combinedexpr_PFAM_topinf <- list_of_tibbles_consensus.SOM_family.enrichment_clusterwise %>% rbindlist %>% as_tibble
+
+write.table(x = tibble_consensus_combinedexpr_PFAM_topinf, file = paste(results_dir, "tibble_consensus.SOM_PFAM_clusterwise_combinedexpr_topinf.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# plot family enrichment per cluster
+purrr::map2(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits), .f = ~ggplot(.x, aes(x = reorder(TermID, -genes), y = genes)) +
+  geom_col(aes(fill = log10(padj))) +
+  scale_fill_distiller(name = expression(log["10"](P)), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented PFAM families for each consensus cluster in OB series (", .y %>% strsplit(split = "_") %>% unlist %>% .[1], ")", sep = "")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
+  xlab("Protein Family (PFAM)") +
+  ylab("Number of genes in protein family") +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+
+purrr::map2(.x = list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_PFAM_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+
+```
+
+### enrichment of upstream RBPs - clusterwise, per gene
+
+```{r}
+
+# note: elements will look like: sep.PSI/MF, sum.PSI/MF, sep.PSI/BP, sum.PSI/BP etc...
+# gene ontology for each combination
+
+list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise <- future_map(.x = list_of_genesets_by_cluster, .f = ~bc3net::enrichment(genes = .x, reference = reference_geneset_universe, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("bc3net::enrichment", "reference_geneset_universe", "list_of_RBP_target_gene_categories", "bc3net_benjamini_correction", "filtering_genehits_from_background_catalogue", "type_convert", "as_tibble")))
+
+# filter gene ontology tables for top hits
+list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise, .f = ~dplyr::arrange(.x, pval) %>% head(n = 10))
+
+# add cluster number into each tibble and combine into single tibble
+tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits <- purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits), .f = ~cbind(.x, "cluster" = .y)) %>% rbindlist %>% as_tibble
+
+# reorder cluster as factor
+tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits[, "cluster"] <- factor(tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits$cluster, levels = tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits$cluster %>% unique %>% mixedsort)
+
+# plot family enrichment per cluster
+ggplot(tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits %>% dplyr::arrange(pval), aes(x = reorder(TermID, pval), y = -log10(pval), size = (padj < 0.05) %>% as.character)) +
+  geom_col(aes(fill = genes), colour = "black") +
+  scale_fill_distiller(name = "Number of genes targeted by RBP", type = "seq", palette = "Spectral", direction = -1, aesthetics = "fill", na.value = "yellow") +
+  scale_size_discrete(name = "FDR", breaks = c("TRUE", "FALSE"), limits = c("TRUE", "FALSE"), labels = c("< 0.05", "> 0.05"), range = c(0.1, 0)) +
+  geom_hline(yintercept = -log10(0.05), lty = 2, col = "red") +
+  facet_wrap(~cluster, scales = "free") +
+  ggtitle(paste("Top 10 significantly over-represented upstream RBPs for each consensus cluster in OB series\nJUM, PSI-Sigma, RSEM/EdgeR", sep = "")) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20)) +
+  xlab("Upstream RBP") +
+  ylab(expression(log["10"](p))) +
+  # coord_cartesian(ylim = c(0, 20)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 20, units = "cm") +
+ ggsave(filename = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 20, units = "cm")
+
+write.table(x = tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, file = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
 
 # JUM, PSI-Sigma and proteome/phosphoproteome.
 
-## Filter the junction/exon ontology by validated junc.exons
-## Match the validated JUM junction identifiers to the junction ID
+## JUM: Filter the junction/exon ontology by validated junc.exons
+### Match the validated JUM junction identifiers to the junction ID
 
 ```{r}
 
@@ -1527,13 +2141,8 @@ for the biomart tibbles, also filter by the biomart accesssion.
 
 # JUM ###
 tibble_JUM_junction_ontology_transcripts_filtered <- dplyr::semi_join(tibble_JUM_junction_ontology_transcripts, tibble_JUM_junction_ontology_supp_info_filtered_by_proteome, by = "AS_event_ID")
-tibble_JUM_junction_ontology_biomart_filtered <- dplyr::semi_join(tibble_JUM_junction_ontology_biomart, tibble_JUM_junction_ontology_supp_info_filtered_by_proteome, by = "AS_event_ID") %>% 
-  dplyr::semi_join(., tibble_non_family_interpro_entries %>% dplyr::rename("interpro" = "Accession")) %>% 
-  dplyr::bind_rows(., dplyr::semi_join(tibble_JUM_junction_ontology_biomart, tibble_JUM_junction_ontology_supp_info_filtered_by_proteome, by = "AS_event_ID") %>% .[is.na(.$interpro), ])
+tibble_JUM_junction_ontology_biomart_filtered <- dplyr::semi_join(tibble_JUM_junction_ontology_biomart, tibble_JUM_junction_ontology_supp_info_filtered_by_proteome, by = "AS_event_ID")
 tibble_JUM_junction_ontology_PTM_filtered <- dplyr::semi_join(tibble_JUM_junction_ontology_PTM, tibble_JUM_junction_ontology_supp_info_filtered_by_proteome, by = "AS_event_ID")
-
-# PSI-Sigma ###
-tibble_PSIsigma_exon_ontology_biomart_filtered <- tibble_PSIsigma_exon_ontology_biomart %>% dplyr::semi_join(., tibble_non_family_interpro_entries %>% dplyr::rename("interpro" = "Accession"))
 
 ```
 
@@ -1542,21 +2151,21 @@ tibble_PSIsigma_exon_ontology_biomart_filtered <- tibble_PSIsigma_exon_ontology_
 ```{r}
 
 # PROTEIN-LEVEL
-vector_unique_interpro_ids <- tibble_JUM_junction_ontology_biomart_filtered$interpro %>% na.omit %>% unique
+# vector_unique_interpro_ids <- tibble_JUM_junction_ontology_biomart_filtered$interpro %>% na.omit %>% unique
 
 tibble_protein_level_summary_count <- tibble_JUM_junction_ontology_biomart_filtered %>% dplyr::group_by(AS_event_ID) %>% 
-  dplyr::summarise(overlaps_interpro_domain = all(is.na(interpro)) == FALSE,
-                   unique_interpro_ids = interpro %>% na.omit %>% unique %>% paste(collapse = ";"),
-                   overlaps_LCR = all(is.na(seg_start)) == FALSE,
-                   overlaps_disordered_region = all(is.na(mobidblite)) == FALSE,
-                   overlaps_ncoils = all(is.na(ncoils_start)) == FALSE,
-                   overlaps_signalp = all(is.na(signalp_start)) == FALSE,
-                   overlaps_tmhmm = all(is.na(tmhmm_start)) == FALSE)
+  dplyr::summarise("overlaps_interpro_domain" = all(is.na(interpro)) == FALSE & intersect(interpro, tibble_non_family_interpro_entries$Accession) %>% length != 0,
+                   "unique_interpro_ids" = interpro %>% na.omit %>% unique %>% paste(collapse = ";"),
+                   "overlaps_LCR" = all(is.na(seg_start)) == FALSE,
+                   "overlaps_disordered_region" = all(is.na(mobidblite)) == FALSE,
+                   "overlaps_ncoils" = all(is.na(ncoils_start)) == FALSE,
+                   "overlaps_signalp" = all(is.na(signalp_start)) == FALSE,
+                   "overlaps_tmhmm" = all(is.na(tmhmm_start)) == FALSE)
 
-vector_unique_interpro_ids <- tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort
+vector_unique_interpro_ids <- dplyr::semi_join(tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort %>% tibble::enframe(name = NULL, value = "vec"), tibble_non_family_interpro_entries$Accession %>% tibble::enframe(name = NULL, value = "vec"), by = "vec") %>% unlist
 
 # create tally of each unique instance of interpro ID per AS_event_ID
-tibble_interpro_id_tally_per_ASeventID <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% .[order(.$tally), ] %>% dplyr::arrange(desc(tally))
+tibble_interpro_id_tally_per_ASeventID <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% dplyr::arrange(desc(tally))
 
 # create interpro to matched gene mapping
 tibble_interpro_ID_to_matched_gene_mapping <- tibble_JUM_junction_ontology_biomart_filtered %>% dplyr::group_by(interpro) %>% 
@@ -1589,7 +2198,7 @@ ggplot(tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)) %>
 
 write.table(x = tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)), file = paste(results_dir, "tally_overlapping_interpro_domains_JUM_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-message("total number of unique VSRs with any sort of protein-level annotation: ", tibble_JUM_junction_ontology_biomart_filtered$AS_event_ID %>% unique %>% length, " (", tibble_JUM_junction_ontology_biomart_filtered$AS_event_ID %>% unique %>% length *100/nrow(tibble_JUM_junction_ontology_transcripts_filtered), "% of those which have any transcript annotation)")
+message("total number of unique VSRs with any sort of protein-level annotation: ", tibble_JUM_junction_ontology_biomart_filtered$AS_event_ID %>% unique %>% length, " (", tibble_JUM_junction_ontology_biomart_filtered$AS_event_ID %>% unique %>% length *100/length(tibble_JUM_junction_ontology_transcripts$AS_event_ID %>% unique), "% of those which have any transcript annotation)")
 
 message("total percent of unique VSRs overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
@@ -1621,7 +2230,118 @@ ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
 
 ```
 
+## PSI-Sigma: Filter the junction/exon ontology by validated diff_exon_coords
+
+### filter the junction ontology by the validated proteome. get valid AS_event_IDs
+
+```{r}
+
+tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome <- dplyr::semi_join(tibble_PSIsigma_exon_ontology_supp_info %>%
+                                                                                  add_column("Leading.razor.protein" = paste("exon_", .$diff_exon_coords, ":", .$matched_strand, sep = "")),
+                                                                                tibble_2020.PO4_2012.proteome_valid_junc.exons, 
+                                                                                by = "Leading.razor.protein")
+
+```
+
+### filter by IDs for the transcript, biomart and PTM results.
+
+for the biomart tibbles, also filter by the biomart accesssion.
+
+```{r}
+
+# PSI-Sigma ###
+tibble_PSIsigma_exon_ontology_biomart_filtered <- dplyr::semi_join(tibble_PSIsigma_exon_ontology_biomart, tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome, by = "diff_exon_coords")
+tibble_PSIsigma_exon_ontology_PTM_filtered <- dplyr::semi_join(tibble_PSIsigma_exon_ontology_PTM, tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome, by = "diff_exon_coords")
+
+```
+
+#### stats summary of PSI-Sigma junction ontology
+
+```{r}
+
+# PROTEIN-LEVEL
+# vector_unique_interpro_ids <- tibble_PSIsigma_exon_ontology_biomart_filtered$interpro %>% na.omit %>% unique
+
+tibble_protein_level_summary_count <- tibble_PSIsigma_exon_ontology_biomart_filtered %>% dplyr::group_by(diff_exon_coords) %>% 
+  dplyr::summarise("overlaps_interpro_domain" = all(is.na(interpro)) == FALSE & intersect(interpro, tibble_non_family_interpro_entries$Accession) %>% length != 0,
+                   "unique_interpro_ids" = interpro %>% na.omit %>% unique %>% paste(collapse = ";"),
+                   "overlaps_LCR" = all(is.na(seg_start)) == FALSE,
+                   "overlaps_disordered_region" = all(is.na(mobidblite)) == FALSE,
+                   "overlaps_ncoils" = all(is.na(ncoils_start)) == FALSE,
+                   "overlaps_signalp" = all(is.na(signalp_start)) == FALSE,
+                   "overlaps_tmhmm" = all(is.na(tmhmm_start)) == FALSE)
+
+vector_unique_interpro_ids <- dplyr::semi_join(tibble_protein_level_summary_count$unique_interpro_ids %>% strsplit(split = ";") %>% unlist %>% sort %>% tibble::enframe(name = NULL, value = "vec"), tibble_non_family_interpro_entries$Accession %>% tibble::enframe(name = NULL, value = "vec"), by = "vec") %>% unlist
+
+# create tally of each unique instance of interpro ID per diff_exon_coords
+tibble_interpro_id_tally_per_diff_exon_coords <- tibble::enframe(vector_unique_interpro_ids, name = NULL, value = "interpro_id") %>% dplyr::group_by(interpro_id) %>% dplyr::summarise("tally" = n()) %>% dplyr::arrange(desc(tally))
+
+# create interpro to matched gene mapping
+tibble_interpro_ID_to_matched_gene_mapping <- tibble_PSIsigma_exon_ontology_biomart_filtered %>% dplyr::group_by(interpro) %>% 
+  dplyr::summarise("genes" = paste(matched_gene_names %>% unique %>% mixedsort, collapse = ",")) %>% setNames(c("interpro_id", "genes"))
+# create interpro to matched diff_exon_coords mapping
+tibble_interpro_ID_to_matched_diff_exon_coords_mapping <- tibble_PSIsigma_exon_ontology_biomart_filtered %>% dplyr::group_by(interpro) %>% 
+  dplyr::summarise("diff_exon_coords" = paste(diff_exon_coords %>% unique %>% mixedsort, collapse = ",")) %>% setNames(c("interpro_id", "diff_exon_coords"))
+
+# fetch descriptions of interpro ID
+tibble_interpro_ID_to_description_mapping <- tibble_non_family_interpro_entries[, c("Accession", "Name")] %>% setNames(c("interpro_id", "interpro_description")) %>% as_tibble
+# add column for plotting
+tibble_interpro_ID_to_description_mapping <- tibble_interpro_ID_to_description_mapping %>% add_column("interpro_identifier" = paste(tibble_interpro_ID_to_description_mapping$interpro_description, " (", tibble_interpro_ID_to_description_mapping$interpro_id, ")", sep = ""))
+# tibble joins
+tibble_interpro_id_tally_per_diff_exon_coords <- dplyr::right_join(tibble_interpro_ID_to_description_mapping, tibble_interpro_id_tally_per_diff_exon_coords, by = "interpro_id")
+tibble_interpro_id_tally_per_diff_exon_coords <- dplyr::right_join(tibble_interpro_ID_to_matched_gene_mapping, tibble_interpro_id_tally_per_diff_exon_coords, by = "interpro_id")
+tibble_interpro_id_tally_per_diff_exon_coords <- dplyr::right_join(tibble_interpro_ID_to_matched_diff_exon_coords_mapping, tibble_interpro_id_tally_per_diff_exon_coords, by = "interpro_id")
+
+# plot
+ggplot(tibble_interpro_id_tally_per_diff_exon_coords %>% dplyr::arrange(desc(tally)) %>% head(90), aes(x = reorder(interpro_identifier, -tally), y = tally)) +
+  geom_col(fill = "firebrick4") +
+  ggtitle(paste("Tally of the 90 most overlapping interpro identifiers of PSI-Sigma exons")) +
+  xlab("Interpro identifier") +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Number of hits") +
+  # coord_cartesian(ylim = c(0, 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8), axis.text.y = element_text(size = 20), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_dir, "tally_overlapping_interpro_domains_PSISigma_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 10, units = "cm") +
+ ggsave(filename = paste(results_dir, "tally_overlapping_interpro_domains_PSISigma_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 10, units = "cm") 
+
+write.table(x = tibble_interpro_id_tally_per_diff_exon_coords %>% dplyr::arrange(desc(tally)), file = paste(results_dir, "tally_overlapping_interpro_domains_PSISigma_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+message("total number of unique exons with any sort of protein-level annotation: ", tibble_PSIsigma_exon_ontology_biomart_filtered$diff_exon_coords %>% unique %>% length, " (", tibble_PSIsigma_exon_ontology_biomart_filtered$diff_exon_coords %>% unique %>% length *100/length(tibble_PSIsigma_exon_ontology_transcripts$diff_exon_coords %>% unique), "% of those which have any transcript annotation)")
+
+message("total percent of unique exons overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+
+message("total percent of unique exons overlapping a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+
+# PTM level
+tibble_PTM_tally <- tibble_PSIsigma_exon_ontology_PTM_filtered %>% 
+  dplyr::distinct(diff_exon_coords, splicemode, PTM_type) %>% 
+  dplyr::group_by(PTM_type) %>% 
+  dplyr::summarise("tally" = n())
+
+# plot
+ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
+  geom_col(fill = "firebrick4") +
+  geom_text(stat = "identity", nudge_y = 1, aes(label = tally), angle = 90, hjust = 0) +
+  ggtitle(paste("Tally of PTMs inside differentially spliced regions\nPSI-Sigma")) +
+  xlab("PTM type") +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Frequency") +
+  ylim(c(0, max(tibble_PTM_tally$tally) + 5)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(results_dir, "tally_overlapping_PTMs_PSISigma_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 4, height = 8, units = "cm") +
+ ggsave(filename = paste(results_dir, "tally_overlapping_PTMs_PSISigma_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
+
+```
+
 ## filter the valid phosphosites by differential CDS positions.
+
+### JUM
 
 ```{r}
 
@@ -1650,6 +2370,779 @@ list_logical_phosphosite_intersect_differential_CDS_positions <- purrr::map2(
 # append the results of overlap as logical column back onto the phosphosite table.
 tibble_JUM_valid_phosphosites_with_overlap <- tibble_JUM_valid_phosphosites_with_junc_ID %>% 
   add_column("differential_overlap" = list_logical_phosphosite_intersect_differential_CDS_positions %>% purrr::map(.f = ~.x != 0) %>% unlist)
+
+tibble_validated_phosphosites_JUM <- tibble_JUM_valid_phosphosites_with_overlap %>% 
+  dplyr::filter(differential_overlap == TRUE) %>% 
+  dplyr::distinct(genome_relative_positions_phosphosite, .keep_all = TRUE)
+
+write.table(tibble_validated_phosphosites_JUM, paste(results_dir, "tibble_validated_phosphosites_JUM.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+cat("\nthere are ", tibble_validated_phosphosites_JUM$genome_relative_positions_phosphosite %>% unique %>% length, " phosphosites validated in JUM AS region")
+
+```
+
+### PSI-Sigma
+
+```{r}
+
+# loop thru each identifier for phosphosites and test if the genome-relative positions intersect.
+list_logical_phosphosite_intersect_differential_CDS_positions <- purrr::map2(
+  .x = tibble_2020.PO4_valid_phosphosites$identifier,
+  .y = tibble_2020.PO4_valid_phosphosites$genome_relative_positions_phosphosite %>% strsplit(split = ","),
+  .f = function(a1, a2) {
+    
+    subset_exon_ontology_supp_info_by_identifier <- tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome[grep(x = tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome$Leading.razor.protein, pattern = a1), ]
+    
+    intersecting_coords <- intersect(a2, 
+                                     subset_exon_ontology_supp_info_by_identifier$vector_genomic_coords_of_all_differential_CDS_positions %>% strsplit(split = ",") %>% unlist)
+    
+    return(intersecting_coords %>% length)
+    
+  } )
+
+# append the results of overlap as logical column back onto the phosphosite table.
+tibble_PSIsigma_valid_phosphosites_with_overlap <- tibble_2020.PO4_valid_phosphosites %>% 
+  add_column("differential_overlap" = list_logical_phosphosite_intersect_differential_CDS_positions %>% purrr::map(.f = ~.x != 0) %>% unlist)
+
+tibble_validated_phosphosites_PSIsigma <- tibble_PSIsigma_valid_phosphosites_with_overlap %>% 
+  dplyr::filter(differential_overlap == TRUE) %>% 
+  dplyr::distinct(genome_relative_positions_phosphosite, .keep_all = TRUE)
+
+write.table(tibble_validated_phosphosites_PSIsigma, paste(results_dir, "tibble_validated_phosphosites_PSIsigma.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+cat("\nthere are ", tibble_validated_phosphosites_PSIsigma$genome_relative_positions_phosphosite %>% unique %>% length, " phosphosites validated in PSI-Sigma AS region")
+
+```
+
+## Calculate bootstrap P values of the JUM/PSI-Sigma:
+
+- Transcript regions
+- Interpro domains (ALL + proteome filtered)
+- Biomart regions esp. LCR (ALL + proteome filtered)
+- PTM overlap  (ALL + proteome filtered)
+
+NOTE: For all the proteome-filtered, MUST walk along the **CDS**.
+
+### Meaning we need to cast onto the genome and convert to Granges:
+
+- Biomart reference regions (easiest to do)
+- Biomart regions, incl. interpro domains, LCR.
+- Each interpro domain
+- dbPTM sites (which already includes phosphositeplus)
+
+## set environment and GTF
+
+```{r}
+
+library(regioneR)
+library(rtracklayer)
+library(BSgenome.Hsapiens.UCSC.hg38)
+
+# tibble_ref_gtf_original <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+tibble_ref_gtf_original <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+
+tibble_ref_gtf_original <- tibble_ref_gtf_original %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
+
+colnames(tibble_ref_gtf_original) <- c("chr", "start", "end", "width", "strand", "type", "phase", "gene_id", "gene_name", "gene_biotype", "transcript_id", "transcript_name", "transcript_biotype", "exon_number", "exon_id", "protein_id") 
+
+tibble_ref_gtf_original <- tibble_ref_gtf_original %>% mutate_if(is.factor, as.character)
+
+# import dbPTM info
+# Z:/dbPTM_download/extract/allPTM_human.txt
+# tibble_dbPTM_allhuman_annotations <- read.delim("/media/Ubuntu/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+tibble_dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+# import PhosphoSitePlus info
+# Z:/phosphositeplus_phosphosites_human.tab
+# tibble_phosphositeplus_allhuman_phosphosites <- read.delim("/media/Ubuntu/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+tibble_phosphositeplus_allhuman_phosphosites <- read.delim("Z:/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+# change the residue position column
+tibble_phosphositeplus_allhuman_phosphosites[, "modified_residue_position"] <- gsub(x = tibble_phosphositeplus_allhuman_phosphosites$modified_residue_position, pattern = "^([A-Z])([0-9]{1,5})(.*)", replacement = "\\2")
+
+# remove rows where phosphosite is NA
+row.indices_phosphosite.is.na <- which(is.na(tibble_phosphositeplus_allhuman_phosphosites$modified_residue_position))
+
+tibble_phosphositeplus_allhuman_phosphosites <- tibble_phosphositeplus_allhuman_phosphosites[-row.indices_phosphosite.is.na, ]
+
+# RBIND THE PTM TABLES
+tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibble_phosphositeplus_allhuman_phosphosites)
+
+```
+
+### Preprocessing: convert differential positions into Granges
+
+#### exonic
+
+```{r}
+
+# JUM - unfiltered RNA
+## create tibble of item coords and chr
+tibble_JUM_differential_exonic_coords_and_chr <- tibble_JUM_junction_ontology_supp_info[, c("AS_event_ID", "vector_genomic_coords_of_all_differential_exon_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_exon_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "AS_event_ID", .funs = function(x) {gsub(x = x, pattern = "^([^_]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "AS_event_ID") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_exon_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_exon_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_JUM_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_JUM_differential_exonic_coords_and_chr$vector_genomic_coords_of_all_differential_exon_positions, 
+  metadata_vector = tibble_JUM_differential_exonic_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_JUM_differential_exonic_regions_all.RNA <- toGRanges(tibble_JUM_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                               # turn chr column into chr1 chr2 etc...
+                                                               dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                               type_convert %>% 
+                                                               # data frame is absolutele necessary for regioneR.
+                                                               as.data.frame)
+
+# PSI-Sigma - unfiltered RNA
+## create tibble of item coords and chr
+tibble_PSIsigma_differential_exonic_coords_and_chr <- tibble_PSIsigma_exon_ontology_supp_info[, c("diff_exon_coords", "vector_genomic_coords_of_all_differential_exon_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_exon_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "diff_exon_coords", .funs = function(x) {gsub(x = x, pattern = "^([^\\:]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "diff_exon_coords") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_exon_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_exon_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_PSIsigma_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_PSIsigma_differential_exonic_coords_and_chr$vector_genomic_coords_of_all_differential_exon_positions, 
+  metadata_vector = tibble_PSIsigma_differential_exonic_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_PSIsigma_differential_exonic_regions_all.RNA <- toGRanges(tibble_PSIsigma_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                       # turn chr column into chr1 chr2 etc...
+                                                       dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                       type_convert %>% 
+                                                       # data frame is absolutele necessary for regioneR.
+                                                       as.data.frame)
+
+# JUM - proteome-filtered RNA
+## create tibble of item coords and chr
+tibble_JUM_differential_exonic_coords_and_chr <- tibble_JUM_junction_ontology_supp_info_filtered_by_proteome[, c("AS_event_ID", "vector_genomic_coords_of_all_differential_exon_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_exon_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "AS_event_ID", .funs = function(x) {gsub(x = x, pattern = "^([^_]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "AS_event_ID") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_exon_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_exon_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_JUM_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_JUM_differential_exonic_coords_and_chr$vector_genomic_coords_of_all_differential_exon_positions, 
+  metadata_vector = tibble_JUM_differential_exonic_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_JUM_differential_exonic_regions_proteome.filtered.RNA <- toGRanges(tibble_JUM_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                                             # turn chr column into chr1 chr2 etc...
+                                                                             dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                                             type_convert %>% 
+                                                                             # data frame is absolutele necessary for regioneR.
+                                                                             as.data.frame)
+
+# PSI-Sigma - proteome-filtered RNA
+## create tibble of item coords and chr
+tibble_PSIsigma_differential_exonic_coords_and_chr <- tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome[, c("diff_exon_coords", "vector_genomic_coords_of_all_differential_exon_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_exon_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "diff_exon_coords", .funs = function(x) {gsub(x = x, pattern = "^([^\\:]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "diff_exon_coords") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_exon_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_exon_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_PSIsigma_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_PSIsigma_differential_exonic_coords_and_chr$vector_genomic_coords_of_all_differential_exon_positions, 
+  metadata_vector = tibble_PSIsigma_differential_exonic_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_PSIsigma_differential_exonic_regions_proteome.filtered.RNA <- toGRanges(tibble_PSIsigma_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                       # turn chr column into chr1 chr2 etc...
+                                                       dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                       type_convert %>% 
+                                                       # data frame is absolutele necessary for regioneR.
+                                                       as.data.frame)
+
+```
+
+#### CDS
+
+```{r}
+
+# JUM - unfiltered RNA
+## create tibble of item coords and chr
+tibble_JUM_differential_CDS_coords_and_chr <- tibble_JUM_junction_ontology_supp_info[, c("AS_event_ID", "vector_genomic_coords_of_all_differential_CDS_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_CDS_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "AS_event_ID", .funs = function(x) {gsub(x = x, pattern = "^([^_]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "AS_event_ID") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_CDS_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_CDS_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_JUM_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_JUM_differential_CDS_coords_and_chr$vector_genomic_coords_of_all_differential_CDS_positions, 
+  metadata_vector = tibble_JUM_differential_CDS_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_JUM_differential_CDS_regions_all.RNA <- toGRanges(tibble_JUM_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                               # turn chr column into chr1 chr2 etc...
+                                                               dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                               type_convert %>% 
+                                                               # data frame is absolutele necessary for regioneR.
+                                                               as.data.frame)
+
+# JUM - proteome-filtered RNA
+## create tibble of item coords and chr
+tibble_JUM_differential_CDS_coords_and_chr <- tibble_JUM_junction_ontology_supp_info_filtered_by_proteome[, c("AS_event_ID", "vector_genomic_coords_of_all_differential_CDS_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_CDS_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "AS_event_ID", .funs = function(x) {gsub(x = x, pattern = "^([^_]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "AS_event_ID") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_CDS_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_CDS_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_JUM_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_JUM_differential_CDS_coords_and_chr$vector_genomic_coords_of_all_differential_CDS_positions, 
+  metadata_vector = tibble_JUM_differential_CDS_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_JUM_differential_CDS_regions_proteome.filtered.RNA <- toGRanges(tibble_JUM_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                                             # turn chr column into chr1 chr2 etc...
+                                                                             dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                                             type_convert %>% 
+                                                                             # data frame is absolutele necessary for regioneR.
+                                                                             as.data.frame)
+
+# PSI-Sigma - unfiltered RNA
+## create tibble of item coords and chr
+tibble_PSIsigma_differential_CDS_coords_and_chr <- tibble_PSIsigma_exon_ontology_supp_info[, c("diff_exon_coords", "vector_genomic_coords_of_all_differential_CDS_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_CDS_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "diff_exon_coords", .funs = function(x) {gsub(x = x, pattern = "^([^\\:]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "diff_exon_coords") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_CDS_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_CDS_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_PSIsigma_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_PSIsigma_differential_CDS_coords_and_chr$vector_genomic_coords_of_all_differential_CDS_positions, 
+  metadata_vector = tibble_PSIsigma_differential_CDS_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_PSIsigma_differential_CDS_regions_all.RNA <- toGRanges(tibble_PSIsigma_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                       # turn chr column into chr1 chr2 etc...
+                                                       dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                       type_convert %>% 
+                                                       # data frame is absolutele necessary for regioneR.
+                                                       as.data.frame)
+
+# PSI-Sigma - proteome-filtered RNA
+## create tibble of item coords and chr
+tibble_PSIsigma_differential_CDS_coords_and_chr <- tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome[, c("diff_exon_coords", "vector_genomic_coords_of_all_differential_CDS_positions")] %>%
+  dplyr::mutate_at(.vars = "vector_genomic_coords_of_all_differential_CDS_positions", .funs = function(x) {strsplit(x, split = ",") %>% return} ) %>%
+  dplyr::mutate_at(.vars = "diff_exon_coords", .funs = function(x) {gsub(x = x, pattern = "^([^\\:]+).*", replacement = "\\1") %>% return} ) %>% 
+  dplyr::rename("chr" = "diff_exon_coords") %>%
+  unnest(cols = "vector_genomic_coords_of_all_differential_CDS_positions") %>%
+  dplyr::arrange(vector_genomic_coords_of_all_differential_CDS_positions) %>%
+  na.omit
+  
+## convert vector of discontinuous sites into chr, start, end.
+tibble_PSIsigma_differential_genome.relative_chr.start.end <- convert_vector.of.positions_to_simple.ranges(
+  input_vector = tibble_PSIsigma_differential_CDS_coords_and_chr$vector_genomic_coords_of_all_differential_CDS_positions, 
+  metadata_vector = tibble_PSIsigma_differential_CDS_coords_and_chr$chr) %>% 
+  # rename metadata column)
+  dplyr::rename("chr" = "value") %>% 
+  # filter out non-1:22/X/Y chromosome entries
+  dplyr::filter(chr %in% c(1:22, "X", "Y"))
+
+granges_PSIsigma_differential_CDS_regions_proteome.filtered.RNA <- toGRanges(tibble_PSIsigma_differential_genome.relative_chr.start.end[, c("chr", "start", "end")] %>% 
+                                                       # turn chr column into chr1 chr2 etc...
+                                                       dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                                                       type_convert %>% 
+                                                       # data frame is absolutely necessary for regioneR.
+                                                       as.data.frame)
+
+```
+
+### Preprocessing: map target (fixed) regions onto genome
+
+#### get all the genome-relative positions of CDS nucleotides for every ENSP id
+
+```{r}
+
+# tibble_ENSP_to_genome_relative_CDS_positions <- tibble_ref_gtf_original %>% 
+#   dplyr::filter(type == "CDS") %>% 
+#   dplyr::group_split(protein_id) %>% 
+#   future_map(.f = ~list("protein_id" = .x$protein_id %>% unique, "chr" = .x$chr %>% unique, "vec_all_parent_ENSP_CDS_positions_sorted" = purrr::map2(.x = .$start, .y = .$end, .f = ~.x:.y) %>% unlist %>% sort), .progress = TRUE, .options = future_options(globals = FALSE)) %>% 
+#   future_map(.f = ~as_tibble(.x) %>% nest(data = "vec_all_parent_ENSP_CDS_positions_sorted") %>% dplyr::rename("vec_all_parent_ENSP_CDS_positions_sorted" = "data"), .progress = TRUE, .options = future_options(globals = c("as_tibble", "nest", "dplyr::rename"))) %>% 
+#   rbindlist %>% as_tibble
+
+# save(tibble_ENSP_to_genome_relative_CDS_positions, file = paste(results_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tibble", sep = ""))
+
+load(file = paste(results_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tibble", sep = ""))
+
+```
+
+#### create granges of transcript "type" and "biotype" (ensembl)
+
+```{r}
+
+list_granges_ensembl_transcript_types <- tibble_ref_gtf_original %>%
+  dplyr::group_split(type) %>%
+  set_names(purrr::map(.x = ., .f = ~.x$type %>% unique)) %>%
+  purrr::map(~toGRanges(.x[, c("chr", "start", "end")] %>% 
+                          # turn chr column into chr1 chr2 etc...
+                          dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                          type_convert %>% 
+                          # data frame is absolutele necessary for regioneR.
+                          as.data.frame))
+
+list_granges_ensembl_transcript_biotypes <- tibble_ref_gtf_original %>%
+  dplyr::filter(type == "exon") %>%
+  dplyr::group_split(transcript_biotype) %>%
+  set_names(purrr::map(.x = ., .f = ~.x$transcript_biotype %>% unique)) %>%
+  purrr::map(~toGRanges(.x[, c("chr", "start", "end")] %>% 
+                          # turn chr column into chr1 chr2 etc...
+                          dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                          type_convert %>% 
+                          # data frame is absolutele necessary for regioneR.
+                          as.data.frame))
+
+list_granges_ensembl_transcript_by_type_and_biotype <- purrr::splice(list_granges_ensembl_transcript_types, list_granges_ensembl_transcript_biotypes)
+
+```
+
+#### Cast biomart regions onto the genome
+
+```{r}
+
+# create a list of attributes to retrieve from biomart. we will loop thru this.
+list_of_attributes_to_retrieve <- list("interpro" = c("ensembl_peptide_id", "interpro", "interpro_start", "interpro_end"),
+                                       "ncoils" = c("ensembl_peptide_id", "ncoils_start", "ncoils_end"),
+                                       "seg" = c("ensembl_peptide_id", "seg_start", "seg_end"),
+                                       "signalp" = c("ensembl_peptide_id", "signalp_start", "signalp_end"),
+                                       "tmhmm" = c("ensembl_peptide_id", "tmhmm_start", "tmhmm_end"),
+                                       "sifts" = c("ensembl_peptide_id", "sifts_import", "sifts_import_start", "sifts_import_end"),
+                                       "mobidblite" = c("ensembl_peptide_id", "mobidblite", "mobidblite_start", "mobidblite_end"))
+
+# read tables
+list_of_tibbles_biomart_domain_annotation <- future_map(.x = names(list_of_attributes_to_retrieve), .f = ~read.delim(paste(shared_dir, "table_biomart_ENSP_to_", .x, ".txt", sep = ""), row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble", "shared_dir"))) %>% 
+  set_names(names(list_of_attributes_to_retrieve))
+
+# rename columns of each nested tibble to be consistent
+list_of_tibbles_biomart_domain_annotation <- list_of_tibbles_biomart_domain_annotation %>% purrr::map(.f = function(.x) {
+  
+  output_tibble <- .x
+  
+  colnames(output_tibble) <- gsub(x = colnames(output_tibble), pattern = ".*start$", replacement = "start")
+  colnames(output_tibble) <- gsub(x = colnames(output_tibble), pattern = ".*end$", replacement = "end")
+  
+  return(output_tibble)
+  
+} )
+
+# filter the interpro entries for the non-family entries only
+list_of_tibbles_biomart_domain_annotation <- purrr::modify_at(.x = list_of_tibbles_biomart_domain_annotation,
+                                                              .at = "interpro",
+                                                              .f = ~dplyr::semi_join(.x, tibble_non_family_interpro_entries %>% dplyr::rename("interpro" = "Accession"), by = "interpro"))
+
+list_of_tibbles_biomart_regions_cast_onto_genome <- list_of_tibbles_biomart_domain_annotation %>% purrr::imap(.f = function(a1, a2) {
+  
+  # DEBUG ###
+  # a1 <- list_of_tibbles_biomart_domain_annotation[["mobidblite"]]
+  ###########
+  
+  cat("\nnow processing: ", a2, "\n")
+  
+  a1 %>% 
+    add_column("CDS_relative_coords_start" = ((3*.$start) - 2), "CDS_relative_coords_end" = (3*.$end)) %>% 
+    dplyr::mutate("vec_all_CDS_relative_positions" = purrr::map2(.x = `CDS_relative_coords_start`, .y = `CDS_relative_coords_end`, .f = ~.x:.y)) %>%
+    dplyr::left_join(., tibble_ENSP_to_genome_relative_CDS_positions %>% dplyr::rename("ensembl_peptide_id" = "protein_id"), by = "ensembl_peptide_id") %>%
+    # some ENSP ids from interpro are not in ensembl.
+    dplyr::filter(is.na(chr) != TRUE) %>%
+    # the parent ENSP CDS positions are sorted already. we just retri eve the genome-relative positions using the CDS-relative positions. 
+    # these are the regions casted onto the genome.
+    dplyr::mutate("vec_all_genome_relative_coords_of_item" = future_map2(.x = `vec _all_CDS_relative_positions`, .y = `vec_all_parent_ENSP_CDS_positions_sorted`, .f = ~.y %>% unlist %>% .[.x], .progress = TRUE, .options = future_options(globals = FALSE))) %>%
+    dplyr::mutate("nucleotide_width" = purrr::map(.x = `vec_all_genome_relative_coords_o>f_item`, .f = ~length(.x)) %>% unlist) %>% return
+  
+} ) 
+
+# drop the columns of all ENSP positions. we dont need them anymore.
+list_of_tibbles_biomart_regions_cast_onto_genome <- list_of_tibbles_biomart_regions_cast_onto_genome %>% purrr::map(~.x %>% dplyr::select(-vec_all_parent_ENSP_CDS_positions_sorted))
+# drop empty "chr" rows
+# list_of_tibbles_biomart_regions_cast_onto_genome <- list_of_tibbles_biomart_regions_cast_onto_genome %>% purrr::map(~.x %>% dplyr::filter(is.na(chr) != TRUE))
+
+# save(list_of_tibbles_biomart_regions_cast_onto_genome, file = paste(results_dir, "list_of_tibbles_biomart_regions_cast_onto_genome.Rlist", sep = ""))
+
+load(file = paste(results_dir, "list_of_tibbles_biomart_regions_cast_onto_genome.Rlist", sep = ""))
+
+```
+
+#### cast dbPTM sites onto the genome
+
+```{r}
+
+# get ENSP to uniprotkb_entry mapping
+# tibble_ENSP_to_uniprotkb <- biomaRt::getBM(attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% setNames(c("ensembl_peptide_id", "uniprotkb_entry")) %>% 
+  # type_convert %>% 
+  # as_tibble %>%
+  # na.omit
+
+# save(tibble_ENSP_to_uniprotkb, file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", paste = ""))
+load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", paste = ""))
+
+# convert uniprotkb_entry into ENSP
+tibble_dbPTM_allhuman_annotations_with_ENSP <- dplyr::left_join(tibble_dbPTM_allhuman_annotations, tibble_ENSP_to_uniprotkb, by = "uniprotkb_entry") %>% 
+  dplyr::filter(is.na(ensembl_peptide_id) != TRUE) %>% type_convert
+
+# cast onto genome.save(tibble_dbPTM_allhuman_annotati
+tibble_dbPTM_allhuman_annotations_cast_onto_genome <- tibble_dbPTM_allhuman_annotations_with_ENSP %>% 
+  add_column("CDS_relative_coords_start" = ((3*.$modified_residue_position) - 2), "CDS_relative_coords_end" = (3*.$modified_residue_position)) %>% 
+  dplyr::mutate("vec_all_CDS_relative_positions" = purrr::map2(.x = `CDS_relative_coords_start`, .y = `CDS_relative_coords_end`, .f = ~.x:.y)) %>%
+  dplyr::left_join(., tibble_ENSP_to_genome_relative_CDS_positions %>% dplyr::rename("ensembl_peptide_id" = "protein_id"), by = "ensembl_peptide_id") %>%
+  # some ENSP ids from interpro are not in ensembl.
+  dplyr::filter(is.na(chr) != TRUE) %>%
+  # the parent ENSP CDS positions are sorted already. we just retrieve the genome-relative positions using the CDS-relative positions. 
+  # these are the regions casted onto the genome.
+  dplyr::mutate("vec_all_genome_relative_coords_of_item" = purrr::map2(.x = .$vec_all_CDS_relative_positions, .y = .$vec_all_parent_ENSP_CDS_positions_sorted, .f = ~.y %>% unlist %>% .[.x], .progress = TRUE, .options = future_options(globals = FALSE))) %>%
+  dplyr::mutate("nucleotide_width" = purrr::map(.x = .$vec_all_genome_relative_coords_of_item, .f = ~length(.x)) %>% unlist)
+
+# drop the columns of all ENSP positions. we dont need them anymore.
+tibble_dbPTM_allhuman_annotations_cast_onto_genome <- tibble_dbPTM_allhuman_annotations_cast_onto_genome %>% dplyr::select(-vec_all_parent_ENSP_CDS_positions_sorted)
+# save(tibble_dbPTM_allhuman_annotations_cast_onto_genome, file = paste(results_dir, "tibble_dbPTM_allhuman_annotations_cast_onto_genome.Rlist", sep = ""))
+
+load(file = paste(results_dir, "tibble_dbPTM_allhuman_annotations_cast_onto_genome.Rlist", sep = ""))
+
+```
+
+### Preprocessing: create a complement mask so we may only consider exonic or CDS positions.
+
+```{r}
+
+# convert the whole genome into a granges object
+granges_UCSC_hg38 <- GRanges(seqinfo(BSgenome.Hsapiens.UCSC.hg38))
+
+# convert the exome into a granges object
+granges_ensembl_exome <- tibble_ref_gtf_original %>%
+  dplyr::filter(type == "exon") %>%
+  # turn chr column into chr1 chr2 etc...
+  dplyr::select(chr, start, end) %>%
+  dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+  type_convert %>% 
+  # data frame is absolutele necessary for granges
+  as.data.frame %>%
+  toGRanges 
+
+# convert the CDSome into a granges object
+granges_ensembl_codome <- tibble_ref_gtf_original %>%
+  dplyr::filter(type == "CDS") %>%
+  # turn chr column into chr1 chr2 etc...
+  dplyr::select(chr, start, end) %>%
+  dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+  type_convert %>% 
+  # data frame is absolutele necessary for granges
+  as.data.frame %>%
+  toGRanges 
+
+granges_anti.exome_mask <- regioneR::subtractRegions(A = granges_UCSC_hg38,
+                                                     B = granges_ensembl_exome)
+# BSgenome.Hsapiens.UCSC.hg38_anti.exome.masked <- getGenomeAndMask(genome = BSgenome.Hsapiens.UCSC.hg38, mask = granges_anti.exome_mask)
+
+granges_anti.CDS_mask <- regioneR::subtractRegions(A = granges_UCSC_hg38,
+                                                     B = granges_ensembl_codome)
+
+```
+
+### Permutation test
+
+- we use random shuffle permutations at the level of the exome or CDS. This is because contiguity is achieved in the exome and CDS.
+
+#### transcript regions - loop thru each type of region - **exonic** regions across GENOME.
+
+```{r}
+
+# permtest: JUM (all RNA)
+permtest_JUM_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type <- purrr::map(.x = list_granges_ensembl_transcript_by_type_and_biotype[c("CDS", "five_prime_utr", "three_prime_utr", "protein_coding", "lncRNA", "miRNA")], 
+                                                                                        .f = ~permTest(A = granges_JUM_differential_exonic_regions_all.RNA, 
+                                                                                                       B = .x, 
+                                                                                                       randomize.function = randomizeRegions,
+                                                                                                       non.overlapping = TRUE,
+                                                                                                       per.chromosome = FALSE, 
+                                                                                                       evaluate.function = numOverlaps,
+                                                                                                       ntimes = 1000, 
+                                                                                                       genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                                       mask = granges_anti.exome_mask,
+                                                                                                       # min.parallel = 8,
+                                                                                                       alternative = "greater", 
+                                                                                                       force.parallel = TRUE, 
+                                                                                                       verbose = TRUE,
+                                                                                                       mc.cores = 40))
+
+
+save(permtest_JUM_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type, file = paste(results_dir, "permtest_JUM_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type.Rlist", sep = ""))
+# load(file = paste(results_dir, "permtest_JUM_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type.Rlist", sep = ""))
+
+# permtest: PSI-Sigma (all RNA)
+permtest_PSIsigma_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type <- purrr::map(.x = list_granges_ensembl_transcript_by_type_and_biotype[c("CDS", "five_prime_utr", "three_prime_utr", "protein_coding", "lncRNA", "miRNA")], 
+                                                                                             .f = ~permTest(A = granges_PSIsigma_differential_exonic_regions_all.RNA, 
+                                                                                                            B = .x, 
+                                                                                                            randomize.function = randomizeRegions,
+                                                                                                            non.overlapping = TRUE,
+                                                                                                            per.chromosome = FALSE, 
+                                                                                                            evaluate.function = numOverlaps,
+                                                                                                            ntimes = 1000, 
+                                                                                                            genome = BSgenome.Hsapiens.UCSC.hg38,  
+                                                                                                            mask = granges_anti.exome_mask,
+                                                                                                            # min.parallel = 8,
+                                                                                                            alternative = "greater", 
+                                                                                                            force.parallel = TRUE, 
+                                                                                                            verbose = TRUE,
+                                                                                                            mc.cores = 40))
+
+save(permtest_PSIsigma_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type, file = paste(results_dir, "permtest_PSIsigma_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type.Rlist", sep = ""))
+# load(file = paste(results_dir, "permtest_PSIsigma_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type.Rlist", sep = ""))
+
+```
+
+#### biomarts regions - loop thru each type of region
+
+```{r}
+
+# grange-ify the dbPTM sites
+## split by PTM type, unnest the item coords and chr
+list_of_tibbles_biomart_coords_and_chr <- list_of_tibbles_biomart_regions_cast_onto_genome %>%
+  future_map(~.x %>%
+               dplyr::select(chr, vec_all_genome_relative_coords_of_item) %>% 
+               unnest(cols = "vec_all_genome_relative_coords_of_item") %>% 
+               dplyr::filter(is.na(vec_all_genome_relative_coords_of_item) != TRUE) %>%
+               dplyr::arrange(vec_all_genome_relative_coords_of_item), .progress = TRUE, .options = future_options(globals = c("dplyr::select", "unnest", "dplyr::filter", "dplyr::arrange")))
+
+# save(list_of_tibbles_biomart_coords_and_chr, file = paste(results_dir, "list_of_tibbles_biomart_coords_and_chr.Rlist", sep = ""))
+# load(file = paste(results_dir, "list_of_tibbles_biomart_coords_and_chr.Rlist", sep = ""))
+
+## convert vector of discontinuous sites into chr, start, end.
+list_of_tibbles_biomart_regions_genome.relative_chr.start.end <- list_of_tibbles_biomart_coords_and_chr %>% purrr::map(~convert_vector.of.positions_to_simple.ranges(input_vector = .x$vec_all_genome_relative_coords_of_item, metadata_vector = .x$chr) %>% 
+                                                                                                                         # rename metadata column)
+                                                                                                                         dplyr::rename("chr" = "value") %>% 
+                                                                                                                         # filter out non-1:22/X/Y chromosome entries
+                                                                                                                         dplyr::filter(chr %in% c(1:22, "X", "Y")))
+
+list_of_granges_biomart_regions_genome.relative <- list_of_tibbles_biomart_regions_genome.relative_chr.start.end %>% 
+  purrr::map(~toGRanges(.x[, c("chr", "start", "end")] %>% 
+                          # turn chr column into chr1 chr2 etc...
+                          dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                          type_convert %>% 
+                          # data frame is absolutele necessary for regioneR.
+                          as.data.frame))
+
+save(list_of_granges_biomart_regions_genome.relative, file = paste(results_dir, "list_of_granges_biomart_regions_genome.relative.Rlist", sep = ""))
+load(file = paste(results_dir, "list_of_granges_biomart_regions_genome.relative.Rlist", sep = ""))
+
+# permtest: JUM (all RNA)
+permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.biomart <- purrr::map(.x = list_of_granges_biomart_regions_genome.relative, 
+                                                                      .f = ~permTest(A = granges_JUM_differential_CDS_regions_all.RNA, 
+                                                                                     B = .x, 
+                                                                                     randomize.function = circularRandomizeRegions,
+                                                                                     evaluate.function = numOverlaps,
+                                                                                     ntimes = 100000, 
+                                                                                     genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                     # min.parallel = 8,
+                                                                                     per.chromosome = FALSE, 
+                                                                                     alternative = "greater", 
+                                                                                     force.parallel = TRUE, 
+                                                                                     verbose = TRUE,
+                                                                                     mc.cores = 40))
+
+
+save(permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.biomart, file = paste(results_dir, "permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+# load(file = paste(results_dir, "permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+
+# permtest: PSI-Sigma (all RNA)
+permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.biomart <- purrr::map(.x = list_of_granges_biomart_regions_genome.relative, 
+                                                                           .f = ~permTest(A = granges_PSIsigma_differential_CDS_regions_all.RNA, 
+                                                                                          B = .x, 
+                                                                                          randomize.function = circularRandomizeRegions,
+                                                                                          evaluate.function = numOverlaps,
+                                                                                          ntimes = 100000, 
+                                                                                          genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                          # min.parallel = 8,
+                                                                                          per.chromosome = FALSE, 
+                                                                                          alternative = "greater", 
+                                                                                          force.parallel = TRUE, 
+                                                                                          verbose = TRUE,
+                                                                                          mc.cores = 40))
+
+save(permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.biomart, file = paste(results_dir, "permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+# load(file = paste(results_dir, "permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+
+# permtest: JUM (proteome-filtered RNA)
+permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart <- purrr::map(.x = list_of_granges_biomart_regions_genome.relative, 
+                                                                                    .f = ~permTest(A = granges_JUM_differential_CDS_regions_proteome.filtered.RNA, 
+                                                                                                   B = .x, 
+                                                                                                   randomize.function = circularRandomizeRegions,
+                                                                                                   evaluate.function = numOverlaps,
+                                                                                                   ntimes = 100000, 
+                                                                                                   genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                                   # min.parallel = 8,
+                                                                                                   per.chromosome = FALSE, 
+                                                                                                   alternative = "greater", 
+                                                                                                   force.parallel = TRUE, 
+                                                                                                   verbose = TRUE,
+                                                                                                   mc.cores = 40))
+
+save(permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart, file = paste(results_dir, "permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+# load(file = paste(results_dir, "permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+
+# permtest: PSI-Sigma (proteome-filtered RNA)
+permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart <- purrr::map(.x = list_of_granges_biomart_regions_genome.relative, 
+                                                                                         .f = ~permTest(A = granges_PSIsigma_differential_CDS_regions_proteome.filtered.RNA, 
+                                                                                                        B = .x, 
+                                                                                                        randomize.function = circularRandomizeRegions,
+                                                                                                        evaluate.function = numOverlaps,
+                                                                                                        ntimes = 100000, 
+                                                                                                        genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                                        # min.parallel = 8,
+                                                                                                        per.chromosome = FALSE, 
+                                                                                                        alternative = "greater", 
+                                                                                                        force.parallel = TRUE, 
+                                                                                                        verbose = TRUE,
+                                                                                                        mc.cores = 40))
+
+save(permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart, file = paste(results_dir, "permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+# load(file = paste(results_dir, "permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.biomart.Rlist", sep = ""))
+
+```
+
+#### dbPTM regions - loop thru each type of mod.
+
+```{r}
+
+# grange-ify the dbPTM sites
+## split by PTM type, unnest the item coords and chr
+list_of_tibbles_dbPTM_coords_and_chr <- tibble_dbPTM_allhuman_annotations_cast_onto_genome %>% 
+  dplyr::group_split(PTM_type) %>%
+  set_names(purrr::map(.x = ., .f = ~.x$PTM_type %>% unique)) %>%
+  purrr::map(~.x %>%
+               dplyr::select(chr, vec_all_genome_relative_coords_of_item) %>% 
+               unnest(cols = "vec_all_genome_relative_coords_of_item") %>% 
+               dplyr::filter(is.na(vec_all_genome_relative_coords_of_item) != TRUE) %>%
+               dplyr::arrange(vec_all_genome_relative_coords_of_item))
+
+## convert vector of discontinuous sites into chr, start, end.
+list_of_tibbles_dbPTM_sites_genome.relative_chr.start.end <- list_of_tibbles_dbPTM_coords_and_chr %>% purrr::map(~convert_vector.of.positions_to_simple.ranges(input_vector = .x$vec_all_genome_relative_coords_of_item, metadata_vector = .x$chr) %>% 
+                                                                                                          # rename metadata column)
+                                                                                                          dplyr::rename("chr" = "value") %>% 
+                                                                                                          # filter out non-1:22/X/Y chromosome entries
+                                                                                                          dplyr::filter(chr %in% c(1:22, "X", "Y")))
+
+list_of_granges_dbPTM_sites_genome.relative <- list_of_tibbles_dbPTM_sites_genome.relative_chr.start.end %>% 
+  purrr::map(~toGRanges(.x[, c("chr", "start", "end")] %>% 
+                          # turn chr column into chr1 chr2 etc...
+                          dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
+                          type_convert %>% 
+                          # data frame is absolutele necessary for regioneR.
+                          as.data.frame))
+
+# permtest: JUM (all RNA)
+permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM <- purrr::map(.x = list_of_granges_dbPTM_sites_genome.relative[c("Ubiquitination", "Phosphorylation", "Acetylation")], 
+                                                                      .f = ~permTest(A = granges_JUM_differential_CDS_regions_all.RNA, 
+                                                                                     B = .x, 
+                                                                                     randomize.function = circularRandomizeRegions,
+                                                                                     evaluate.function = numOverlaps,
+                                                                                     ntimes = 10000, 
+                                                                                     genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                     # min.parallel = 8,
+                                                                                     per.chromosome = FALSE, 
+                                                                                     alternative = "greater", 
+                                                                                     force.parallel = TRUE, 
+                                                                                     verbose = TRUE,
+                                                                                     mc.cores = 40))
+
+
+save(permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM, file = paste(results_dir, "permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
+load(file = paste(results_dir, "permtest_JUM_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
+
+# permtest: PSI-Sigma (all RNA)
+permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM <- purrr::map(.x = list_of_granges_dbPTM_sites_genome.relative[c("Ubiquitination", "Phosphorylation", "Acetylation")], 
+                                                                           .f = ~permTest(A = granges_PSIsigma_differential_CDS_regions_all.RNA, 
+                                                                                          B = .x, 
+                                                                                          randomize.function = circularRandomizeRegions,
+                                                                                          evaluate.function = numOverlaps,
+                                                                                          ntimes = 10000, 
+                                                                                          genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                          # min.parallel = 8,
+                                                                                          per.chromosome = FALSE, 
+                                                                                          alternative = "greater", 
+                                                                                          force.parallel = TRUE, 
+                                                                                          verbose = TRUE,
+                                                                                          mc.cores = 40))
+
+save(permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM, file = paste(results_dir, "permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
+load(file = paste(results_dir, "permtest_PSIsigma_diff.CDS.all.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
+
+# permtest: JUM (proteome-filtered RNA)
+permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM <- purrr::map(.x = list_of_granges_dbPTM_sites_genome.relative[c("Ubiquitination", "Phosphorylation", "Acetylation")], 
+                                                                                    .f = ~permTest(A = granges_JUM_differential_CDS_regions_proteome.filtered.RNA, 
+                                                                                                   B = .x, 
+                                                                                                   randomize.function = circularRandomizeRegions,
+                                                                                                   evaluate.function = numOverlaps,
+                                                                                                   ntimes = 10000, 
+                                                                                                   genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                                   # min.parallel = 8,
+                                                                                                   per.chromosome = FALSE, 
+                                                                                                   alternative = "greater", 
+                                                                                                   force.parallel = TRUE, 
+                                                                                                   verbose = TRUE,
+                                                                                                   mc.cores = 40))
+
+save(permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM, file = paste(results_dir, "permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
+load(file = paste(results_dir, "permtest_JUM_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
+
+# permtest: PSI-Sigma (proteome-filtered RNA)
+permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM <- purrr::map(.x = list_of_granges_dbPTM_sites_genome.relative[c("Ubiquitination", "Phosphorylation", "Acetylation")], 
+                                                                                         .f = ~permTest(A = granges_PSIsigma_differential_CDS_regions_proteome.filtered.RNA, 
+                                                                                                        B = .x, 
+                                                                                                        randomize.function = circularRandomizeRegions,
+                                                                                                        evaluate.function = numOverlaps,
+                                                                                                        ntimes = 10000, 
+                                                                                                        genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                                                        # min.parallel = 8,
+                                                                                                        per.chromosome = FALSE, 
+                                                                                                        alternative = "greater", 
+                                                                                                        force.parallel = TRUE, 
+                                                                                                        verbose = TRUE,
+                                                                                                        mc.cores = 40))
+
+save(permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM, file = paste(results_dir, "permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
+load(file = paste(results_dir, "permtest_PSIsigma_diff.CDS.proteome.filtered.RNA_vs_fixed.genomic.dbPTM.Rlist", sep = ""))
 
 ```
 
@@ -1760,7 +3253,7 @@ set.seed(7)
 ```{r}
 
 # use purrr to test significance of all traits simultaneously
-list_permtest_results_JUM <- future_map(.x = tibble_JUM_AS.event.ID_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`, .f = function(.x) {
+list_permtest_results_JUM <- purrr::map(.x = tibble_JUM_AS.event.ID_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`, .f = function(.x) {
                                              
                                              # TURN THE SNP POSITIONS INTO GRANGES OBJECT
                                              granges_gwas_catalog <- toGRanges(tibble_ebi_gwas_catalog %>% 
@@ -1793,25 +3286,39 @@ list_permtest_results_JUM <- future_map(.x = tibble_JUM_AS.event.ID_snps_summary
                                              # genome = "hg38", 
                                              # allow.overlaps = FALSE, 
                                              # per.chromosome = FALSE)
-                                             
-                                             permtest_result <- overlapPermTest(A = granges_items_chr_start_end, B = granges_gwas_catalog, 
-                                                                                ntimes = 500, 
-                                                                                genome = BSgenome.Hsapiens.UCSC.hg38, 
-                                                                                # min.parallel = 8,
-                                                                                allow.overlaps = FALSE, 
-                                                                                per.chromosome = FALSE, 
-                                                                                alternative = "greater", 
-                                                                                force.parallel = FALSE, 
-                                                                                verbose = TRUE)
-                                                                                # ,
-                                                                                # mc.cores = 8)
-                                                                                # 
+                                             # 
+                                             # permtest_result <- overlapPermTest(A = granges_items_chr_start_end, B = granges_gwas_catalog, 
+                                             #                                    ntimes = 10000, 
+                                             #                                    genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                             #                                    # min.parallel = 8,
+                                             #                                    allow.overlaps = FALSE, 
+                                             #                                    per.chromosome = FALSE, 
+                                             #                                    alternative = "greater", 
+                                             #                                    force.parallel = FALSE, 
+                                             #                                    verbose = TRUE,
+                                             #                                    mc.cores = 8)
+                                             # 
+                                             permtest_result <- permTest(A = granges_items_chr_start_end, 
+                                                                         B = granges_gwas_catalog, 
+                                                                         randomize.function = randomizeRegions,
+                                                                         evaluate.function = numOverlaps,
+                                                                         allow.overlaps = FALSE, 
+                                                                         ntimes = 10000, 
+                                                                         genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                         # min.parallel = 8,
+                                                                         per.chromosome = FALSE, 
+                                                                         alternative = "greater", 
+                                                                         force.parallel = TRUE, 
+                                                                         verbose = TRUE,
+                                                                         mc.cores = 8)
                                              
                                              # plot(permtest_result)
                                              
                                              return(permtest_result %>% flatten)
                                              
-                                           }, .progress = TRUE ) %>% set_names(tibble_JUM_AS.event.ID_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`)
+                                           }) %>% set_names(tibble_JUM_AS.event.ID_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`)
+
+save(list_permtest_results_JUM, file = paste(results_dir, "list_SNP_permtest_results_JUM.Rlist", sep = ""))
 
 ```
 
@@ -1858,7 +3365,7 @@ tibble_psisigma_diff.exon.coords_snps_summary_by_trait <- tibble_psisigma_diff.e
 ```{r}
 
 # use purrr to test significance of all traits simultaneously
-list_permtest_results_PSIsigma <- future_map(.x = tibble_psisigma_diff.exon.coords_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`, .f = function(.x) {
+list_permtest_results_PSIsigma <- purrr::map(.x = tibble_psisigma_diff.exon.coords_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`, .f = function(.x) {
                                              
                                              # TURN THE SNP POSITIONS INTO GRANGES OBJECT
                                              granges_gwas_catalog <- toGRanges(tibble_ebi_gwas_catalog %>% 
@@ -1892,24 +3399,39 @@ list_permtest_results_PSIsigma <- future_map(.x = tibble_psisigma_diff.exon.coor
                                              # allow.overlaps = FALSE, 
                                              # per.chromosome = FALSE)
                                              
-                                             permtest_result <- overlapPermTest(A = granges_items_chr_start_end, B = granges_gwas_catalog, 
-                                                                                ntimes = 500, 
-                                                                                genome = BSgenome.Hsapiens.UCSC.hg38, 
-                                                                                # min.parallel = 8,
-                                                                                allow.overlaps = FALSE, 
-                                                                                per.chromosome = FALSE, 
-                                                                                alternative = "greater", 
-                                                                                force.parallel = FALSE, 
-                                                                                verbose = TRUE)
-                                                                                # ,
-                                                                                # mc.cores = 8)
-                                                                                # 
+                                             # permtest_result <- overlapPermTest(A = granges_items_chr_start_end, B = granges_gwas_catalog, 
+                                             #                                    ntimes = 500, 
+                                             #                                    genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                             #                                    # min.parallel = 8,
+                                             #                                    allow.overlaps = FALSE, 
+                                             #                                    per.chromosome = FALSE, 
+                                             #                                    alternative = "greater", 
+                                             #                                    force.parallel = FALSE, 
+                                             #                                    verbose = TRUE,
+                                             #                                    mc.cores = 8)
+                                             
+                                             permtest_result <- permTest(A = granges_items_chr_start_end, 
+                                                                         B = granges_gwas_catalog, 
+                                                                         randomize.function = randomizeRegions,
+                                                                         evaluate.function = numOverlaps,
+                                                                         allow.overlaps = FALSE, 
+                                                                         ntimes = 10000, 
+                                                                         genome = BSgenome.Hsapiens.UCSC.hg38, 
+                                                                         # min.parallel = 8,
+                                                                         per.chromosome = FALSE, 
+                                                                         alternative = "greater", 
+                                                                         force.parallel = TRUE, 
+                                                                         verbose = TRUE,
+                                                                         mc.cores = 8)
+                                             
                                              
                                              # plot(permtest_result)
                                              
                                              return(permtest_result %>% flatten)
                                              
-                                           }, .progress = TRUE ) %>% set_names(tibble_JUM_AS.event.ID_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`)
+                                           }) %>% set_names(tibble_JUM_AS.event.ID_snps_summary_by_trait[1:8, ] %>% .$`DISEASE/TRAIT`)
+
+save(list_permtest_results_PSIsigma, file = paste(results_dir, "list_SNP_permtest_results_PSIsigma.Rlist", sep = ""))
 
 ```
 # Bulk JUM, PSI-Sigma and scRNA-Seq Sierra !!! WARNING: TEMPORARILY ON HOLD !!!

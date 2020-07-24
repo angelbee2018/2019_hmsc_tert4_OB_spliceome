@@ -3,9 +3,11 @@ Accepts an input of a reconstructed/assembled transcriptome annotation (e.g. str
 
 Behaviour: loads reconstructed transcriptome, then subsets each transcript. For each transcript, look-up the reference FASTA sequence and 3FT to find ALL start codons that occur more than 54nt upstream of the last exon-exon junction. Then look for any in-frame stop codons downstream. Transcript is an NMD candidate when the FIRST nucleotide of the stop codon is within 51 - 50nt of the last exon junction (the stop codon is fully encapsulated in the 51nt window).
 
-NMD candidature is flagged in the \"transcript_biotype\" entry of the GTF. First/last exon is flagged in a separate entry. Poison exons are defined on a per-transcript basis, with candidature flagged as a separate entry with the \"type\" attribute == \"poison_exon\"
+Option is available to use already-annotated start codon to tell the program which translation frame is the correct one.
 
-Recommended system requirements: 6 threads/64GB memory"
+NMD candidature is flagged in the \"PTC\" entry of the GTF. First/last exon is flagged in a separate entry. Poison exons are defined on a per-transcript basis, with candidature flagged as a separate entry with the \"type\" attribute == \"poison_exon\"
+
+Recommended system requirements: 6 threads/64GB memory. Minimum system requirements: 1 thread/16GB memory"
 
 # print the arguments received by the R script
 cat("Arguments input:", commandArgs(), sep = "\n")
@@ -39,20 +41,26 @@ list_input_arg_info = list(
   "2" = make_option(c("-F", "--reference_genome_fasta_dir"), type = "character", default = NULL, 
                     help = "Compulsory. path to the directory containing the genome FASTA files. Ideally from Ensembl... you need separate files by chromosomes, NOT the primary assembly. 
               FORMATTING IMPORTANT!!!! MAKE SURE THE REF. GENOME FASTA FILES ARE IN THE FORMAT: <_anything_><chr>.fa e.g. \"Homo_sapiens.GRCh38.dna.chromosome.MT.fa\" OR \"chr16.fa\" OR \"Y.fa\". What will not work: anything which does not have .fa extension e.g. \"chr16.fasta\", anything between the chromosome number and the .fa extension e.g. \"chromosome1.ensembl.fa\"", metavar = "character"),
-  "3" = make_option(c("-O", "--output_name"), type = "character", default = NULL, 
-                    help = "Compulsory. output file path. what do you want to save the newly annotated reconstructed GTF as? IMPORTANT: MUST BE A FULL FILE PATH WITHOUT THE EXTENSION AND NOT A DIRECTORY. THE .GTF EXTENSION WILL AUTOMATICALLY BE ADDED FOR THE OUTPUT FILE. e.g. correct: ~/outputdir/annotated_sample incorrect: ~/outputdir/ incorrect: /outputdir/annotated_sample.gtf", metavar = "character"),
-  "4" = make_option(c("-C", "--ncores"), type = "integer", default = 0, 
+  "3" = make_option(c("-D", "--output_dir"), type = "character", default = NULL, 
+                    help = "Compulsory. output file directory. where do you want to save the newly annotated reconstructed GTF? IMPORTANT: MUST BE A FULL DIRECTORY AND NOT A FILE PATH. e.g. correct: ~/outputdir/ correct: ~/outputdir incorrect: /outputdir/annotated_sample.gtf", metavar = "character"),
+  "4" = make_option(c("-O", "--output_name"), type = "character", default = NULL, 
+                    help = "Compulsory. output file name, to be saved in the output directory a.k.a. what do you want to save the newly annotated reconstructed GTF as? IMPORTANT: MUST BE A STRING WITHOUT THE .GTF EXTENSION AND NOT A DIRECTORY. THE .GTF EXTENSION WILL AUTOMATICALLY BE ADDED FOR THE OUTPUT FILE. e.g. correct: annotated_sample incorrect: annotated_sample.gtf incorrect: annotated_sample/", metavar = "character"),
+  "5" = make_option(c("-C", "--ncores"), type = "integer", default = 0, 
                     help = "Optional. Number of cores to use. possible inputs: numbers 1 to any integer. By default, uses all cores (ncores = 0).", metavar = "integer"),
-  "5" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
+  "6" = make_option(c("-S", "--use_start_codon"), type = "logical", default = TRUE, 
+                    help = "Optional but you should really choose the right option. This option tells the program whether or not there are start codons provided for each transcript (where available). It's useful if you want to re-annotate e.g. the reference Ensembl GTF for the presence of PTCs, so that the program will not consider all 3 translation frames but only consider the frame containing the annotated start codon. If for any reason a transcript doesn't have an associated start codon, the program will revert to considering all 3 frames. By default, start codons are used where applicable.", metavar = "logical"),
+  "7" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
                     help = "Optional. Specifies which chromosomes to do: select what chromosomes you want translated. possible inputs: numbers 0-2. 0 (default): nuclear chromosomes only i,e, 1:22, X & Y. 1: nuclear + mitochondrial i.e. 1:22, X & Y, M. 2: everything including haplotype/fusion chromosomes etc... this is possible provided the chromosome names.", metavar = "integer"),
-  "6" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
-                    help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you are doing haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The script won't try to search for a second file. In ensembl, this file is called \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character"),
-  "7" = make_option(c("-W", "--checking_window_size"), type = "double", default = 51,
+  "8" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
+                    help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you want to consider haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The program won't try to search for a second file. In ensembl, this file is called something like \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So if you want to use that file, then for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character"),
+  "9" = make_option(c("-W", "--checking_window_size"), type = "double", default = 51,
                     help = "ADVANCED. Use this parameter to change the nucleotide window from the default of 51. 
                     DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double"),
-  "8" = make_option(c("-E", "--min_exons_per_transcript"), type = "integer", default = 3,
+  "10" = make_option(c("-E", "--min_exons_per_transcript"), type = "integer", default = 3,
                     help = "ADVANCED. Use this parameter to change the minimum number of exons that a transcript must have in order to be flagged for NMD. As a general rule of thumb, the false positive rate:false negative rate ratio will decrease as you increase this parameter. Default is 3, meaning 2-exon transcripts and below will not be considered for NMD. 
-                    DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double")
+                    DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double"),
+  "11" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
+                     help = "Turn this on if you want to save the R workspace in the same name as the --output_name. YES: saves at the end. DEBUG: saves at each critical step. NO: doesn't save.", metavar = "character")
 )
 
 input_arg_info <- OptionParser(option_list = list_input_arg_info, description = script_description)
@@ -70,24 +78,30 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
 
 # DEBUG #######
 
-# reconstructed_gtf_path <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+# reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 # reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-# output_name <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMDflagged"
+# output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/"
+# output_name <- "Homo_sapiens.GRCh38.98.gtf_NMD_PTC_E4_test"
 
 # reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
 # reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 # reference_genome_fasta_dir <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
 # output_name <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck.gtf"
+
 # window_size <- 51
-# min_exons_per_transcript <- 3
+# min_exons_per_transcript <- 4
+# use_start_codon <- TRUE
 
 ###############
 
 reconstructed_gtf_path <- input_args$reconstructed_transcript_gtf
 reference_genome_fasta_dir <- input_args$reference_genome_fasta_dir
+output_dir <- input_args$output_dir
 output_name <- input_args$output_name
 window_size <- input_args$checking_window_size
 min_exons_per_transcript <- input_args$min_exons_per_transcript
+use_start_codon <- input_args$use_start_codon
+save_workspace_when_done <- input_args$save_workspace_when_done
 
 cat("reconstructed_gtf_path:", reconstructed_gtf_path, "\n")
 cat("reference_genome_fasta_dir:", reference_genome_fasta_dir, "\n")
@@ -95,8 +109,8 @@ cat("output_name:", output_name, "\n")
 cat("window_size:", window_size, "\n")
 cat("min_exons_per_transcript:", min_exons_per_transcript, "\n")
 
-if(!dir.exists(output_name) ) {
-  dir.create(output_name, recursive = TRUE)}
+# if(!dir.exists(output_name) ) {
+#   dir.create(output_name, recursive = TRUE)}
 
 # manage parrallellisation rrlllRll
 
@@ -146,10 +160,63 @@ test_for_any_valid_ORF <- function(vector_AA_sequence) {
 
 # END test_for_any_valid_ORF()
 
+# FUNCTION TO LABEL THE FIRST AND LAST EXON OF A SUBSET GTF (DESCRIBING A SINGLE TRANSCRIPT) WITH "first_exon" or "last_exon"
+
+label_first_last_exon <- function(tibble_gtf_subset_by_transcript_id) {
+  
+  max_exon_number <- max(tibble_gtf_subset_by_transcript_id$exon_number)
+  
+  # account for transcripts which only have one exon
+  if (max_exon_number == 1) {
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "only_one_exon"
+    
+  } else if (exon_order == "increasing" & tibble_gtf_subset_by_transcript_id$strand %>% unique == "-") {
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "first_exon"
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "last_exon"
+    
+  } else {
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "last_exon"
+    
+    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "first_exon"
+    
+  }
+  
+  return(tibble_gtf_subset_by_transcript_id)
+  
+}
+
+# END label_first_last_exon() ######
+
+# MAIN FUNCTION TO LABEL THE FIRST/LAST EXONS OF GTF
+
+add_first.last.exon_info <- function(input_gtf) {
+  
+  # add in the first_or_last_exon column
+  input_gtf_2 <- input_gtf %>% add_column("first_or_last_exon" = NA)
+  
+  # remove rows which have an NA exon number
+  input_gtf_2 <- input_gtf_2[-which(is.na(input_gtf_2$exon_number)), ]
+  
+  # remove rows which don't have strand info
+  input_gtf_2 <- input_gtf_2 %>% dplyr::filter(input_gtf_2$strand != "+" | input_gtf_2$strand != "-")
+  
+  # get all the unique transcript IDs for looping
+  list_unique_transcript.ids <- input_gtf_2$transcript_id %>% unique %>% array_tree
+  
+  output_gtf <- future_map(.x = list_unique_transcript.ids, .f = ~label_first_last_exon(input_gtf_2[input_gtf_2$transcript_id == .x, ]), .progress = TRUE, .options = future_options(globals = c("input_gtf_2", "label_first_last_exon"))) %>% rbindlist %>% as_tibble
+  
+  return(output_gtf)
+  
+}
+
 # BEGIN EXECUTION ###########################
 
 cat("import reconstructed transcriptome GTF\n")
-reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
+tibble_reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
 vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(reference_genome_fasta_dir)[list.files(reference_genome_fasta_dir) %>% grep(., pattern = ".*.fa$")], sep = "")
 
@@ -157,23 +224,23 @@ vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(r
 ## sample the first transcript on the negative strand with more than 1 exon
 temp_number <- 1
 
-first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+first_transcript_id <- tibble_reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
 
-while (reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
-       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
-       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
-       reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
+while (tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
+       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
+       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
+       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
   
   temp_number <- temp_number + 1
   
-  first_transcript_id <- reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+  first_transcript_id <- tibble_reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
   
 }
 
 # the test condition
-max_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
-max_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
-min_exon_start_test <- reconstructed_gtf[reconstructed_gtf$transcript_id == first_transcript_id & reconstructed_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
+max_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
+max_exon_start_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id & tibble_reconstructed_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
+min_exon_start_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id & tibble_reconstructed_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
 
 exon_order <- NULL
 
@@ -226,20 +293,20 @@ for (chr in chr_to_run) {
   cat("temporary allocation to ref genome fasta list\n")
   reference_genome_fasta_chr_temp <- seqinr::read.fasta(file = paste(vector_ref_genome_paths_by_chr[vector_ref_genome_paths_by_chr_position]), forceDNAtolower = FALSE)
   
-  reconstructed_gtf_tempchr <- reconstructed_gtf[reconstructed_gtf$seqnames == chr, ]
+  tibble_reconstructed_gtf_tempchr <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$seqnames == chr, ]
   
   cat("subset reconstructed transcriptome GTF by filtering for exon entries only.\n")
   # leave aside the remaining entries for later inclusion
-  ## rows which do not describe an exon entry
-  row_indices_recon.gtf_non.exon.entries <- which(reconstructed_gtf_tempchr$type != "exon")
+  ## rows which do not describe an exon or start_codon entry
+  row_indices_recon.gtf_non.exon.entries <- which(tibble_reconstructed_gtf_tempchr$type != "exon" & tibble_reconstructed_gtf_tempchr$type != "start_codon")
   ## rows where the transcript_id is NA
-  row_indices_recon.gtf_na.transcript.id.entries <- which(is.na(reconstructed_gtf_tempchr$transcript_id))
+  row_indices_recon.gtf_na.transcript.id.entries <- which(is.na(tibble_reconstructed_gtf_tempchr$transcript_id))
   
-  row_indices_recon.gtf_exon.entries.only <- which(reconstructed_gtf_tempchr$type == "exon")
-  reconstructed_gtf_exon.entries.only <- reconstructed_gtf_tempchr[row_indices_recon.gtf_exon.entries.only, ]
+  row_indices_recon.gtf_exon.entries.only <- which(tibble_reconstructed_gtf_tempchr$type == "exon" | tibble_reconstructed_gtf_tempchr$type == "start_codon")
+  reconstructed_gtf_exon.entries.only <- tibble_reconstructed_gtf_tempchr[row_indices_recon.gtf_exon.entries.only, ]
   
   # generate list of all 'transcript_id's to loop thru
-  list_transcript_ids <- reconstructed_gtf_tempchr$transcript_id %>% unique %>% na.omit %>% array_tree
+  list_transcript_ids <- tibble_reconstructed_gtf_tempchr$transcript_id %>% unique %>% na.omit %>% array_tree
   
   cat("load the exon entries of the recon. GTF table into the list\n")
   list_reconstructed_gtf_exon.entries.only_by_transcript_id <- future_map(.x = list_transcript_ids, .f = ~reconstructed_gtf_exon.entries.only[reconstructed_gtf_exon.entries.only$transcript_id == .x, ], .progress = TRUE, .options = future_options(globals = c("reconstructed_gtf_exon.entries.only"))) %>% set_names(list_transcript_ids %>% unlist)
@@ -250,106 +317,227 @@ for (chr in chr_to_run) {
   cat("generate attributes of each transcript:
       1. all genome-relative forward coords of each nucleotide,
       2. coords of the nucleotides flanking last exon-exon junction\n")
-  list_transcript_attributes <- future_map(.x = list_reconstructed_gtf_exon.entries.only_by_transcript_id, 
-                                           .f = ~list(
-                                             "recon_entries" = .x,
-                                             "strand" = .x$strand %>% unique %>% paste,
-                                             "forward_coords" = purrr::map2(.x = .x$start, .y = .x$end, .f = ~.x:.y) %>% unlist %>% as.numeric %>% sort, 
-                                             # since the start is always less than the end in genome relative coords, for the fwd strand last_nt_of_second_last_exon will be the end coord of the second last exon.
-                                             # however for rev. strand, last_nt_of_second_last_exon will be the start coord of the second last exon, and the first_nt_of_last_exon will be the end coord of the last exon.
-                                             "last_nt_of_second_last_exon" = if (.x$strand %>% unique %>% paste == "+") {
-                                               .x[.x$exon_number == max(.x$exon_number %>% as.numeric) - 1, "end"] %>% paste %>% as.numeric
-                                             } else if (exon_order == "stranded" & .x$strand %>% unique %>% paste == "-") {
-                                               .x[.x$exon_number == max(.x$exon_number %>% as.numeric) - 1, "start"] %>% paste %>% as.numeric
-                                             } else if (exon_order == "increasing" & .x$strand %>% unique %>% paste == "-") {
-                                               .x[.x$exon_number == min(.x$exon_number %>% as.numeric) + 1, "start"] %>% paste %>% as.numeric
-                                             }, 
-                                             "first_nt_of_last_exon" = if (.x$strand %>% unique %>% paste == "+") {
-                                               .x[.x$exon_number == max(.x$exon_number %>% as.numeric), "start"] %>% paste %>% as.numeric
-                                             } else if (exon_order == "stranded" & .x$strand %>% unique %>% paste == "-") {
-                                               .x[.x$exon_number == max(.x$exon_number %>% as.numeric), "end"] %>% paste %>% as.numeric
-                                             } else if (exon_order == "increasing" & .x$strand %>% unique %>% paste == "-") {
-                                               .x[.x$exon_number == min(.x$exon_number %>% as.numeric), "end"] %>% paste %>% as.numeric
-                                             }
-                                           ), .progress = TRUE
-                                           
+  list_transcript_attributes <- future_imap(.x = list_reconstructed_gtf_exon.entries.only_by_transcript_id, 
+                                            .f = function(a1, a2) {
+                                              
+                                              # cat("\nnow processing: ", a2)
+                                              
+                                              temp0 <- list(
+                                                "recon_entries" = a1,
+                                                "strand" = a1$strand %>% unique %>% paste,
+                                                "forward_coords" = purrr::map2(.x = a1 %>% dplyr::filter(type == "exon") %>% .$start, .y = a1 %>% dplyr::filter(type == "exon") %>% .$end, .f = ~.x:.y) %>% unlist %>% as.numeric %>% sort, 
+                                                # since the start is always less than the end in genome relative coords, for the fwd strand last_nt_of_second_last_exon will be the end coord of the second last exon.
+                                                # however for rev. strand, last_nt_of_second_last_exon will be the start coord of the second last exon, and the first_nt_of_last_exon will be the end coord of the last exon.
+                                                "last_nt_of_second_last_exon" = if (a1$strand %>% unique %>% paste == "+") {
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max - 1)) %>% .$end %>% paste %>% as.numeric
+                                                } else if (exon_order == "stranded" & a1$strand %>% unique %>% paste == "-") {
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max - 1)) %>% .$start %>% paste %>% as.numeric
+                                                } else if (exon_order == "increasing" & a1$strand %>% unique %>% paste == "-") {
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% min + 1)) %>% .$start %>% paste %>% as.numeric
+                                                }, 
+                                                "first_nt_of_last_exon" = if (a1$strand %>% unique %>% paste == "+") {
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max)) %>% .$start %>% paste %>% as.numeric
+                                                } else if (exon_order == "stranded" & a1$strand %>% unique %>% paste == "-") {
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max)) %>% .$end %>% paste %>% as.numeric
+                                                } else if (exon_order == "increasing" & a1$strand %>% unique %>% paste == "-") {
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% min)) %>% .$end %>% paste %>% as.numeric
+                                                } )
+                                              
+                                              # only splice in the start_codon entry if use_start_codon is specified
+                                              if (use_start_codon == TRUE) {
+                                                
+                                                temp0 %>% purrr::splice("start_codon" = a1 %>% dplyr::filter(type == "start_codon")) %>% return
+                                                
+                                              } else {
+                                                
+                                                temp0 %>% purrr::splice("start_codon" = a1[0, ]) %>% return
+                                                
+                                              }
+                                              
+                                            }, .progress = TRUE
+                                            
   )
   
   cat("generate all the forward nucleotides of each transcript\n")
   # also get the TRANSCRIPT RELATIVE position of the junction  (transcript-relative coord will be a half-integer value)
-  list_transcript_fwd_nts <- future_imap(.x = list_transcript_attributes, .f = function(.x, .y) {
+  # also get the transcript-relative position of the start_codon (if it's present)
+  list_transcript_fwd_nts <- future_imap(.x = list_transcript_attributes, .f = function(a1, a2) {
     
-    # cat("now looking up nucleotides of transcript number", which(names(list_transcript_attributes) == .y), "/", length(list_transcript_attributes), "\n")
+    # DEBUG ###
+    # a1 <- list_transcript_attributes[[3]]
+    ###########
     
-    updated_list <- purrr::splice(.x,
-                                  
-                                  "forward_nucleotides" = reference_genome_fasta_chr_temp[[chr %>% paste]][.x$forward_coords],
-                                  "transcript_relative_junction_position" = mean(c(
+    cat("now looking up nucleotides of transcript number", which(names(list_transcript_attributes) == a2), "/", length(list_transcript_attributes), "\n")
+    
+    # if use_start_codon is called and actually exists in the GTF, get the transcript-relative position of the first nt of the start codon according to the matched entry.
+    # if start_codon is not available for whatever reason, the first nt of the start codon is taken to be the first nt of the transcript.
+    if (a1$start_codon %>% nrow == 0) {
+      
+      updated_list <- purrr::splice(a1,
+                                    "fwd_coordinates_relative_first_nt_of_start_codon" = if (a1$strand == "+") {1} else if (a1$strand == "-") {length(a1$forward_coords)})
+      
+    } else if (a1$start_codon %>% nrow > 0) {
+      
+      updated_list <- purrr::splice(a1,
+                                    "fwd_coordinates_relative_first_nt_of_start_codon" = if (a1$strand %>% unique %>% paste == "+") {
+                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% as.numeric %>% min)) %>% .$start == a1$forward_coords)
+                                    } else if (exon_order == "stranded" & a1$strand %>% unique %>% paste == "-") {
+                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% as.numeric %>% min)) %>% .$end == a1$forward_coords)
+                                    } else if (exon_order == "increasing" & a1$strand %>% unique %>% paste == "-") {
+                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% as.numeric %>% max)) %>% .$end == a1$forward_coords)
+                                    } )
+      
+      
+      
+    }
+    
+    updated_list <- purrr::splice(updated_list,
+                                  "forwards_coords_relative_junction_position" = mean(c(
                                     # transcript relative position of the last nt of second last exon
-                                    which(.x$forward_coords == .x$last_nt_of_second_last_exon),
+                                    which(a1$forward_coords == a1$last_nt_of_second_last_exon),
                                     # transcript relative position of the first nt of last exon
-                                    which(.x$forward_coords == .x$first_nt_of_last_exon))))
+                                    which(a1$forward_coords == a1$first_nt_of_last_exon))),
+                                  "forward_transcript_nucleotides" = reference_genome_fasta_chr_temp[[chr %>% paste]][a1$forward_coords],
+                                  "forward_CDS_nucleotides" = if (a1$strand == "+") {
+                                    reference_genome_fasta_chr_temp[[chr %>% paste]][a1$forward_coords %>% .[updated_list$fwd_coordinates_relative_first_nt_of_start_codon:length(a1$forward_coords)]]
+                                  } else if (a1$strand == "-") {reference_genome_fasta_chr_temp[[chr %>% paste]][a1$forward_coords %>% .[1:updated_list$fwd_coordinates_relative_first_nt_of_start_codon]]
+                                  } )
     
     return(updated_list)
     
   }, .progress = TRUE)
   
   cat("do 3FT based on the forward nucleotides of each transcript and test for whether there is any valid ORF.\n")
-  list_transcript_3FT <- future_imap(.x = list_transcript_fwd_nts, .f = function(.x, .y) {
+  list_transcript_3FT <- future_imap(.x = list_transcript_fwd_nts, .f = function(a1, a2) {
     
-    cat("now checking 3FT of transcript number", which(names(list_transcript_fwd_nts) == .y), "/", length(list_transcript_fwd_nts), "\n")
+    # DEBUG ###
+    # a1 <- list_transcript_fwd_nts[[1]]
+    ###########
+    
+    cat("now checking 3FT of transcript number", which(names(list_transcript_fwd_nts) == a2), "/", length(list_transcript_fwd_nts), "\n")
     
     # for simplicity, we exclude the last exon + 51 nt window from the nt sequence
     # hence get the effective fwd. nucleotide sequence:
-    vector_all_foward_nucleotides <- .x$forward_nucleotides
+    vector_all_forward_CDS_nucleotides <- a1$forward_CDS_nucleotides
+    vector_all_forward_transcript_nucleotides <- a1$forward_transcript_nucleotides
     
-    # if (weirdly enough) the transcript is actually shorter than 51 nt, then we dont care about the window. Instances of this occurring are very rare indeed.
+    # if (weirdly enough) the transcript is actually shorter than 51 nt, then we skip it. Instances of this occurring are very rare indeed.
     # requirement is that the sequence length longer than the window is at least window + 5 because you need at least 5nt in order for 3FT to work succesfully in all frames
-    if (length(vector_all_foward_nucleotides) < (window_size + 1) |
-        ((.x$strand == "+") & (floor(.x$transcript_relative_junction_position) - window_size) < 5) |
-        ((.x$strand == "-") & (ceiling(.x$transcript_relative_junction_position) + window_size) > (length(vector_all_foward_nucleotides) - 5))) {
+    if (((a1$strand == "+") & (floor(a1$forwards_coords_relative_junction_position) - window_size + 1 - a1$fwd_coordinates_relative_first_nt_of_start_codon + 1) < 5) |
+        ((a1$strand == "-") & (a1$fwd_coordinates_relative_first_nt_of_start_codon - floor(a1$forwards_coords_relative_junction_position) - window_size + 1 < 5))) {
       
-      vector_forward_nucleotides_excl.last.exon <- vector_all_foward_nucleotides
+      return(NA)
       
-    } else if (.x$strand == "+") {
+    } else if (a1$strand == "+") {
       
-      vector_forward_nucleotides_excl.last.exon <- vector_all_foward_nucleotides[1:(floor(.x$transcript_relative_junction_position) - window_size)]
+      vector_forward_nucleotides_excl.last.exon <- vector_all_forward_transcript_nucleotides[(a1$fwd_coordinates_relative_first_nt_of_start_codon):(floor(a1$forwards_coords_relative_junction_position) - window_size + 1)]
       
-    } else if (.x$strand == "-") {
+    } else if (a1$strand == "-") {
       
-      vector_forward_nucleotides_excl.last.exon <- vector_all_foward_nucleotides[(ceiling(.x$transcript_relative_junction_position) + window_size):length(vector_all_foward_nucleotides)]
+      vector_forward_nucleotides_excl.last.exon <- vector_all_forward_transcript_nucleotides[(ceiling(a1$forwards_coords_relative_junction_position) + window_size - 1):(a1$fwd_coordinates_relative_first_nt_of_start_codon)]
       
     }
     
-    # splice in the 3FT data
-    updated_list_temp <- purrr::splice(.x, nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = vector_forward_nucleotides_excl.last.exon, strand = .x$strand))
-    # test for the presence of valid ORFs
+    # splice in the 3FT virtual amino acids
+    updated_list_temp <- purrr::splice(a1, nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = vector_forward_nucleotides_excl.last.exon, strand = a1$strand))
+    # if start codon info was available, remove the translation frames 1 and 2.
+    if (updated_list_temp$start_codon %>% nrow > 0) {
+      
+      updated_list_temp$translation_frame_1 <- updated_list_temp$translation_frame_0
+      updated_list_temp$translation_frame_2 <- updated_list_temp$translation_frame_0
+      
+    } 
+    
+    # test for the presence of valid ORFs - splice in results
+    # splice in the three positions of the FIRST stop codon following an M if it exists. This will be used to create the poison exon candidate annotation.
+    # then we additionally splice in all positions where stop codons occurred.
     updated_list_temp <- purrr::splice(updated_list_temp, 
+                                       
                                        "any_valid_ORF_frame_0" = test_for_any_valid_ORF(updated_list_temp$translation_frame_0),
                                        "any_valid_ORF_frame_1" = test_for_any_valid_ORF(updated_list_temp$translation_frame_1),
-                                       "any_valid_ORF_frame_2" = test_for_any_valid_ORF(updated_list_temp$translation_frame_2))
+                                       "any_valid_ORF_frame_2" = test_for_any_valid_ORF(updated_list_temp$translation_frame_2),
+                                       
+                                       "translation_relative_coords_first_M.S_stop_codon_frame_0" = str_locate_all(string = updated_list_temp$translation_frame_0 %>% paste(collapse = ""), pattern = "M[^\\*]*\\*") %>% .[[1]] %>% as_tibble %>% .$end %>% (function(x) {if (length(x) != 0) {min(x)} else {NA}}),
+                                       "translation_relative_coords_first_M.S_stop_codon_frame_1" = str_locate_all(string = updated_list_temp$translation_frame_1 %>% paste(collapse = ""), pattern = "M[^\\*]*\\*") %>% .[[1]] %>% as_tibble %>% .$end %>% (function(x) {if (length(x) != 0) {min(x)} else {NA}}),
+                                       "translation_relative_coords_first_M.S_stop_codon_frame_2" = str_locate_all(string = updated_list_temp$translation_frame_2 %>% paste(collapse = ""), pattern = "M[^\\*]*\\*") %>% .[[1]] %>% as_tibble %>% .$end %>% (function(x) {if (length(x) != 0) {min(x)} else {NA}}),
+                                       
+                                       "translation_relative_coords_all_stop_codons_frame_0" = which(updated_list_temp$translation_frame_0 == "*"),
+                                       "translation_relative_coords_all_stop_codons_frame_1" = which(updated_list_temp$translation_frame_1 == "*"),
+                                       "translation_relative_coords_all_stop_codons_frame_2" = which(updated_list_temp$translation_frame_2 == "*"))
+    # convert stop codon positions to CDS-relative
+    updated_list_temp <- purrr::splice(updated_list_temp,
+                                       "CDS_relative_coords_first_M.S_stop_codon_frame_0" = if (updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_0 %>% length != 0 & is.na(updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_0) != TRUE) {((3 * updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_0) - 2):(3 * updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_0)},
+                                       "CDS_relative_coords_first_M.S_stop_codon_frame_1" = if (updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_1 %>% length != 0 & is.na(updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_1) != TRUE) {(((3 * updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_1) - 2):(3 * updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_1)) + 1},
+                                       "CDS_relative_coords_first_M.S_stop_codon_frame_2" = if (updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_2 %>% length != 0 & is.na(updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_2) != TRUE) {(((3 * updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_2) - 2):(3 * updated_list_temp$translation_relative_coords_first_M.S_stop_codon_frame_2)) + 2},
+                                       
+                                       "CDS_relative_coords_all_stop_codons_frame_0" = if (updated_list_temp$translation_relative_coords_all_stop_codons_frame_0 %>% length != 0) {purrr::map2(.x = (3 * updated_list_temp$translation_relative_coords_all_stop_codons_frame_0) - 2, .y = 3 * updated_list_temp$translation_relative_coords_all_stop_codons_frame_0, .f = ~.x:.y) %>% unlist},
+                                       "CDS_relative_coords_all_stop_codons_frame_1" = if (updated_list_temp$translation_relative_coords_all_stop_codons_frame_1 %>% length != 0) {purrr::map2(.x = (3 * updated_list_temp$translation_relative_coords_all_stop_codons_frame_1) - 2, .y = 3 * updated_list_temp$translation_relative_coords_all_stop_codons_frame_1, .f = ~(.x:.y) + 1) %>% unlist},
+                                       "CDS_relative_coords_all_stop_codons_frame_2" = if (updated_list_temp$translation_relative_coords_all_stop_codons_frame_2 %>% length != 0) {purrr::map2(.x = (3 * updated_list_temp$translation_relative_coords_all_stop_codons_frame_2) - 2, .y = 3 * updated_list_temp$translation_relative_coords_all_stop_codons_frame_2, .f = ~(.x:.y) + 2) %>% unlist})
+    # if start codon info was available, remove the translation frames 1 and 2.
+    if (updated_list_temp$start_codon %>% nrow > 0) {
+      
+      updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_1 <- updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_0
+      updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_2 <- updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_0
+      
+      updated_list_temp$CDS_relative_coords_all_stop_codons_frame_1 <- updated_list_temp$CDS_relative_coords_all_stop_codons_frame_0
+      updated_list_temp$CDS_relative_coords_all_stop_codons_frame_2 <- updated_list_temp$CDS_relative_coords_all_stop_codons_frame_0
+      
+    } 
+    # convert CDS-relative positions to transcript-relative
+    updated_list_temp <- purrr::splice(updated_list_temp,
+                                       "transcript_relative_coords_first_M.S_stop_codon_frame_0" = if (updated_list_temp$strand == "+") {updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_0 + updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1} else if (updated_list_temp$strand == "-") {updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_0 + length(updated_list_temp$forward_coords) - updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon},
+                                       "transcript_relative_coords_first_M.S_stop_codon_frame_1" = if (updated_list_temp$strand == "+") {updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_1 + updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1} else if (updated_list_temp$strand == "-") {updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_1 + length(updated_list_temp$forward_coords) - updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon},
+                                       "transcript_relative_coords_first_M.S_stop_codon_frame_2" = if (updated_list_temp$strand == "+") {updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_2 + updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1} else if (updated_list_temp$strand == "-") {updated_list_temp$CDS_relative_coords_first_M.S_stop_codon_frame_2 + length(updated_list_temp$forward_coords) - updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon},
+                                       
+                                       "transcript_relative_coords_all_stop_codons_frame_0" = if (updated_list_temp$strand == "+") {updated_list_temp$CDS_relative_coords_all_stop_codons_frame_0 + updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1} else if (updated_list_temp$strand == "-") {updated_list_temp$CDS_relative_coords_all_stop_codons_frame_0 + length(updated_list_temp$forward_coords) - updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon},
+                                       "transcript_relative_coords_all_stop_codons_frame_1" = if (updated_list_temp$strand == "+") {updated_list_temp$CDS_relative_coords_all_stop_codons_frame_1 + updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1} else if (updated_list_temp$strand == "-") {updated_list_temp$CDS_relative_coords_all_stop_codons_frame_1 + length(updated_list_temp$forward_coords) - updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon},
+                                       "transcript_relative_coords_all_stop_codons_frame_2" = if (updated_list_temp$strand == "+") {updated_list_temp$CDS_relative_coords_all_stop_codons_frame_2 + updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1} else if (updated_list_temp$strand == "-") {updated_list_temp$CDS_relative_coords_all_stop_codons_frame_2 + length(updated_list_temp$forward_coords) - updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon})
+    # finally turn transcript-relative coords to genome-relative coords. 
+    ## this is strand-dependent because the "forward coords" are always increasing.
+    ## we reverse the forward coords if on the negative strand.
+    updated_list_temp <- purrr::splice(updated_list_temp,
+                                       "genome_relative_coords_first_M.S_stop_codon_frame_0" = if (updated_list_temp$strand == "+") {updated_list_temp$forward_coords %>% .[updated_list_temp$transcript_relative_coords_first_M.S_stop_codon_frame_0]} else if (updated_list_temp$strand == "-") {updated_list_temp$forward_coords %>% rev %>% .[updated_list_temp$transcript_relative_coords_first_M.S_stop_codon_frame_0]},
+                                       "genome_relative_coords_first_M.S_stop_codon_frame_1" = if (updated_list_temp$strand == "+") {updated_list_temp$forward_coords %>% .[updated_list_temp$transcript_relative_coords_first_M.S_stop_codon_frame_1]} else if (updated_list_temp$strand == "-") {updated_list_temp$forward_coords %>% rev %>% .[updated_list_temp$transcript_relative_coords_first_M.S_stop_codon_frame_1]},
+                                       "genome_relative_coords_first_M.S_stop_codon_frame_2" = if (updated_list_temp$strand == "+") {updated_list_temp$forward_coords %>% .[updated_list_temp$transcript_relative_coords_first_M.S_stop_codon_frame_2]} else if (updated_list_temp$strand == "-") {updated_list_temp$forward_coords %>% rev %>% .[updated_list_temp$transcript_relative_coords_first_M.S_stop_codon_frame_2]},
+                                       
+                                       "genome_relative_coords_all_stop_codons_frame_0" = if (updated_list_temp$strand == "+") {updated_list_temp$forward_coords %>% .[updated_list_temp$transcript_relative_coords_all_stop_codons_frame_0]} else if (updated_list_temp$strand == "-") {updated_list_temp$forward_coords %>% rev %>% .[updated_list_temp$transcript_relative_coords_all_stop_codons_frame_0]},
+                                       "genome_relative_coords_all_stop_codons_frame_1" = if (updated_list_temp$strand == "+") {updated_list_temp$forward_coords %>% .[updated_list_temp$transcript_relative_coords_all_stop_codons_frame_1]} else if (updated_list_temp$strand == "-") {updated_list_temp$forward_coords %>% rev %>% .[updated_list_temp$transcript_relative_coords_all_stop_codons_frame_1]},
+                                       "genome_relative_coords_all_stop_codons_frame_2" = if (updated_list_temp$strand == "+") {updated_list_temp$forward_coords %>% .[updated_list_temp$transcript_relative_coords_all_stop_codons_frame_2]} else if (updated_list_temp$strand == "-") {updated_list_temp$forward_coords %>% rev %>% .[updated_list_temp$transcript_relative_coords_all_stop_codons_frame_2]})
+    
     # collapse the vectors into string format
     ## commas to separate numbers
-    updated_list_temp <- purrr::modify_at(.x = updated_list_temp, .at = "forward_coords", .f = ~paste(.x, collapse = ","))
+    updated_list_temp <- purrr::modify_at(.x = updated_list_temp, .at = c("forward_coords", names(updated_list_temp)[grep(x = names(updated_list_temp), pattern = "coords_first_M.S_stop_codon")], names(updated_list_temp)[grep(x = names(updated_list_temp), pattern = "coords_all_stop_codons")]), .f = ~paste(.x, collapse = ","))
     ## nothing to separate nt. and AA sequences.
-    updated_list <- purrr::modify_at(.x = updated_list_temp, .at = c("forward_nucleotides", "translation_frame_0", "translation_frame_1", "translation_frame_2"), .f = ~paste(.x, collapse = ""))
+    updated_list <- purrr::modify_at(.x = updated_list_temp, .at = c("CDS_nucleotides", "translation_frame_0", "translation_frame_1", "translation_frame_2"), .f = ~paste(.x, collapse = ""))
     
     return(updated_list)
     
   }, .progress = TRUE)
   
   # get the transcripts which have all FALSE valid ORFs
-  list_all_invalid_ORFs_by_transcript <- purrr::keep(.x = list_transcript_3FT, .p = ~all(c(.x$any_valid_ORF_frame_0, .x$any_valid_ORF_frame_1, .x$any_valid_ORF_frame_2) == FALSE))
+  list_all_invalid_ORFs_by_transcript <- purrr::discard(.x = list_transcript_3FT, .p = ~is.na(.x %>% unlist %>% .[1])) %>% purrr::keep(.x = ., .p = ~all(c(.x$any_valid_ORF_frame_0, .x$any_valid_ORF_frame_1, .x$any_valid_ORF_frame_2) == FALSE))
   
   # these transcripts with no valid ORFs are NMD candidates.
-  list_logical_NMD_or_not <- purrr::map2(.x = list_all_invalid_ORFs_by_transcript, .y = names(list_all_invalid_ORFs_by_transcript), .f = ~tibble("transcript_id" = .y, NMD_candidate = "TRUE"))
+  # DEBUG ###
+  # .x <- list_all_invalid_ORFs_by_transcript[[1]]
+  # .y <- names(list_all_invalid_ORFs_by_transcript)[1]
+  ###########
+  
+  list_logical_NMD_or_not <- purrr::map2(.x = list_all_invalid_ORFs_by_transcript, .y = names(list_all_invalid_ORFs_by_transcript), .f = ~tibble("transcript_id" = .y, "NMD_candidate" = "TRUE") %>% dplyr::bind_cols(., .x[grep(x = names(.x), pattern = "genome_relative_coords.*stop_codon.*")] %>% as_tibble))
   
   # collapse and tibblise in preparation for left joins
-  tibble_logical_NMD_or_not <- list_logical_NMD_or_not %>% rbindlist %>% type_convert %>% as_tibble
+  tibble_logical_NMD_or_not <- list_logical_NMD_or_not %>% rbindlist(use.names = TRUE) %>% type_convert(col_types = cols(.default = col_character()), na = c("", "na", "NA")) %>% as_tibble
   
   # assign into the temporary tibble by chromosome
   assign(x = paste("tibble_logical_NMD_or_not_temp_chr_", chr, sep = ""), 
          value = tibble_logical_NMD_or_not)
+  
+  # SAVE WORKSPACE NOW IF DEBUGGING
+  if (save_workspace_when_done == "DEBUG") {
+    
+    save.image(file = paste(output_dir, "/", output_name, ".Rdata", sep = ""))
+    
+  }
   
   tictoc::toc()
   
@@ -359,11 +547,79 @@ for (chr in chr_to_run) {
 # trim off all those elements (per chromosome) that did not have any 3FT result.
 list_ORF_test <- ls(pattern = "tibble_logical_NMD_or_not_temp_chr_") %>% array_tree %>% purrr::map(.x = ., .f = ~get(.x)) %>% compact
 # rbindlist into a tibble
-tibble_ORF_test <- list_ORF_test %>% rbindlist %>% as_tibble
+tibble_ORF_test <- list_ORF_test %>% rbindlist(use.names = TRUE) %>% as_tibble
 # table join for final annotated reconstructed GTF
-tibble_annotated_recon_gtf <- dplyr::left_join(x = reconstructed_gtf, y = tibble_ORF_test, by = "transcript_id")
+tibble_annotated_recon_gtf <- dplyr::left_join(x = tibble_reconstructed_gtf, y = tibble_ORF_test[, c("transcript_id", "NMD_candidate")], by = "transcript_id")
 # turn NA in the NMD column to FALSE
-tibble_annotated_recon_gtf[which(is.na(tibble_annotated_recon_gtf$NMD_candidate)), "NMD_candidate"] <- FALSE
+tibble_annotated_recon_gtf[which(is.na(tibble_annotated_recon_gtf$NMD_candidate)), "NMD_candidate"] <- "FALSE"
+
+# SAVE WORKSPACE NOW IF DEBUGGING
+if (save_workspace_when_done == "DEBUG") {
+  
+  save.image(file = paste(output_dir, "/", output_name, ".Rdata", sep = ""))
+  
+}
+
+cat("Annotate poison exons/PTC-containing exons")
+## un-stringsplit each row of genome relative coords
+## turn the tibble_ORF_test into array_tree
+## subset the GTF table for each array_tree element (GTF table should have been subsetted for exons only)
+## rbind and tibblise
+## rejoin onto the NMD-candidate-annotated reference GTF
+tibble_ORF_test <- tibble_ORF_test %>% dplyr::mutate_at(.vars = colnames(tibble_ORF_test)[grep(x = colnames(tibble_ORF_test), pattern = "genome_relative_coords.*stop_codon")], .funs = function(x) {strsplit(x, split = ",") %>% purrr::map(~.x %>% type.convert) %>% return} )
+
+list_tibble_ORF_test_array.tree <- tibble_ORF_test %>% array_tree
+
+## subset recon. GTF for exonic entries only
+tibble_reconstructed_gtf_exonic_entries_only <- tibble_reconstructed_gtf %>% dplyr::filter(type == "exon") %>% dplyr::select(transcript_id, type, start, end)
+## subset recon. GTF for each element
+list_recon_GTF_matched_to_PTC_per_transcript_id <- future_map(.x = list_tibble_ORF_test_array.tree, .f = function(a1) {
+  
+  # DEBUG ###
+  # a1 <- list_tibble_ORF_test_array.tree[[1]]
+  ###########
+  
+  # pool together the poison exon PTC coords
+  vector_poison_exon_PTC_coords <- a1[grep(x = names(a1), pattern = "first_M.S")] %>% unlist %>% sort
+  # pool together all the PTC coords.
+  vector_all_PTC_coords <- a1[grep(x = names(a1), pattern = "all_stop_codons")] %>% unlist %>% sort
+  
+  # select for transcript_id we're currently up to
+  tibble_subset_recon.GTF_for_transcript_id <- tibble_reconstructed_gtf_exonic_entries_only %>% dplyr::filter(transcript_id == a1$transcript_id)
+  # select for exonic range
+  ## get the row indices of poison-exon candiates in the subset reference GTF
+  row.indices_of_subset_GTF_which_are_poison_exons <- purrr::map2(.x = tibble_subset_recon.GTF_for_transcript_id$start, .y = tibble_subset_recon.GTF_for_transcript_id$end, .f = ~intersect(.x:.y, vector_poison_exon_PTC_coords) %>% length > 0) %>% unlist %>% which
+  ## get the row indices of all PTC-containing exons in the subset reference GTF
+  row.indices_of_subset_GTF_which_are_PTC_containing_exons <- purrr::map2(.x = tibble_subset_recon.GTF_for_transcript_id$start, .y = tibble_subset_recon.GTF_for_transcript_id$end, .f = ~intersect(.x:.y, vector_all_PTC_coords) %>% length > 0) %>% unlist %>% which
+  
+  # pre-allocate rows and annotate
+  tibble_subset_recon.GTF_for_transcript_id_annotated <- tibble_subset_recon.GTF_for_transcript_id %>% 
+    add_column("poison_exon_candidate" = "FALSE", "contains_PTC" = "FALSE")
+  
+  tibble_subset_recon.GTF_for_transcript_id_annotated[row.indices_of_subset_GTF_which_are_poison_exons, "poison_exon_candidate"] <- "TRUE"
+  tibble_subset_recon.GTF_for_transcript_id_annotated[row.indices_of_subset_GTF_which_are_PTC_containing_exons, "contains_PTC"] <- "TRUE"
+  
+  return(tibble_subset_recon.GTF_for_transcript_id_annotated)
+  
+  }, .progress = TRUE)
+
+## rbind and tibblise
+tibble_subset_recon_GTF_matched_to_PTC_per_transcript_id <- list_recon_GTF_matched_to_PTC_per_transcript_id %>% rbindlist(use.names = TRUE) %>% as_tibble
+
+## table join onto the main GTF table. then  we are finished.
+tibble_annotated_recon_gtf <- dplyr::left_join(tibble_annotated_recon_gtf, tibble_subset_recon_GTF_matched_to_PTC_per_transcript_id, by = c("transcript_id", "type", "start", "end"))
+
+# SAVE WORKSPACE NOW IF DEBUGGING
+if (save_workspace_when_done == "DEBUG") {
+  
+  save.image(file = paste(output_dir, "/", output_name, ".Rdata", sep = ""))
+  
+}
+
+# LABEL FIRST AND LAST EXONS ##
+
+tibble_annotated_recon_gtf_first.last <- tibble_annotated_recon_gtf %>% add_first.last.exon_info
+
 
 # output_dir <- gsub(x = output_name, pattern = "(.*/)(.*)$", replacement = "\\1")
 # output_name <- gsub(x = output_name, pattern = "(.*/)(.*)$", replacement = "\\2")
@@ -371,14 +627,21 @@ tibble_annotated_recon_gtf[which(is.na(tibble_annotated_recon_gtf$NMD_candidate)
 # # set working directory to prevent screw-up
 # setwd(output_dir)
 
+if (save_workspace_when_done == "YES" | save_workspace_when_done == "DEBUG") {
+  
+  save.image(file = paste(output_dir, "/", output_name, ".RData", sep = ""))
+  
+}
+
 # write GTF
-rtracklayer::export(tibble_annotated_recon_gtf, con = paste(output_name, ".gtf", sep = ""), format = "gtf")
+rtracklayer::export(tibble_annotated_recon_gtf_first.last, con = paste(output_dir, "/", output_name, ".gtf", sep = ""), format = "gtf")
 
-# print stats summary
-
-cat("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique), "\n")
-cat("number of transcripts which were in the GTF:", length(reconstructed_gtf$transcript_id %>% unique), "\n")
-cat("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(reconstructed_gtf$transcript_id %>% unique))) * 100, "%\n")
+# write stats summary
+fileConn <- file(paste(output_dir, "/", output_name, "_stats_summary.txt", sep = ""))
+writeLines(paste("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique), "\n", sep = ""), con = fileConn)
+writeLines(paste("number of transcripts which were in the GTF:", length(tibble_reconstructed_gtf$transcript_id %>% unique), "\n", sep = ""), con = fileConn)
+writeLines(paste("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(tibble_reconstructed_gtf$transcript_id %>% unique))) * 100, "%\n", sep = ""), con = fileConn)
+close(fileConn)
 
 # finish counting
 tictoc::toc()

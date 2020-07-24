@@ -31,13 +31,13 @@ u
 
 library(tidyverse)
 library(gtools)
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 library(data.table)
 
 library(genefilter)
 
-library(future.apply)
+# library(future.apply)
 library(furrr)
 options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
 plan(multiprocess)
@@ -55,9 +55,8 @@ library(genefilter)
 # library(scales)
 library(ComplexHeatmap)
 
-# library(biomaRt)
-# ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "asia.ensembl.org")
-# , version = 98
+library(biomaRt)
+ensembl_mart <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
 
 library(systemPipeR)
 # library(GOstats)
@@ -67,28 +66,24 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/media/Ubuntu/sharedfolder/"
+# shared_dir <- "Z:/"
 
-psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9e_in_parallel_with_gct/"
-# psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/"
+# psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9e_in_parallel_with_gct/"
+psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/"
 
-R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9e_in_parallel_with_gct/R_processing_results/"
-# R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/"
-
+# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9e_in_parallel_with_gct/R_processing_results/"
+R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/"
+# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 if(! dir.exists(R_processing_results_dir) ) {
   dir.create(R_processing_results_dir, recursive = TRUE)}
-
-# R_processing_results_figures_dir <- paste(R_processing_results_dir, "figures/", sep = "")
-# 
-# if(! dir.exists(R_processing_results_figures_dir) ) {
-#      dir.create(R_processing_results_figures_dir, recursive = TRUE)}
 
 vector_OBseries_timepoints <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
-vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
-# vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+# vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
@@ -357,12 +352,11 @@ extract_junction.flanking.exons <- function(spliceregion_list, tibble_gtf_table,
 extract_overlapping.exons <- function(spliceregion_list, tibble_gtf_table, stranded = FALSE) {
   
   # DEBUG ###################
-# 
-#   index <- 1
-#   spliceregion_list <- wide_tibble_of_all_unique_exon_coords_array.tree[[index]]
-#   # tibble_gtf_table <- tibble_ref_gtf
-#   tibble_gtf_table <- tibble_alltimepoints_reconstructed_gtf
-  
+  # index <- 1
+  # spliceregion_list <- wide_tibble_of_all_unique_exon_coords_array.tree_not_IR[[index]]
+  # # tibble_gtf_table <- tibble_ref_gtf
+  # tibble_gtf_table <- tibble_recon_gtf
+  # stranded = FALSE
   ###########################
 
   # print(paste("now processing junction number", index))
@@ -371,18 +365,18 @@ extract_overlapping.exons <- function(spliceregion_list, tibble_gtf_table, stran
     
     # +/- 1 nt tolerance
     tibble_gtf_subset_overlapping_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$diff_exon_chr %>% trimws, ] %>% 
-      .[.$start > ((spliceregion_list$diff_exon_start %>% as.numeric) - 2) & .$end < ((spliceregion_list$diff_exon_end %>% as.numeric) + 2), ] %>% 
-      .[(.$start < ((spliceregion_list$diff_exon_start %>% as.numeric) + 2) & .$end > ((spliceregion_list$diff_exon_end %>% as.numeric) - 2)), ] %>% 
-      .[.$type == "exon", ]
+      .[which(.$start > ((spliceregion_list$diff_exon_start %>% as.numeric) - 2) & .$end < ((spliceregion_list$diff_exon_end %>% as.numeric) + 2)), ] %>% 
+      .[which((.$start < ((spliceregion_list$diff_exon_start %>% as.numeric) + 2) & .$end > ((spliceregion_list$diff_exon_end %>% as.numeric) - 2))), ] %>% 
+      .[which(.$type == "exon"), ]
     
   } else if (stranded == TRUE) {
     
     # +/- 1 nt tolerance
     tibble_gtf_subset_overlapping_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == spliceregion_list$diff_exon_chr %>% trimws &
                                                               tibble_gtf_table$strand == spliceregion_list$matched_strand %>% trimws, ] %>% 
-      .[.$start > ((spliceregion_list$diff_exon_start %>% as.numeric) - 2) & .$end < ((spliceregion_list$diff_exon_end %>% as.numeric) + 2), ] %>% 
-      .[(.$start < ((spliceregion_list$diff_exon_start %>% as.numeric) + 2) & .$end > ((spliceregion_list$diff_exon_end %>% as.numeric) - 2)), ] %>% 
-      .[.$type == "exon", ]
+      .[which(.$start > ((spliceregion_list$diff_exon_start %>% as.numeric) - 2) & .$end < ((spliceregion_list$diff_exon_end %>% as.numeric) + 2)), ] %>% 
+      .[which((.$start < ((spliceregion_list$diff_exon_start %>% as.numeric) + 2) & .$end > ((spliceregion_list$diff_exon_end %>% as.numeric) - 2))), ] %>% 
+      .[which(.$type == "exon"), ]
     
   }
   
@@ -989,7 +983,7 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
 
 ```{r}
 
-list_of_psisigma_result_tibbles_raw <- future_map(.x = vector_of_comparisons_final, .f = ~read.delim(paste(psisigma_results_dir, .x, "_r5_ir3.sorted.txt", sep = "")) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble")))
+list_of_psisigma_result_tibbles_raw <- future_map(.x = vector_of_comparisons_final, .f = ~read.delim(paste(psisigma_results_dir, .x, "/", .x, "_r1_ir3.sorted.txt", sep = ""), sep = "\t") %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble")))
 
 ```
 
@@ -1009,23 +1003,22 @@ list_of_psisigma_result_tibbles_processed <- purrr::map(.x = list_of_psisigma_re
                                                                      "diff_exon_start" = gsub(x = .$diff_exon_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2"), 
                                                                      "diff_exon_end" = gsub(x = .$diff_exon_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3")))
 # add column indicating what comparison the tibble is from
-list_of_psisigma_result_tibbles_processed <- map2(.x = list_of_psisigma_result_tibbles_processed, .y = list_of_comparisons_final, .f = ~add_column(.x, "comparison" = .y))
+list_of_psisigma_result_tibbles_processed <- map2(.x = list_of_psisigma_result_tibbles_processed, .y = vector_of_comparisons_final, .f = ~add_column(.x, "comparison" = .y))
 
-# collapse into a wide tibble
-wide_tibble_of_psisigma_results_allcomparisons_processed <- list_of_psisigma_result_tibbles_processed %>% rbindlist %>% as_tibble %>% type_convert
-
-# re-sort each of the three absolute psi values per comparison so that we have no mis-matching when we recast the table
-## get the column incides of the timepoint and ud absolute psi values
-vector_col.index_absolute.psi.comparison.1 <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_processed), pattern = "comparison.1_absolute.psi")
-vector_col.index_absolute.psi.comparison.2 <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_processed), pattern = "comparison.2_absolute.psi")
-
-## sort each compartment of 3 columns each
-wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.1] <- future_apply(X = wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.1], MARGIN = 1, FUN = function(X) {sort(X, na.last = TRUE)}, future.globals = FALSE) %>% t %>% as_tibble
-
-wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.2] <- future_apply(X = wide_tibble_of_psisigma_results_allcomparisons_processed[, vector_col.index_absolute.psi.comparison.2], MARGIN = 1, FUN = function(X) {sort(X, na.last = TRUE)}, future.globals = FALSE) %>% t %>% as_tibble
+# collapse into a long tibble
+wide_tibble_of_psisigma_results_allcomparisons_processed <- list_of_psisigma_result_tibbles_processed %>% rbindlist %>% as_tibble %>% type_convert(na = c("", "NA", "na"))
 
 # remove all special characters from the splicemode column
 wide_tibble_of_psisigma_results_allcomparisons_processed[, "splicemode"] <- gsub(x = wide_tibble_of_psisigma_results_allcomparisons_processed$splicemode, pattern = "(.*)overlapping(.*)", replacement = "IR_overlapping_region")
+
+wide_tibble_of_psisigma_results_allcomparisons_processed <- wide_tibble_of_psisigma_results_allcomparisons_processed %>% as.data.frame
+
+# impute missing values of PSI
+wide_tibble_of_psisigma_results_allcomparisons_processed[, colnames(wide_tibble_of_psisigma_results_allcomparisons_processed)[grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_processed), pattern = "comparison.1_")]] <- future_map2(.x = wide_tibble_of_psisigma_results_allcomparisons_processed %>% dplyr::select(contains("comparison.1_")) %>% array_tree(margin = 1), .y = wide_tibble_of_psisigma_results_allcomparisons_processed %>% dplyr::select(contains("comparison.1_")) %>% rowMeans(na.rm = TRUE), .f = function(a1, a2) {a1[is.na(a1)] <- a2; return(a1 %>% t %>% as.data.frame)} ) %>% rbindlist(use.names = TRUE) %>% as_tibble
+
+wide_tibble_of_psisigma_results_allcomparisons_processed[, colnames(wide_tibble_of_psisigma_results_allcomparisons_processed)[grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_processed), pattern = "comparison.2_")]] <- future_map2(.x = wide_tibble_of_psisigma_results_allcomparisons_processed %>% dplyr::select(contains("comparison.2_")) %>% array_tree(margin = 1), .y = wide_tibble_of_psisigma_results_allcomparisons_processed %>% dplyr::select(contains("comparison.2_")) %>% rowMeans(na.rm = TRUE), .f = function(a1, a2) {a1[is.na(a1)] <- a2; return(a1 %>% t %>% as.data.frame)} ) %>% rbindlist(use.names = TRUE) %>% as_tibble
+
+wide_tibble_of_psisigma_results_allcomparisons_processed <- wide_tibble_of_psisigma_results_allcomparisons_processed %>% as_tibble
 
 ```
 
@@ -1063,9 +1056,9 @@ list_ref_matching_exon_entries_IR <- future_imap(.x = wide_tibble_of_all_unique_
 list_ref_matching_exon_entries_IR_annotated <- future_imap(.x = list_ref_matching_exon_entries_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_differential_exon", "as_tibble")))
 
 # for non-IR events, match exons.
-list_ref_matching_exon_entries_not_IR <- future_imap(.x = wide_tibble_of_all_unique_exon_coords_array.tree_not_IR, .f = ~list(
-  "reference_gtf_match" = extract_overlapping.exons(.x, tibble_ref_gtf, .y), 
-  "reconstructed_gtf_match" = extract_overlapping.exons(.x, tibble_recon_gtf, .y), 
+list_ref_matching_exon_entries_not_IR <- future_map(.x = wide_tibble_of_all_unique_exon_coords_array.tree_not_IR, .f = ~list(
+  "reference_gtf_match" = extract_overlapping.exons(spliceregion_list = .x, tibble_gtf_table = tibble_ref_gtf), 
+  "reconstructed_gtf_match" = extract_overlapping.exons(spliceregion_list = .x, tibble_gtf_table = tibble_recon_gtf), 
   "diff_exon_coords" = .x$diff_exon_coords,
   "diff_exon_chr" = .x$diff_exon_chr,
   "diff_exon_start" = .x$diff_exon_start,
@@ -1133,13 +1126,13 @@ list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x =
   # message("now processing entry number: ", .y)
   
   # DEBUG ###
-  .x <- list_ref_matching_exon_entries_all_array.tree_IR[[216]]
-  tibble_ref_gtf <- tibble_ref_gtf
-  tibble_recon_gtf <- tibble_recon_gtf
+  # .x <- list_ref_matching_exon_entries_all_array.tree_IR[[216]]
+  # tibble_ref_gtf <- tibble_ref_gtf
+  # tibble_recon_gtf <- tibble_recon_gtf
   ###########
-  
-  tibble_ref_gtf <<- tibble_ref_gtf
-  tibble_recon_gtf <<- tibble_recon_gtf
+  # 
+  # tibble_ref_gtf <<- tibble_ref_gtf
+  # tibble_recon_gtf <<- tibble_recon_gtf
   
   chr <- .x$diff_exon_chr %>% paste %>% trimws
   start <- .x$diff_exon_start %>% paste %>% trimws %>% type.convert
@@ -1275,7 +1268,7 @@ list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x =
 }, .progress = TRUE, .options = future_options(globals = c("as_tibble", "tibble_ref_gtf", "tibble_recon_gtf")))
 
 # tibblize
-tibble_as.event.id_with_summarised_annotation_IR <- list_ref_matching_exon_entries_all_array.tree_IR_reannotated %>% rbindlist %>% as_tibble
+tibble_as.event.id_with_summarised_annotation_IR <- list_ref_matching_exon_entries_all_array.tree_IR_reannotated %>% rbindlist(fill = TRUE) %>% as_tibble
 
 ```
 
@@ -1288,15 +1281,15 @@ tibble_ref_matching_exon_entries_all_summarised <- dplyr::bind_rows(tibble_as.ev
                                                                     tibble_ref_matching_exon_entries_all_not.IR_summarised %>% type_convert %>% type_convert)
 
 # left join of the annotated exon info onto the PSI-Sigma result tables
-wide_tibble_of_psisigma_results_allcomparisons_final <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_processed, tibble_ref_matching_exon_entries_all_summarised, by = c("diff_exon_coords", "splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end")) %>% dplyr::mutate_if(is.factor, as.character)
+long_tibble_of_psisigma_DEXSeq_results <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_processed, tibble_ref_matching_exon_entries_all_summarised, by = c("diff_exon_coords", "splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end")) %>% dplyr::mutate_if(is.factor, as.character)
 
 # reorder columns
-wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "psisigma_gene.symbol", "psisigma_reference.transcript", "psisigma_exon_type", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_gene_names", "matched_recon_transcript_names", "matched_ref_transcript_names", "matched_strand", "NMD_reference", "NMD_recon", "any_NMD", "first_or_last_exon_reference", "first_or_last_exon_recon", "any_first_exon", "any_last_exon", "num.replicates_comparison.1", "num.replicates_comparison.2", "pvalue", "FDR", "dpsi", "comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3", "comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3", "comparison")]
+long_tibble_of_psisigma_DEXSeq_results <- long_tibble_of_psisigma_DEXSeq_results[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "psisigma_gene.symbol", "psisigma_reference.transcript", "psisigma_exon_type", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_gene_names", "matched_recon_transcript_names", "matched_ref_transcript_names", "matched_strand", "NMD_reference", "NMD_recon", "any_NMD", "first_or_last_exon_reference", "first_or_last_exon_recon", "any_first_exon", "any_last_exon", "num.replicates_comparison.1", "num.replicates_comparison.2", "pvalue", "FDR", "dpsi", "comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3", "comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3", "comparison")]
 
-cat("There are", wide_tibble_of_psisigma_results_allcomparisons_final[, c("event_region_coords", "diff_exon_coords")] %>% unique %>% nrow, "exons detected in total (at least one observation across the entire time series)")
+cat("There are", long_tibble_of_psisigma_DEXSeq_results[, c("event_region_coords", "diff_exon_coords")] %>% unique %>% nrow, "exons detected in total (at least one observation across the entire time series)")
 
 # remove exons which have less than 2 observations in both comparisons
-wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final %>% dplyr::filter(., num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2) %>% mutate_if(is.factor, as.character) %>% type_convert
+long_tibble_of_psisigma_DEXSeq_results <- long_tibble_of_psisigma_DEXSeq_results %>% dplyr::filter(., num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2) %>% mutate_if(is.factor, as.character) %>% type_convert
 
 ```
 
@@ -1306,10 +1299,10 @@ wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_
 ```{r}
 
 # get row indices of those that do not have strand info
-row.indices_na_matched_gene_name <- which(is.na(wide_tibble_of_psisigma_results_allcomparisons_final$matched_gene_names))
+row.indices_na_matched_gene_name <- which(is.na(long_tibble_of_psisigma_DEXSeq_results$matched_gene_names))
 
 # migrate PSI-sigma gene symbols to the match column
-wide_tibble_of_psisigma_results_allcomparisons_final[row.indices_na_matched_gene_name, "matched_gene_names"] <- wide_tibble_of_psisigma_results_allcomparisons_final[row.indices_na_matched_gene_name, "psisigma_gene.symbol"]
+long_tibble_of_psisigma_DEXSeq_results[row.indices_na_matched_gene_name, "matched_gene_names"] <- long_tibble_of_psisigma_DEXSeq_results[row.indices_na_matched_gene_name, "psisigma_gene.symbol"]
 
 ```
 
@@ -1319,26 +1312,471 @@ wide_tibble_of_psisigma_results_allcomparisons_final[row.indices_na_matched_gene
 ```{r}
 
 # get row indices of those that do not have strand info
-row.indices_na_matched_strand <- which(is.na(wide_tibble_of_psisigma_results_allcomparisons_final$matched_strand))
+row.indices_na_matched_strand <- which(is.na(long_tibble_of_psisigma_DEXSeq_results$matched_strand))
 
 # purrr::map to look up the reference GTF strand of each row based on psi sigma gene symbol
-list_missing_strand_info <- future_map(.x = row.indices_na_matched_strand, .f = ~tibble_ref_gtf[tibble_ref_gtf$gene_name == wide_tibble_of_psisigma_results_allcomparisons_final[.x, "psisigma_gene.symbol"] %>% paste, "strand"] %>% unlist %>% unique %>% paste, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "wide_tibble_of_psisigma_results_allcomparisons_final")))
+list_missing_strand_info <- future_map(.x = row.indices_na_matched_strand, .f = ~tibble_ref_gtf[tibble_ref_gtf$gene_name == long_tibble_of_psisigma_DEXSeq_results[.x, "psisigma_gene.symbol"] %>% paste, "strand"] %>% unlist %>% unique %>% paste, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "long_tibble_of_psisigma_DEXSeq_results")))
 
-# rejoin retrieved information with the table
-wide_tibble_of_psisigma_results_allcomparisons_final[row.indices_na_matched_strand, "matched_strand"] <- list_missing_strand_info %>% unlist
+# if the strand info is ambiguous, then we just star the strand
+list_missing_strand_info <- list_missing_strand_info %>% purrr::map(.f = function(.x) {
+  if (length(.x) > 1) {
+    return("*")
+  } else if (length(.x) == 0) {
+    return(NA)
+  } else { 
+    return(.x)
+      }
+  } )
 
-cat("there are", which(is.na(wide_tibble_of_psisigma_results_allcomparisons_final$matched_strand)) %>% length, "rows with missing strand info\n")
+long_tibble_of_psisigma_DEXSeq_results[row.indices_na_matched_strand, "matched_strand"] <- list_missing_strand_info %>% unlist
+
+cat("there are", which(is.na(long_tibble_of_psisigma_DEXSeq_results$matched_strand)) %>% length, "rows with missing strand info\n")
 
 # this is the FINAL tibble of all all comparisons ######
 # export #
-write.table(x = wide_tibble_of_psisigma_results_allcomparisons_final, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_results.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_tibble_of_psisigma_DEXSeq_results, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_results.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # write all unique genes as background
-vec_all_psi.sigma_genes_genesymbol <- wide_tibble_of_psisigma_results_allcomparisons_final$matched_gene_names %>% unique
+vec_all_psi.sigma_genes_genesymbol <- long_tibble_of_psisigma_DEXSeq_results$matched_gene_names %>% unique
 write.table(x = vec_all_psi.sigma_genes_genesymbol, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_genesymbol.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 # convert to ENSG
 vec_all_psi.sigma_genes_ENSG <- getBM(filters = "external_gene_name", values = vec_all_psi.sigma_genes_genesymbol, attributes = "ensembl_gene_id", mart = ensembl_mart)
 write.table(x = vec_all_psi.sigma_genes_ENSG, file = paste(R_processing_results_dir, "table_of_all_psi.sigma_genes_ENSG.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+
+# save image (for katana use)
+# save.image(paste(R_processing_results_dir, "15072020_psisigma_dexseq_processed.RData", sep = ""))
+
+```
+
+# Run DEXSeq
+
+## Create environment
+
+### load packages and data
+
+```{r}
+
+DEXSeq_dir <- paste(R_processing_results_dir, "DEXSeq/", sep = "")
+
+if(! dir.exists(DEXSeq_dir) ) {
+  dir.create(DEXSeq_dir, recursive = TRUE)}
+
+long_tibble_of_psisigma_DEXSeq_results <- read.delim(file = paste(R_processing_results_dir, "table_of_all_psi.sigma_results.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble
+
+# get example
+# tibble_example_jum_dexseq_gff <- rtracklayer::import("/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/combined_AS_JUM.gff") %>% as_tibble
+
+```
+
+## get denominator and numerator values
+
+### load the denominator values (.gct)
+
+```{r}
+
+list_of_psisigma_denominator_gct_tibbles <- future_map(.x = vector_of_comparisons_final, .f = ~read.delim(paste(psisigma_results_dir, .x, "/", .x, "_r1_ir3.denominator.gct", sep = ""), skip = 2, sep = "\t") %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble"))) %>% 
+  set_names(vector_of_comparisons_final)
+
+```
+
+### process the denominator tibbles
+
+- get rid of the gene name in the "Event" column and rename it to database_ID
+- add comparison column
+- rename each column to not be comparison specific
+- get rid of the NMD column
+
+```{r}
+
+list_of_psisigma_denominator_gct_tibbles_processed <- purrr::map2(.x = list_of_psisigma_denominator_gct_tibbles, 
+                                                                 .y = names(list_of_psisigma_denominator_gct_tibbles),
+                                                                 .f = function(a1, a2) {
+                                                                   
+                                                                   tibble_temp <- a1
+                                                                   
+                                                                   tibble_temp[, "Event"] <- gsub(x = tibble_temp$Event, pattern = "^(.*{0,1}\\:)(.*)", replacement = "\\2")
+                                                                   
+                                                                   tibble_temp <- tibble_temp %>% 
+                                                                     add_column("comparison" = a2) %>%
+                                                                     dplyr::select(-Annotation) %>% 
+                                                                     setNames(c("database_ID", "comparison.1_denominator_1", "comparison.1_denominator_2", "comparison.1_denominator_3", "comparison.2_denominator_1", "comparison.2_denominator_2", "comparison.2_denominator_3", "comparison"))
+                                                                     
+                                                                     return(tibble_temp)
+                                                                   
+                                                                 } )
+
+# rbind and tibblise
+long_tibble_psisigma_denominator_gct_tibbles_processed <- list_of_psisigma_denominator_gct_tibbles_processed %>% rbindlist %>% as_tibble
+
+```
+
+### table join onto the main psisigma table
+
+```{r}
+
+wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator <- dplyr::left_join(long_tibble_of_psisigma_DEXSeq_results, long_tibble_psisigma_denominator_gct_tibbles_processed, by = c("database_ID", "comparison")) %>% type_convert(na = c("", "na", "NA"))
+
+```
+
+### add back the numerator
+
+numerator = psi * denominator
+
+```{r}
+
+wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator <- wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator %>% 
+  dplyr::mutate("comparison.1_numerator_1" = comparison.1_absolute.psi_1 * comparison.1_denominator_1 * 0.01) %>%
+  dplyr::mutate("comparison.1_numerator_2" = comparison.1_absolute.psi_2 * comparison.1_denominator_2 * 0.01) %>%
+  dplyr::mutate("comparison.1_numerator_3" = comparison.1_absolute.psi_3 * comparison.1_denominator_3 * 0.01) %>%
+  
+  dplyr::mutate("comparison.2_numerator_1" = comparison.2_absolute.psi_1 * comparison.2_denominator_1 * 0.01) %>%
+  dplyr::mutate("comparison.2_numerator_2" = comparison.2_absolute.psi_2 * comparison.2_denominator_2 * 0.01) %>%
+  dplyr::mutate("comparison.2_numerator_3" = comparison.2_absolute.psi_3 * comparison.2_denominator_3 * 0.01) %>% 
+  # add in the ER values
+  dplyr::mutate("comparison.1_ER_1" = comparison.1_denominator_1 - comparison.1_numerator_1) %>%
+  dplyr::mutate("comparison.1_ER_2" = comparison.1_denominator_2 - comparison.1_numerator_2) %>%
+  dplyr::mutate("comparison.1_ER_3" = comparison.1_denominator_3 - comparison.1_numerator_3) %>%
+  
+  dplyr::mutate("comparison.2_ER_1" = comparison.2_denominator_1 - comparison.2_numerator_1) %>%
+  dplyr::mutate("comparison.2_ER_2" = comparison.2_denominator_2 - comparison.2_numerator_2) %>%
+  dplyr::mutate("comparison.2_ER_3" = comparison.2_denominator_3 - comparison.2_numerator_3)
+
+```
+
+### add id column for traceability
+
+```{r}
+
+wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator <- wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator %>% as_tibble(rownames = "id")
+
+wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator[, "id"] <- paste("id_", wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator$id, sep = "")
+
+```
+
+### write the tibble of numerator and denominator
+
+```{r}
+
+write.table(x = wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator, file = paste(R_processing_results_dir, "wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator <- read.delim(file = paste(R_processing_results_dir, "wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble
+
+```
+
+### filter for only exons with at least 5 inclusion reads in 3 samples. (numerator)
+
+```{r}
+
+# create logical test 
+## logical test based on numerator of comparison 1
+vector_logical_5_in_at_least_3_comparison_1 <- wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator[, c("comparison.1_numerator_1", "comparison.1_numerator_2", "comparison.1_numerator_3")] %>% array_tree(margin = 1) %>% future_map(.f = ~(all((.x %>% na.omit > 5)) & any(is.na(.x)) != TRUE), .progress = TRUE) %>% unlist
+## logical test based on numerator of comparison 2
+vector_logical_5_in_at_least_3_comparison_2 <- wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator[, c("comparison.2_numerator_1", "comparison.2_numerator_2", "comparison.2_numerator_3")] %>% array_tree(margin = 1) %>% future_map(.f = ~(all((.x %>% na.omit > 5)) & any(is.na(.x)) != TRUE), .progress = TRUE) %>% unlist
+
+vector_logical_5_in_at_least_3 <- (vector_logical_5_in_at_least_3_comparison_1 == TRUE) | (vector_logical_5_in_at_least_3_comparison_2 == TRUE)
+
+# retrieve row indices which are valid
+vector_row.indices_5_in_at_least_3 <- which(vector_logical_5_in_at_least_3 == TRUE)
+
+wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3 <- wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator[vector_row.indices_5_in_at_least_3, ]
+
+# write table
+write.table(x = wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3, file = paste(R_processing_results_dir, "wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3 <- read.delim(file = paste(R_processing_results_dir, "wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble
+
+```
+
+## create GFF of pseudotranscripts
+
+- each differential exon belonging to an approximate Local Isoform Variant will have its own pseudotranscript.
+- each pseudotranscript has two exons. Exon 1: the differential exon count; Exon 2: The denominator (spanning the entirety of the event region)
+
+### build GFF tibble and export for each comparison
+
+```{r}
+
+# group_split the wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3
+list_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3_by_comparison <- wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3 %>% dplyr::group_split(comparison)
+
+names(list_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3_by_comparison) <- list_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3_by_comparison %>% purrr::map(~.x$comparison %>% unique) %>% unlist
+
+purrr::map2(.x = list_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3_by_comparison, 
+            .y = names(list_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3_by_comparison), 
+            .f = function(a1, a2) {
+              
+              cat("now processing: ", a2)
+              
+              # only use distinct exons needed to build the GFF
+              tibble_GFF_building_exons_info <- a1 %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, .keep_all = TRUE)
+              
+              # list-ify by each exon
+              list_GFF_building_exons_info <- tibble_GFF_building_exons_info %>% 
+                array_tree %>%
+                # add in the event region start and end
+                future_map(.f = ~purrr::splice(.x, 
+                                               "event_region_start" = gsub(x = .x$event_region_coords, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(.*)$", replacement = "\\2"),
+                                               "event_region_end" = gsub(x = .x$event_region_coords, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(.*)$", replacement = "\\3")), 
+                           .progress = TRUE, .options = future_options(globals = c("purrr::splice", "gsub")))
+              
+              # create pseudotranscript entries for each L1 element
+              ## it goes: 
+              ## row 1: aggregate_gene
+              ## row 2: the exon (001)
+              ## row 3: the denominator (002)
+              
+              # note that we'll have to add in the width later.
+              # note2: gene_id is taken as the id column for GFF compatibility purposes.
+              list_GFF_building_tibble <- future_map(.x = list_GFF_building_exons_info, 
+                                                     .f = ~tibble("seqnames" = .x$diff_exon_chr,
+                                                                  "start" = c(.x$event_region_start, .x$diff_exon_start, .x$event_region_start),
+                                                                  "end" = c(.x$event_region_end, .x$diff_exon_end, .x$event_region_end),
+                                                                  "strand" = .x$matched_strand,
+                                                                  "source" = "PSISigma_combined_BM.MSC_to_OB_2012_PGNEXUS",
+                                                                  "type" = c("aggregate_gene", "exonic_part", "exonic_part"),
+                                                                  "score" = NA,
+                                                                  "phase" = NA,
+                                                                  "exonic_part_number" = c(NA, "001", "002"),
+                                                                  "gene_id" = .x$id),
+                                                     .progress = TRUE, .options = future_options(globals = c("tibble")))
+              
+              # rbind, tibblise and add width, modify data classes
+              tibble_combined_GFF0 <- list_GFF_building_tibble %>% rbindlist %>% as_tibble %>%
+                type_convert %>% type_convert %>%
+                add_column("width" = .$end - .$start, .after = "end")
+              
+              # where start > end, flip them around and negate the width.
+              # fking hell.
+              tibble_combined_GFF1 <- tibble_combined_GFF0
+              ## flip start/end
+              tibble_combined_GFF1[which(tibble_combined_GFF0$width < 0), "start"] <- tibble_combined_GFF0[which(tibble_combined_GFF0$width < 0), "end"]
+              tibble_combined_GFF1[which(tibble_combined_GFF0$width < 0), "end"] <- tibble_combined_GFF0[which(tibble_combined_GFF0$width < 0), "start"]
+              ## negate width
+              tibble_combined_GFF1[which(tibble_combined_GFF0$width < 0), "width"] <- -tibble_combined_GFF0[which(tibble_combined_GFF0$width < 0), "width"]
+              
+              tibble_combined_GFF1[which(is.na(tibble_combined_GFF1$strand)), "strand"] <- "*"
+              
+              rtracklayer::export(object = tibble_combined_GFF1, con = paste(DEXSeq_dir, a2, "_combined_dexseq_GFF_PSISigma.gff", sep = ""), format = "gff2")
+
+            } )
+
+```
+
+## Create text file of counts
+
+- 001: IR
+- 002: ER = denominator - IR
+
+### build tibble per comparison
+
+- do for each comparison
+- 2 columns: column 1: gene:001 or 002, column 2: count(numerator or denominator - numerator)
+
+```{r}
+
+# map each comparison >> map each replicate
+list_combined_count_tibbles <- purrr::map(
+  .x = list_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3_by_comparison,
+  .f = function(a1) {
+    
+    list(
+      "comparison.1_replicate_1" = dplyr::bind_rows(tibble("gene:exon" = paste(a1$id, ":001", sep = ""),
+                                                           "count" = a1$comparison.1_numerator_1), 
+                                                    tibble("gene:exon" = paste(a1$id, ":002", sep = ""),
+                                                           "count" = (a1$comparison.1_denominator_1) - (a1$comparison.1_numerator_1))),
+      "comparison.1_replicate_2" = dplyr::bind_rows(tibble("gene:exon" = paste(a1$id, ":001", sep = ""),
+                                                           "count" = a1$comparison.1_numerator_2), 
+                                                    tibble("gene:exon" = paste(a1$id, ":002", sep = ""),
+                                                           "count" = (a1$comparison.1_denominator_2) - (a1$comparison.1_numerator_2))),
+      "comparison.1_replicate_3" = dplyr::bind_rows(tibble("gene:exon" = paste(a1$id, ":001", sep = ""),
+                                                           "count" = a1$comparison.1_numerator_3), 
+                                                    tibble("gene:exon" = paste(a1$id, ":002", sep = ""),
+                                                           "count" = (a1$comparison.1_denominator_3) - (a1$comparison.1_numerator_3))),
+      
+      "comparison.2_replicate_1" = dplyr::bind_rows(tibble("gene:exon" = paste(a1$id, ":001", sep = ""),
+                                                           "count" = a1$comparison.2_numerator_1), 
+                                                    tibble("gene:exon" = paste(a1$id, ":002", sep = ""),
+                                                           "count" = (a1$comparison.2_denominator_1) - (a1$comparison.2_numerator_1))),
+      "comparison.2_replicate_2" = dplyr::bind_rows(tibble("gene:exon" = paste(a1$id, ":001", sep = ""),
+                                                           "count" = a1$comparison.2_numerator_2), 
+                                                    tibble("gene:exon" = paste(a1$id, ":002", sep = ""),
+                                                           "count" = (a1$comparison.2_denominator_2) - (a1$comparison.2_numerator_2))),
+      "comparison.2_replicate_3" = dplyr::bind_rows(tibble("gene:exon" = paste(a1$id, ":001", sep = ""),
+                                                           "count" = a1$comparison.2_numerator_3), 
+                                                    tibble("gene:exon" = paste(a1$id, ":002", sep = ""),
+                                                           "count" = (a1$comparison.2_denominator_3) - (a1$comparison.2_numerator_3)))
+    )
+    
+  } )
+
+# write tibbles
+future_map2(.x = list_combined_count_tibbles, 
+            .y = names(list_combined_count_tibbles),
+            .f = function(a1, a2) {
+              
+              purrr::map2(.x = a1,
+                          .y = names(a1),
+                          .f = function(b1, b2) {
+                            
+                            # get the replicate number for L2 element
+                            replicate_number <- gsub(x = b2, pattern = "comparison.([1-2])_replicate_(.*)", replacement = "\\2")
+                            # get the comparison number for L2 element. and refer back to comparison
+                            comparison_number <- gsub(x = b2, pattern = "comparison.([1-2])_replicate_(.*)", replacement = "\\1")
+                            # get timepoint from comparison name
+                            comparison_name <- gsub(x = a2, pattern = "^(.*)_vs_(.*)", replacement = paste("\\", comparison_number, sep = ""))
+                            
+                            b1[is.na(b1)] <- 0
+                            
+                            write.table(x = b1 %>% .[mixedorder(.$`gene:exon`), ] %>% dplyr::mutate_at(.vars = "count", round), file = paste(DEXSeq_dir, a2, "_comparison", comparison_number, "r", replicate_number, "_combined_count.txt", sep = ""), sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+                            
+                          } )
+              
+            }, .progress = TRUE )
+
+```
+
+## run DEXSeq for each comparison
+
+```{r}
+
+library(DEXSeq)
+
+list_DEXSeq_results <- purrr::map(.x = vector_of_comparisons_final,
+           .f = function(a1) {
+             
+             cat("now processing: ", a1)
+             
+             DEXSeqDataSet_PSISigma <-  DEXSeqDataSetFromHTSeq(
+               countfiles = list.files(path = DEXSeq_dir, pattern = paste(a1, ".*.txt", sep = ""), full.names = TRUE),
+               sampleData = data.frame("replicatename" = paste(a1, c("_comparison1r1_combined_count.txt", "_comparison1r2_combined_count.txt", "_comparison1r3_combined_count.txt", "_comparison2r1_combined_count.txt", "_comparison2r2_combined_count.txt", "_comparison2r3_combined_count.txt"), sep = ""),
+                                       "condition" = c(rep(gsub(x = a1, pattern = "(.*)_vs_(.*)", replacement = "\\1"), times = 3), rep(gsub(x = a1, pattern = "(.*)_vs_(.*)", replacement = "\\2"), times = 3))),
+               design = ~ sample + exon + condition:exon,
+               flattenedfile = paste(DEXSeq_dir, a1, "_combined_dexseq_GFF_PSISigma.gff", sep = ""))
+             
+             DEXSeqDataSet_PSISigma = estimateSizeFactors(DEXSeqDataSet_PSISigma)
+             DEXSeqDataSet_PSISigma = estimateDispersions(DEXSeqDataSet_PSISigma, BPPARAM = MulticoreParam(workers = 8, progressbar = TRUE))
+             
+             DEXSeqDataSet_PSISigma = testForDEU(DEXSeqDataSet_PSISigma, BPPARAM = MulticoreParam(workers = 8, progressbar = TRUE))
+             DEXSeqDataSet_PSISigma = DEXSeq::estimateExonFoldChanges(DEXSeqDataSet_PSISigma, fitExpToVar = "condition", maxRowsMF = 5000, BPPARAM = MulticoreParam(workers = 8, progressbar = TRUE))
+             
+             tibble_dexseq_results <- DEXSeqResults(DEXSeqDataSet_PSISigma) %>% as_tibble %>% add_column("comparison" = a1)
+             
+             return(list("DEXSeq_object" = DEXSeqDataSet_PSISigma,
+                         "tibble_results" = tibble_dexseq_results))
+             
+           } )
+
+names(list_DEXSeq_results) <- vector_of_comparisons_final
+
+# rename the tibble column names
+list_DEXSeq_results <- list_DEXSeq_results %>% purrr::map(~modify_at(.x = .x, .at = "tibble_results", .f = function(b1) {
+  
+  tibble <- b1
+  
+  colnames(tibble) <- c("id", "featureID", "DEXSeq_exonBaseMean", "DEXSeq_dispersion", "DEXSeq_stat", "DEXSeq_pvalue", "DEXSeq_padj", "DEXSeq_logCPM_first", "DEXSeq_logCPM_second", "DEXSeq_log2FC_second_minus_first", "genomicData.seqnames", "genomicData.start", "genomicData.end", "genomicData.width", "genomicData.strand", "countData.1", "countData.2", "countData.3", "countData.4", "countData.5", "countData.6", "transcripts", "comparison")
+  
+  return(tibble)
+  
+} ))
+
+save(list_DEXSeq_results, file = paste(DEXSeq_dir, "list_DEXSeq_results.Rlist", sep = ""))
+
+# plot the statistics for each comparison
+## this purrr returns nothing
+future_map2(.x = list_DEXSeq_results,
+            .y = names(list_DEXSeq_results),
+           .f = function(a1, a2) {
+             
+             pdf(paste(DEXSeq_dir, "DEXSeq_dispersion_estimates_", a2, ".pdf", sep = ""))
+             plotDispEsts(a1$DEXSeq_object)
+             dev.off()
+             
+             pdf(paste(DEXSeq_dir, "DEXSeq_MAplot_", a2, ".pdf", sep = ""))
+             plotMA(a1$DEXSeq_object, cex = 0.8)
+             dev.off()
+             
+             pdf(paste(DEXSeq_dir, "DEXSeq_pvalue_distributions_", a2, ".pdf", sep = ""))
+             plot(density(a1$tibble_results$DEXSeq_pvalue %>% na.omit))
+             dev.off()
+             
+             # my own volcano plot
+             ggplot(data = a1$tibble_results, mapping = aes(x = DEXSeq_log2FC_second_minus_first, y = -(DEXSeq_padj %>% log10))) +
+               geom_point(size = 2) +
+               ggtitle(paste("Volcano Plot for PSI-Sigma/DEXSeq", sep = "\n")) +
+               guides(size = FALSE) + 
+               xlab(expression(log[2](Fold~Change))) +
+               # (P[BH])
+               ylab(expression(-log[10](P[BH]))) +
+               geom_hline(yintercept = -log10(0.01), col = "red", lty = 2) + 
+               geom_vline(xintercept = -log2(1), col = "red", lty = 2) + 
+               geom_vline(xintercept = log2(1), col = "red", lty = 2) +
+               theme_bw() +
+               theme(text = element_text(family = "Helvetica")) +
+               ggsave(filename = paste(DEXSeq_dir, "DEXSeq_volcanoplot_", a2, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 15, units = "cm") +
+               ggsave(filename = paste(DEXSeq_dir, "DEXSeq_volcanoplot_", a2, ".svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 15, units = "cm")
+             
+           }, .progress = TRUE, .options = future_options(globals = c("plotDispEsts", "plotMA")))
+
+```
+
+## Calculate PSI
+
+```{r}
+
+## extract only the result tibbles
+list_DEXSeq_results_tibble.only <- list_DEXSeq_results %>% purrr::map(~.x$tibble_results)
+
+list_DEXSeq_results_tibble.only_with_PSI <- purrr::map2(.x = list_DEXSeq_results_tibble.only,
+                                                        .y = names(list_DEXSeq_results_tibble.only),
+                                                        .f = function(a1, a2) {
+                                                          
+                                                          # DEBUG ###
+                                                          # a1 <- list_DEXSeq_results_tibble.only[[1]]
+                                                          ###########
+                                                          
+                                                          tibble <- a1 %>% 
+                                                            dplyr::mutate("DEXSeq_IR_first" = 2^DEXSeq_logCPM_first,
+                                                                          "DEXSeq_IR_second" = 2^DEXSeq_logCPM_second) %>%
+                                                            dplyr::group_by(id) %>% 
+                                                            dplyr::mutate("DEXSeq_pseudotranscript_IR_plus_ER_first" = sum(DEXSeq_IR_first),
+                                                                          "DEXSeq_pseudotranscript_IR_plus_ER_second" = sum(DEXSeq_IR_second)) %>%
+                                                            dplyr::ungroup() %>%
+                                                            dplyr::filter(featureID == "E001") %>%
+                                                            dplyr::mutate("DEXSeq_PSI_first" = DEXSeq_IR_first/DEXSeq_pseudotranscript_IR_plus_ER_first,
+                                                                          "DEXSeq_PSI_second" = DEXSeq_IR_second/DEXSeq_pseudotranscript_IR_plus_ER_second) %>%
+                                                            dplyr::mutate("DEXSeq_dpsi_first_minus_second" = DEXSeq_PSI_first - DEXSeq_PSI_second)
+                                                            
+                                                        } )
+
+# plot the dpsi distributions
+future_map2(.x = list_DEXSeq_results_tibble.only_with_PSI,
+            .y = names(list_DEXSeq_results_tibble.only_with_PSI),
+           .f = function(a1, a2) {
+             
+             pdf(paste(DEXSeq_dir, "DEXSeq_dpsi_density_distributions_", a2, ".pdf", sep = ""))
+             plot(density(a1$DEXSeq_dpsi_first_minus_second %>% na.omit))
+             dev.off()
+             
+             pdf(paste(DEXSeq_dir, "DEXSeq_dpsi_cdf_distributions_", a2, ".pdf", sep = ""))
+             plot(ecdf(a1$DEXSeq_dpsi_first_minus_second %>% na.omit))
+             dev.off()
+             
+           }, .progress = TRUE, .options = future_options(globals = FALSE))
+
+```
+
+## Bind the DEXSeq results onto the master PSI-Sigma table. This is final.
+
+```{r}
+
+# rbind and tibblise
+long_tibble_DEXSeq_results_with_PSI <- list_DEXSeq_results_tibble.only_with_PSI %>% rbindlist %>% as_tibble %>%
+# select only cols that are informative
+  dplyr::select(id, DEXSeq_exonBaseMean, DEXSeq_dispersion, DEXSeq_stat, DEXSeq_pvalue, DEXSeq_padj, DEXSeq_log2FC_second_minus_first, comparison, DEXSeq_IR_first, DEXSeq_IR_second, DEXSeq_pseudotranscript_IR_plus_ER_first, DEXSeq_pseudotranscript_IR_plus_ER_second, DEXSeq_PSI_first, DEXSeq_PSI_second, DEXSeq_dpsi_first_minus_second)
+
+long_tibble_of_psisigma_DEXSeq_results <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3, long_tibble_DEXSeq_results_with_PSI, by = c("id", "comparison"))
+
+write.table(x = long_tibble_of_psisigma_DEXSeq_results, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1348,61 +1786,53 @@ write.table(x = vec_all_psi.sigma_genes_ENSG, file = paste(R_processing_results_
 
 ```{r}
 
-wide_tibble_of_psisigma_results_allcomparisons_final <- read.delim(paste(R_processing_results_dir, "table_of_all_psi.sigma_results.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+long_tibble_of_psisigma_DEXSeq_results <- read.delim(paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-# 2 choices: "pvalue" or "FDR"
-pvalue_or_FDR <- "pvalue"
+# 2 choices: "pvalue" or "FDR" or DEXSeq_pvalue or DEXSeq_padj
+pvalue_or_FDR <- "DEXSeq_padj"
 
-dpsi_cutoff <- 10
+dpsi_cutoff <- 0.10
 
 pvalue_cutoff <- 0.01
 
 ```
 
-## filter, return the co-ordinates of the differential exons.
+## filter, return the co-ordinates of the differential LIVs (Local Isoform Variants)
+
+- PSI-Sigma approximates local isoform variants using its indexing method
+- When we sum up all LIVs in each Variable Splice Region (VSR), we should get the overall PSI for the exon in all isoforms of the gene.
 
 ```{r}
 
 # filter dpsi, pvalue and also remove exons which have less than 2 observations in both comparisons
-wide_tibble_of_psisigma_results_allcomparisons_differential <- wide_tibble_of_psisigma_results_allcomparisons_final %>% dplyr::filter(., !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2)
+wide_tibble_of_psisigma_results_allcomparisons_differential <- long_tibble_of_psisigma_DEXSeq_results %>% dplyr::filter(., !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2)
 
-number.of.LSVs_differential_anysig_with_na <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand) %>% nrow
+number.of.LIVs_differential_anysig_with_na <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand) %>% nrow
 number.of.exons_differential_anysig_with_na <- wide_tibble_of_psisigma_results_allcomparisons_differential$diff_exon_coords %>% unique %>% length
 
-message("There are ", number.of.LSVs_differential_anysig_with_na, " differential LSVs using the specified cutoff of ", pvalue_or_FDR, "<", pvalue_cutoff, " and dpsi > ", dpsi_cutoff)
+message("There are ", number.of.LIVs_differential_anysig_with_na, " differential LIVs using the specified cutoff of ", pvalue_or_FDR, "<", pvalue_cutoff, " and dpsi > ", dpsi_cutoff)
 message("There are ", number.of.exons_differential_anysig_with_na, " differential exons using the specified cutoff of ", pvalue_or_FDR, "<", pvalue_cutoff, " and dpsi > ", dpsi_cutoff)
 
-# write table of all differential exons info - for all timepoints and not just the significant timepoint.
-## at the level of LSVs
-wide_tibble_of_psisigma_results_allcomparisons_differential_info_LSV <- dplyr::semi_join(wide_tibble_of_psisigma_results_allcomparisons_final, wide_tibble_of_psisigma_results_allcomparisons_differential, by = c("database_ID", "event_region_coords", "diff_exon_coords"))
-
-write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_LSV, file = paste(R_processing_results_dir, "long_table_of_all_differential_exons_info_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_differential_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-# export associated gene set
-write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_LSV$matched_gene_names %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_of_differential_results_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", wide_tibble_of_psisigma_results_allcomparisons_differential_info_LSV$matched_gene_names %>% unique %>% na.omit %>% length, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
-
-## at the level of exons.
-wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons <- dplyr::semi_join(wide_tibble_of_psisigma_results_allcomparisons_final, wide_tibble_of_psisigma_results_allcomparisons_differential, by = c("diff_exon_coords"))
-
-write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons, file = paste(R_processing_results_dir, "long_table_of_all_differential_exons_info_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_differential_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# get table of all differential exons info - for all timepoints and not just the significant timepoint.
+## at the level of LIVs
+wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV <- dplyr::semi_join(long_tibble_of_psisigma_DEXSeq_results, wide_tibble_of_psisigma_results_allcomparisons_differential, by = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode"))
+## write table
+write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV", number.of.LIVs_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # export associated gene set
-write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons$matched_gene_names %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_of_differential_results_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons$matched_gene_names %>% unique %>% na.omit %>% length, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV$matched_gene_names %>% unique %>% na.omit %>% mixedsort, file = paste(R_processing_results_dir, "geneset_of_differential_LIV_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV$matched_gene_names %>% unique %>% na.omit %>% length, "genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
-
-# filter for tibble of unique differential LSVs only***
-## tibble_differential_exon_coords <- wide_tibble_of_psisigma_results_allcomparisons_differential[, c("event_region_coords", "diff_exon_coords", "splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% unique
-tibble_unique_differential_LSVs <- wide_tibble_of_psisigma_results_allcomparisons_differential[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% unique
-
-# write table of unique differential exons co-ordinates only - for 3FT etc...
-write.table(x = tibble_unique_differential_LSVs[, c("splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% setNames(c("splicemode", "chr", "start", "end", "strand")) %>% unique, file = paste(R_processing_results_dir, "table_of_all_differential_exons_coords_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.exons_differential_anysig_with_na, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# get table at the level of exons.
+wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons <- dplyr::semi_join(long_tibble_of_psisigma_DEXSeq_results, wide_tibble_of_psisigma_results_allcomparisons_differential, by = c("diff_exon_coords"))
+## write
+write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # also write table of differential information for 12d vs. ud.
-tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & abs(dpsi) >= dpsi_cutoff)
+tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff)
 # write table
-write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing_results_dir, "table_of_differential_results_12d_vs_ud_only_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% length, "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV", tibble_differential_results_12d_vs_ud %>% nrow, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 # export associated gene set
-write.table(x = tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_of_differential_results_12d_vs_ud_only_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% length, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+write.table(x = tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% mixedsort, file = paste(R_processing_results_dir, "geneset_differential_LIV_", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% length, "genes_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 cat("There are", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% length, "differential genes between ud and 12d only, using the specified cutoff of", pvalue_or_FDR, "<", pvalue_cutoff, "and dpsi > ", dpsi_cutoff)
 
@@ -1414,21 +1844,47 @@ cat("There are", tibble_differential_results_12d_vs_ud$matched_gene_names %>% un
 
 ```{r}
 
-wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential <- dplyr::semi_join(wide_tibble_of_psisigma_results_allcomparisons_final,
-                                                                                                   tibble_unique_differential_LSVs, by = c("database_ID", "event_region_coords", "diff_exon_coords")) 
-# %>%
-#   dplyr::filter(str_detect(string = `splicemode`, pattern = "SES"))
+# filter for IR or non-IR events here
+wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>%
+  dplyr::filter(str_detect(string = `splicemode`, pattern = "IR"))
 
-tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
+wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>%
+  dplyr::filter(!str_detect(string = `splicemode`, pattern = "IR"))
+
+tibble_cumulative_diff_changes_total <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_final_filtered_for_differential %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
+  add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
+
+tibble_cumulative_diff_changes_IR <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
+                                         "cumulative_diff_changes" = 
+                                           c(0, 
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
+  add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
+
+tibble_cumulative_diff_changes_non.IR <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
+                                         "cumulative_diff_changes" = 
+                                           c(0, 
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
   add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
 
 ```
@@ -1437,17 +1893,41 @@ tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoint
 
 ```{r}
 
-ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
+ggplot(tibble_cumulative_diff_changes_total, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
   # geom_point() +
   geom_line(aes(group = "OBseries"), colour = "firebrick4") +
-  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nPSI-Sigma (exons)") +
+  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nPSI-Sigma (LIVs, total)") +
   xlab("Timepoint") +
   ylab("Cumulative differential changes") +
   scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
-  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_total_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_total_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
+
+ggplot(tibble_cumulative_diff_changes_IR, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
+  # geom_point() +
+  geom_line(aes(group = "OBseries"), colour = "firebrick4") +
+  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nPSI-Sigma (LIVs, IR)") +
+  xlab("Timepoint") +
+  ylab("Cumulative differential changes") +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_IR_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_IR_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
+
+ggplot(tibble_cumulative_diff_changes_non.IR, aes(y = cumulative_diff_changes_pct, x = timepoint)) +
+  # geom_point() +
+  geom_line(aes(group = "OBseries"), colour = "firebrick4") +
+  ggtitle("Cumulative changes in the hMSC-TERT4 spliceome\nOsteogenesis\nPSI-Sigma (LIVs, non-IR)") +
+  xlab("Timepoint") +
+  ylab("Cumulative differential changes") +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
+  theme_bw() +
+  theme(text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_non.IR_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_non.IR_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
 
 ```
 
@@ -1455,16 +1935,16 @@ ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes_pct, x = 
 
 ```{r}
 
-# all (LSV PSI)
-pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_LSV_all.pdf", sep = ""), width = 5, height = 5)
-plot(density(wide_tibble_of_psisigma_results_allcomparisons_final$dpsi %>% abs, bw = 1), 
-     main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (LSVs)", 
+# all (LIV PSI)
+pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_LIV_all.pdf", sep = ""), width = 5, height = 5)
+plot(density(long_tibble_of_psisigma_DEXSeq_results$dpsi %>% abs, bw = 1), 
+     main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (LIVs)", 
      xlab = "Absolute dPSI in any direction (%)",
      ylab = "Frequency density",
      col = "firebrick4", 
      xaxt = "n",
      xlim = c(0, 100)) + 
-  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_final$dpsi %>% abs, bw = 1),
+  polygon(density(long_tibble_of_psisigma_DEXSeq_results$dpsi %>% abs, bw = 1),
           col = alpha("firebrick4", 0.33),
           border = FALSE,
           xaxt = "n",
@@ -1473,16 +1953,16 @@ plot(density(wide_tibble_of_psisigma_results_allcomparisons_final$dpsi %>% abs, 
 dev.off()
 
 
-# LSV PSI - differential
-pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_LSV_diff.pdf", sep = ""), width = 5, height = 5)
-plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LSV$dpsi %>% abs, bw = 1), 
-     main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (LSVs)", 
+# LIV PSI - differential
+pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_LIV_diff.pdf", sep = ""), width = 5, height = 5)
+plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV$dpsi %>% abs, bw = 1), 
+     main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (LIVs)", 
      xlab = "Absolute dPSI in any direction (%)",
      ylab = "Frequency density",
      col = "firebrick4", 
      xaxt = "n",
      xlim = c(0, 100)) + 
-  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LSV$dpsi %>% abs, bw = 1),
+  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV$dpsi %>% abs, bw = 1),
           col = alpha("firebrick4", 0.33),
           border = FALSE,
           xaxt = "n",
@@ -1492,7 +1972,7 @@ dev.off()
 
 # exon PSI - differential
 pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_exon_diff.pdf", sep = ""), width = 5, height = 5)
-plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(dpsi)) %>% .$exon_dpsi %>% abs), 
+plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(DEXSeq_dpsi_first_minus_second, na.rm = TRUE)) %>% .$exon_dpsi %>% abs), 
      main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (exons)", 
      xlab = "Absolute dPSI in any direction (%)",
      ylab = "Frequency density",
@@ -1500,7 +1980,7 @@ plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_ex
   # ,
   # xaxt = "n",
   # xlim = c(0, 100)) 
-  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(dpsi)) %>% .$exon_dpsi %>% abs),
+  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(DEXSeq_dpsi_first_minus_second, na.rm = TRUE)) %>% .$exon_dpsi %>% abs),
           col = alpha("firebrick4", 0.33),
           border = FALSE,
           xaxt = "n")
@@ -1518,12 +1998,12 @@ In order to apply the constitutive cutoff (which requires that ALL timepoints mu
 
 ```{r}
 
-# to fetch the unique LSVs which are constitutive:
-## group all unique LSVs together
-wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV <- wide_tibble_of_psisigma_results_allcomparisons_final %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand)
-## create logical of whether each LSV has all pvalue and dpsi cutoff AS WELL AS having all comparisons intact (and not missing)
+# to fetch the unique LIVs which are constitutive:
+## group all unique LIVs together
+wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV <- long_tibble_of_psisigma_DEXSeq_results %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand)
+## create logical of whether each LIV has all pvalue and dpsi cutoff AS WELL AS having all comparisons intact (and not missing)
 ## if return NA, then it's not constitutive.
-wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV_constitutive.test <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV %>% dplyr::summarise("LSV_is_constitutive" = all(!!as.name(pvalue_or_FDR) > pvalue_cutoff & abs(dpsi) < dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2) & n() == vector_of_comparisons_final %>% length) %>% dplyr::mutate_at("LSV_is_constitutive", .funs = function(x) {
+wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV_constitutive.test <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV %>% dplyr::summarise("LIV_is_constitutive" = all(!!as.name(pvalue_or_FDR) > pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) < dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2) & n() == vector_of_comparisons_final %>% length) %>% dplyr::mutate_at("LIV_is_constitutive", .funs = function(x) {
   
   y <- x 
   
@@ -1532,28 +2012,22 @@ wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV_constitutive
   return(y)
   
 } )
-## subset table for only constitutive LSVs and extract all unique LSVs
-wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV_constitutive.only <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV_constitutive.test[wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV_constitutive.test$LSV_is_constitutive == TRUE, ]
-## extract unique constitutive LSVs
-tibble_unique_constitutive_LSVs <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LSV_constitutive.only %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand, .keep_all = TRUE)
+## subset table for only constitutive LIVs and extract all unique LIVs
+wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV_constitutive.only <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV_constitutive.test[wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV_constitutive.test$LIV_is_constitutive == TRUE, ]
+## extract unique constitutive LIVs
+tibble_unique_constitutive_LIVs <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV_constitutive.only %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand, .keep_all = TRUE)
 ## rejoin onto main table
-tibble_constitutive_LSV_info <- dplyr::semi_join(wide_tibble_of_psisigma_results_allcomparisons_final, tibble_unique_constitutive_LSVs)
+tibble_constitutive_LIV_info <- dplyr::semi_join(long_tibble_of_psisigma_DEXSeq_results, tibble_unique_constitutive_LIVs)
 
 # print numbers
-number.of.LSVs_constitutive <- nrow(tibble_unique_constitutive_LSVs)
-number.of.exons_constitutive <- tibble_unique_constitutive_LSVs$diff_exon_coords %>% unique %>% length
+number.of.LIVs_constitutive <- nrow(tibble_unique_constitutive_LIVs)
+number.of.exons_constitutive <- tibble_unique_constitutive_LIVs$diff_exon_coords %>% unique %>% length
 
-message("There are ", number.of.LSVs_constitutive, " constitutive LSVs using the specified cutoff of ", pvalue_or_FDR, "<", pvalue_cutoff, " and dpsi > ", dpsi_cutoff)
+message("There are ", number.of.LIVs_constitutive, " constitutive LIVs using the specified cutoff of ", pvalue_or_FDR, "<", pvalue_cutoff, " and dpsi > ", dpsi_cutoff)
 message("There are ", number.of.exons_constitutive, " constitutive exons using the specified cutoff of ", pvalue_or_FDR, "<", pvalue_cutoff, " and dpsi > ", dpsi_cutoff)
 
-# write table of all constitutive exons info
-write.table(x = tibble_constitutive_LSV_info, file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LSVs_info_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.LSVs_constitutive, "_LSVs.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-# filter for tibble of unique constitutive exon co-ordinates only
-tibble_unique_constitutive_LSVs <- tibble_unique_constitutive_LSVs[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% unique
-
-# write table of unique constitutive exons co-ordinates only - for 3FT etc...
-write.table(x = tibble_unique_constitutive_LSVs[, c("splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% setNames(c("splicemode", "chr", "start", "end", "strand")) %>% unique, file = paste(R_processing_results_dir, "table_of_all_constitutive_exons_coords_dpsi_", dpsi_cutoff,  "_any", pvalue_or_FDR, pvalue_cutoff, "_", number.of.LSVs_constitutive, "_LSVs.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# write table of all constitutive LIVs info
+write.table(x = tibble_constitutive_LIV_info, file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LIV", number.of.LIVs_constitutive, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_LIVs.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1571,69 +2045,49 @@ Join table separately by local isoform topology.
 vector_of_ud_comparisons <- vector_of_comparisons_final[grep(x = vector_of_comparisons_final, pattern = "ud")]
 
 # subset the wide table of all comparisons for only comparisons which have ud
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp <- dplyr::filter(wide_tibble_of_psisigma_results_allcomparisons_final, comparison %in% vector_of_ud_comparisons, .preserve = TRUE) %>% dplyr::select(., -psisigma_reference.transcript, -psisigma_exon_type, -pvalue, -FDR, -dpsi, -num.replicates_comparison.1, -num.replicates_comparison.2)
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 <- dplyr::filter(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV, comparison %in% vector_of_ud_comparisons) %>% dplyr::select(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_gene_names, matched_recon_transcript_names, matched_ref_transcript_names, matched_strand, NMD_reference, NMD_recon, any_NMD, first_or_last_exon_reference, first_or_last_exon_recon, any_first_exon, any_last_exon, comparison, DEXSeq_PSI_first, DEXSeq_PSI_second) %>% dplyr::rename("DEXSeq_PSI_ud" = "DEXSeq_PSI_second")
 
 # rename the columns. replace "comparison name" with "timepoint", rename the comparison 2 to ud
 # >
-colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp)[which(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp) == "comparison")] <- "timepoint"
-# >
-colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp) <- gsub(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp), pattern = "comparison.2", replacement = "ud")
+colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0)[which(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0) == "comparison")] <- "timepoint"
 
 # replace the actual "comparison name" with "timepoint"
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp[, "timepoint"] <- gsub(x = wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp$timepoint, pattern = "(BM_MSC_to_OB_)(.*)_vs_(BM_MSC_to_OB_)(.*)", replacement = "\\2")
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0[, "timepoint"] <- gsub(x = wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0$timepoint, pattern = "(BM_MSC_to_OB_)(.*)_vs_(BM_MSC_to_OB_)(.*)", replacement = "\\2")
 
-# melt into a long table to shake off the absolute psi columns per timepoint
-## filter out comparison 1 from the column names
-colnames_no_comparison.1 <- colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp)[grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp), pattern = "^(?!comparison.1).*", perl = TRUE)]
-## melt
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp <- reshape2::melt(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp, id.vars = colnames_no_comparison.1, variable.name = "replicate", value.name = "absolute_psi")
-
-# reformat the replicate column to have only numbers
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp[, "replicate"] <- gsub(x = wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp$replicate, pattern = "comparison.1_absolute.psi_", replacement = "")
+# rbind to shake off the timepointwise comparison
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1 <- dplyr::bind_rows(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-DEXSeq_PSI_ud) %>% dplyr::rename("PSI" = "DEXSeq_PSI_first"),
+                                                                                       wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-DEXSeq_PSI_first) %>% dplyr::rename("PSI" = "DEXSeq_PSI_ud") %>% dplyr::mutate_at(.vars = "timepoint", .funs = function(x) {"ud" %>% return}) %>% dplyr::group_by_at(.vars = setdiff(colnames(.), "PSI")) %>% dplyr::mutate_at(.vars = "PSI", .funs = mean )) %>% dplyr::distinct()
 
 # recast into a wide tibble
-## aggregate function only sums if all values are not all NA. so it preserves values which are all NA.
-## wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp[c(2200:2206, 2665:2670), ]
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp %>% unique, formula =  database_ID + event_region_coords + diff_exon_coords + splicemode + psisigma_gene.symbol + diff_exon_chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_strand + NMD_reference + NMD_recon + any_NMD + first_or_last_exon_reference + first_or_last_exon_recon + any_first_exon + any_last_exon + ud_absolute.psi_1 + ud_absolute.psi_2 + ud_absolute.psi_3 ~ timepoint + replicate, value.var = "absolute_psi") %>% as_tibble
+## aggregate function taken as the mean
+## wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0[c(2200:2206, 2665:2670), ]
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1, formula = database_ID + event_region_coords + diff_exon_coords + splicemode + diff_exon_chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_ref_transcript_names + matched_strand + NMD_reference + NMD_recon + any_NMD + first_or_last_exon_reference + first_or_last_exon_recon + any_first_exon + any_last_exon ~ timepoint, value.var = "PSI") %>% as_tibble
 
-# rename the columns. add "absolute.psi" to the colname.
-colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) <- gsub(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only), pattern = "(\\d+)(d|h)_(\\d)", replacement = "\\1\\2_absolute.psi_\\3")
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only %>% dplyr::select(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[!colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) %in% vector_OBseries_timepoints], all_of(vector_OBseries_timepoints))
 
-# reorder columns into chronological order
-## get column indices corresponding to observations
-col_indices_observations <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only), pattern = "absolute.psi")
-## reorder columns
-wide_tibble_of_absolute_PSI_replicates <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only[, c(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[-col_indices_observations], "ud_absolute.psi_1", "ud_absolute.psi_2", "ud_absolute.psi_3", "6h_absolute.psi_1", "6h_absolute.psi_2", "6h_absolute.psi_3", "12h_absolute.psi_1", "12h_absolute.psi_2", "12h_absolute.psi_3", "24h_absolute.psi_1", "24h_absolute.psi_2", "24h_absolute.psi_3", "3d_absolute.psi_1", "3d_absolute.psi_2", "3d_absolute.psi_3", "6d_absolute.psi_1", "6d_absolute.psi_2", "6d_absolute.psi_3", "9d_absolute.psi_1", "9d_absolute.psi_2", "9d_absolute.psi_3", "12d_absolute.psi_1", "12d_absolute.psi_2", "12d_absolute.psi_3")]
+colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) <- c(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[!colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) %in% vector_OBseries_timepoints], vector_OBseries_timepoints_edited)
+
+wide_tibble_of_psisigma_PSI_with_na_LIV <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only
 
 ```
 
-### take the average PSI for every time point - separated PSI
+### Get the sum exon PSIs for the same splice region/splicemode - for later use
 
 ```{r}
 
-wide_tibble_of_absolute_PSI_averages_separate <- dplyr::bind_cols(wide_tibble_of_absolute_PSI_replicates[, -col_indices_observations], wide_tibble_of_absolute_PSI_replicates[, col_indices_observations] %>% calculate_average_values_from_replicate_columns(., 3, append_average_to_column_name = TRUE))
-
-# this is the final chopped table ready for exon switching analysis.
-
-```
-
-### sum exon PSIs for the same splice region/splicemode
-
-```{r}
-
-wide_tibble_of_absolute_PSI_averages_sum_temp <- wide_tibble_of_absolute_PSI_averages_separate %>% dplyr::select(., -database_ID)
+wide_tibble_of_absolute_PSI_averages_sum_temp <- wide_tibble_of_psisigma_PSI_with_na_LIV %>% dplyr::select(., -database_ID)
 
 # create list of event region, splicemode
-list_unique_exon_regions <- wide_tibble_of_absolute_PSI_averages_sum_temp[, c("event_region_coords", "diff_exon_coords", "splicemode")] %>% unique %>% array_tree
+list_unique_exon_regions <- wide_tibble_of_absolute_PSI_averages_sum_temp[, c("event_region_coords", "diff_exon_coords")] %>% unique %>% array_tree
 
 # load the tibble of separated PSI averages into list
-list_of_tibbles_absolute_PSI_average_subset_by_region <- future_map(.x = list_unique_exon_regions, .f = ~wide_tibble_of_absolute_PSI_averages_sum_temp[wide_tibble_of_absolute_PSI_averages_sum_temp$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum_temp$diff_exon_coords == (.x[[2]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum_temp$splicemode == (.x[[3]] %>% paste), ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_absolute_PSI_averages_sum_temp")))
+list_of_tibbles_absolute_PSI_average_subset_by_exon <- future_map(.x = list_unique_exon_regions, .f = ~wide_tibble_of_absolute_PSI_averages_sum_temp[wide_tibble_of_absolute_PSI_averages_sum_temp$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum_temp$diff_exon_coords == (.x[[2]] %>% paste), ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_absolute_PSI_averages_sum_temp")))
 
 # take the average PSI of each timepoint
 # we assume there are no more bugs which cause identical virtual splice variations to be duplicated. so therefore we do not need to take unique values.
-list_of_tables_absolute_PSI_average_subset_by_region_sum <- future_map(.x = list_of_tibbles_absolute_PSI_average_subset_by_region, 
-                                                                        .f = ~cbind(.x[, -grep(x = colnames(.x), pattern = "absolute.psi")] %>% unique, 
-                                                                                    apply(X = .x[, grep(x = colnames(.x), pattern = "absolute.psi")], MARGIN = 2, FUN = function(X) {
+list_of_tables_absolute_PSI_average_subset_by_region_sum <- future_map(.x = list_of_tibbles_absolute_PSI_average_subset_by_exon, 
+                                                                        .f = ~cbind(.x[, !colnames(.x) %in% vector_OBseries_timepoints_edited] %>% unique, 
+                                                                                    apply(X = .x[, colnames(.x) %in% vector_OBseries_timepoints_edited], MARGIN = 2, FUN = function(X) {
                                                                                       if (all(is.na(X))) {
                                                                                         
                                                                                         X[NA_integer_]
@@ -1643,24 +2097,21 @@ list_of_tables_absolute_PSI_average_subset_by_region_sum <- future_map(.x = list
                                                                                           sum(X, na.rm = TRUE)
                                                                                           # sum(X %>% unique, na.rm = TRUE)
 
-                                                                                          
                                                                                         } 
                                                                                       
                                                                                       }) %>% t), .progress = TRUE, .options = future_options(globals = FALSE))
 
-wide_tibble_of_absolute_PSI_averages_sum <- list_of_tables_absolute_PSI_average_subset_by_region_sum %>% rbindlist %>% as_tibble
+wide_tibble_of_psisigma_PSI_with_na_exon.sum <- list_of_tables_absolute_PSI_average_subset_by_region_sum %>% rbindlist %>% as_tibble
 
 ```
 
-### separated PSI per local isoform
+### Do Switching LIVs
 
-#### create subset list for every unique exon
+#### create subset list for every unique event region
 
 ```{r}
 
-list_unique_exons_absolute_PSI_levels_exon.switching <- wide_tibble_of_absolute_PSI_averages_separate[, c("event_region_coords", "splicemode")] %>% unique %>% array_tree
-
-list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_unique_exons_absolute_PSI_levels_exon.switching, .f = ~wide_tibble_of_absolute_PSI_averages_separate[wide_tibble_of_absolute_PSI_averages_separate$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_separate$splicemode == (.x[[2]] %>% paste), ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_absolute_PSI_averages_separate")))
+list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = wide_tibble_of_psisigma_PSI_with_na_LIV$event_region_coords %>% unique, .f = ~wide_tibble_of_psisigma_PSI_with_na_LIV[wide_tibble_of_psisigma_PSI_with_na_LIV$event_region_coords == .x, ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_psisigma_PSI_with_na_LIV")))
 
 ```
 
@@ -1669,7 +2120,7 @@ list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_uniqu
 ```{r}
 
 # calculate ranks
-list_of_tibbles_absolute_PSI_levels_exon.switching_ranks.per.timepoint <- purrr::map_if(.x = list_of_tibbles_absolute_PSI_levels_exon.switching, .p = ~nrow(.x) > 1, .f = ~apply(X = .x[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_separate), pattern = "absolute.psi")], MARGIN = 2, FUN = function(X) {
+list_of_tibbles_absolute_PSI_levels_exon.switching_ranks.per.timepoint <- purrr::map_if(.x = list_of_tibbles_absolute_PSI_levels_exon.switching, .p = ~nrow(.x) > 1, .f = ~apply(X = .x[, colnames(.x) %in% vector_OBseries_timepoints_edited], MARGIN = 2, FUN = function(X) {
   if (all(is.na(X))) {
     
     vector_rank <- rep(NA, times = length(X))
@@ -1721,7 +2172,7 @@ list_of_logical_exon_switched_or_not <- purrr::map_if(.x = list_of_tibbles_absol
 ```{r}
 
 list_of_logical_exon_switched_or_not <- purrr::map_if(.x = list_of_logical_exon_switched_or_not, .p = ~is.logical(.x) == FALSE, 
-                                          .f = ~any(.x[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_separate), pattern = "absolute.psi")] %>% unlist %>% na.omit > 50) & any(.x[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_separate), pattern = "absolute.psi")] %>% unlist %>% na.omit < 50))
+                                          .f = ~any(.x[, colnames(.x) %in% vector_OBseries_timepoints_edited] %>% unlist %>% na.omit > 50) & any(.x[, colnames(.x) %in% vector_OBseries_timepoints_edited] %>% unlist %>% na.omit < 50))
 
 ```
 
@@ -1733,35 +2184,17 @@ list_of_tibbles_of_absolute_PSI_averages_exon.switched <- list_of_tibbles_absolu
 
 tibble_of_absolute_PSI_averages_exon.switched_separate <- list_of_tibbles_of_absolute_PSI_averages_exon.switched %>% rbindlist %>% as_tibble
 
-write.table(x = tibble_of_absolute_PSI_averages_exon.switched_separate, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(tibble_of_absolute_PSI_averages_exon.switched_separate), "_switched.exons_LSV.PSI_OB_diff_all.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_of_absolute_PSI_averages_exon.switched_separate, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(tibble_of_absolute_PSI_averages_exon.switched_separate), "_switched.LIVs_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
-#### filter for differentially switched exons
-
-```{r}
-
-# join by event region and splicemode only because we want all the information in the event regions where differential splicing has occurred.
-tibble_of_absolute_PSI_averages_exon.switched_differential_separate <- dplyr::semi_join(tibble_of_absolute_PSI_averages_exon.switched_separate, tibble_unique_differential_LSVs, by = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode"))
-
-# this is the true number of LSVs which have underwent differential switching.
-number_of_exons_differentially_switched_separate <- dplyr::semi_join(tibble_of_absolute_PSI_averages_exon.switched_separate, tibble_unique_differential_LSVs, by = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode")) %>% nrow
-
-cat("there are", number_of_exons_differentially_switched_separate, "LSVs which undergo significant switching over the time course")
-
-write.table(x = tibble_of_absolute_PSI_averages_exon.switched_differential_separate, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(tibble_of_absolute_PSI_averages_exon.switched_differential_separate), "_switched.exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-```
-
-### summed PSI per exon
+### Do exon switching
 
 #### create subset list for every unique exon
 
 ```{r}
 
-list_unique_exons_absolute_PSI_levels_exon.switching <- wide_tibble_of_absolute_PSI_averages_sum[, c("event_region_coords", "splicemode")] %>% unique %>% array_tree
-
-list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_unique_exons_absolute_PSI_levels_exon.switching, .f = ~wide_tibble_of_absolute_PSI_averages_sum[wide_tibble_of_absolute_PSI_averages_sum$event_region_coords == (.x[[1]] %>% paste) & wide_tibble_of_absolute_PSI_averages_sum$splicemode == (.x[[2]] %>% paste), ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_absolute_PSI_averages_sum")))
+list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = wide_tibble_of_psisigma_PSI_with_na_exon.sum$event_region_coords %>% unique, .f = ~wide_tibble_of_psisigma_PSI_with_na_exon.sum[wide_tibble_of_psisigma_PSI_with_na_exon.sum$event_region_coords == .x, ], .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_psisigma_PSI_with_na_exon.sum")))
 
 ```
 
@@ -1770,7 +2203,7 @@ list_of_tibbles_absolute_PSI_levels_exon.switching <- future_map(.x = list_uniqu
 ```{r}
 
 # calculate ranks
-list_of_tibbles_absolute_PSI_levels_exon.switching_ranks.per.timepoint <- purrr::map_if(.x = list_of_tibbles_absolute_PSI_levels_exon.switching, .p = ~nrow(.x) > 1, .f = ~apply(X = .x[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_sum), pattern = "absolute.psi")], MARGIN = 2, FUN = function(X) {
+list_of_tibbles_absolute_PSI_levels_exon.switching_ranks.per.timepoint <- purrr::map_if(.x = list_of_tibbles_absolute_PSI_levels_exon.switching, .p = ~nrow(.x) > 1, .f = ~apply(X = .x[, colnames(.x) %in% vector_OBseries_timepoints_edited], MARGIN = 2, FUN = function(X) {
   if (all(is.na(X))) {
     
     vector_rank <- rep(NA, times = length(X))
@@ -1822,7 +2255,7 @@ list_of_logical_exon_switched_or_not <- purrr::map_if(.x = list_of_tibbles_absol
 ```{r}
 
 list_of_logical_exon_switched_or_not <- purrr::map_if(.x = list_of_logical_exon_switched_or_not, .p = ~is.logical(.x) == FALSE, 
-                                          .f = ~any(.x[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_sum), pattern = "absolute.psi")] %>% unlist %>% na.omit > 50) & any(.x[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_sum), pattern = "absolute.psi")] %>% unlist %>% na.omit < 50))
+                                          .f = ~any(.x[, colnames(.x) %in% vector_OBseries_timepoints_edited] %>% unlist %>% na.omit > 50) & any(.x[, colnames(.x) %in% vector_OBseries_timepoints_edited] %>% unlist %>% na.omit < 50))
 
 ```
 
@@ -1834,29 +2267,13 @@ list_of_tibbles_of_absolute_PSI_averages_exon.switched <- list_of_tibbles_absolu
 
 tibble_of_absolute_PSI_averages_exon.switched_sum <- list_of_tibbles_of_absolute_PSI_averages_exon.switched %>% rbindlist %>% as_tibble
 
-write.table(x = tibble_of_absolute_PSI_averages_exon.switched_sum, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(tibble_of_absolute_PSI_averages_exon.switched_sum), "_switched.exons_exons.PSI_OB_diff_all.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
-```
-
-#### filter for differentially switched exons
-
-```{r}
-
-# join by event region and splicemode only because we want all the information in the event regions where differential splicing has occurred.
-tibble_of_absolute_PSI_averages_exon.switched_differential_sum <- dplyr::semi_join(tibble_of_absolute_PSI_averages_exon.switched_sum, tibble_unique_differential_LSVs, by = c("event_region_coords", "splicemode"))
-
-# this is the true number of exons which have underwent differential switching.
-number_of_exons_differentially_switched_sum <- dplyr::semi_join(tibble_of_absolute_PSI_averages_exon.switched_sum, tibble_unique_differential_LSVs, by = c("event_region_coords", "diff_exon_coords", "splicemode")) %>% nrow
-
-cat("there are", number_of_exons_differentially_switched_sum, "exons which undergo significant switching over the time course")
-
-write.table(x = tibble_of_absolute_PSI_averages_exon.switched_differential_sum, file = paste(R_processing_results_dir, "wide_table_of_",  number_of_exons_differentially_switched_sum, "_switched.exons_exons.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_of_absolute_PSI_averages_exon.switched_sum, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(tibble_of_absolute_PSI_averages_exon.switched_sum), "_switched.exons_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
 # Clustering using self-organising maps
 
-## separate PSI per LSV
+## separate PSI per LIV
 
 ### Filter the wide table of absolute PSI for exons with complete timeseries only
 #### Then filter for differential exons.
@@ -1864,18 +2281,28 @@ write.table(x = tibble_of_absolute_PSI_averages_exon.switched_differential_sum, 
 ```{r}
 
 # get row indices which have any na.
-row.indices_with_na <- apply(X = wide_tibble_of_absolute_PSI_averages_separate[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_separate), pattern = "absolute.psi")], MARGIN = 1, FUN = function(X) {any(is.na(X))})
+row.indices_with_na <- apply(X = wide_tibble_of_psisigma_PSI_with_na_LIV[, colnames(wide_tibble_of_psisigma_PSI_with_na_LIV) %in% vector_OBseries_timepoints_edited], MARGIN = 1, FUN = function(X) {any(is.na(X))})
 
 # remove those rows that are true (that have any na)
-wide_tibble_of_absolute_PSI_averages_complete.timeseries <- wide_tibble_of_absolute_PSI_averages_separate[which(row.indices_with_na == FALSE), ]
-# filter for differential LSVs
-wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate <- dplyr::semi_join(wide_tibble_of_absolute_PSI_averages_complete.timeseries, tibble_unique_differential_LSVs)
+wide_tibble_of_LIV_PSI_no_na <- wide_tibble_of_psisigma_PSI_with_na_LIV[which(row.indices_with_na == FALSE), ]
 
-no.exons_differentially.spliced_complete.timeseries_separate <- nrow(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate)
+no.LIV.exons_differentially.spliced_complete.timeseries <- nrow(wide_tibble_of_LIV_PSI_no_na)
 
-cat("There are", no.exons_differentially.spliced_complete.timeseries_separate, "exons with a complete time profile of LSV-based PSI which are differentially spliced.")
+cat("There are", no.LIV.exons_differentially.spliced_complete.timeseries, "exons with a complete time profile of LIV-based PSI which are differentially spliced.")
 
 # THIS IS THE FINAL TIBBLE OF ALL THE EXONS WITH A COMPLETE TIME-SERIES PSI PROFILE
+
+```
+
+### scale PSI levels
+
+```{r}
+
+wide_tibble_of_LIV_PSI_no_na_scaled <- wide_tibble_of_LIV_PSI_no_na
+
+wide_tibble_of_LIV_PSI_no_na_scaled[, colnames(wide_tibble_of_LIV_PSI_no_na_scaled) %in% vector_OBseries_timepoints_edited] <- wide_tibble_of_LIV_PSI_no_na_scaled[, colnames(wide_tibble_of_LIV_PSI_no_na_scaled) %in% vector_OBseries_timepoints_edited] %>% genescale(m = ., axis = 1, method = "Z") %>% as_tibble
+
+write.table(x = wide_tibble_of_LIV_PSI_no_na_scaled, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(wide_tibble_of_LIV_PSI_no_na_scaled), "LIVs_scaled.PSI_OB_diff.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1890,18 +2317,12 @@ OB_ydim <- 5
 
 number_of_som_clusters <- OB_xdim * OB_ydim
 
-# OB series #####
-
-som_5_by_5_OBseries_table_absolute.PSI <- wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate), pattern = "absolute.psi")] %>% setNames(vector_OBseries_timepoints)
-
-som_5_by_5_OBseries_table_scaled.PSI_separate <- som_5_by_5_OBseries_table_absolute.PSI %>% genescale(m = ., axis = 1, method = "Z")
 
 set.seed(som_seed_number)
 
-somdata_5_by_5_OBseries <- som(som_5_by_5_OBseries_table_scaled.PSI_separate, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
+somdata_5_by_5_OBseries <- som(tibble_matrix_LIV_PSI_no_na_scaled, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
 
-wide_table_of_final_SOM_summary_5_by_5_OBseries_separate <- cbind(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate[, -grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate), pattern = "absolute.psi")], som_5_by_5_OBseries_table_scaled.PSI_separate, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]])
-
+wide_table_of_final_SOM_summary_5_by_5_OBseries_separate <- cbind(wide_tibble_of_LIV_PSI_no_na[, -grep(x = colnames(wide_tibble_of_LIV_PSI_no_na), pattern = "absolute.psi")], som_5_by_5_OBseries_table_scaled.PSI_separate, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]])
 
 
 ```
@@ -1951,7 +2372,7 @@ ggplot() +
   geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries_separate_average.line, aes(x = timepoint, y = avg_PSI_value, group = cluster), colour = "white", size = 1) +
   scale_colour_manual(values = c("black")) +
   facet_grid(quotient_facet.y ~ remainder_facet.x) +
-  ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate), "LSV PSI values during OB diff (any", pvalue_or_FDR, 
+  ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate), "LIV PSI values during OB diff (any", pvalue_or_FDR, 
                " < ", pvalue_cutoff, "any deltaPSI >", dpsi_cutoff, ")")) +
   scale_x_discrete(limits = vector_OBseries_timepoints, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   xlab("Time-point") +
@@ -1959,12 +2380,12 @@ ggplot() +
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LSV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1976,18 +2397,29 @@ write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file =
 ```{r}
 
 # get row indices which have any na.
-row.indices_with_na <- apply(X = wide_tibble_of_absolute_PSI_averages_sum[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_sum), pattern = "absolute.psi")], MARGIN = 1, FUN = function(X) {any(is.na(X))})
+row.indices_with_na <- apply(X = wide_tibble_of_psisigma_PSI_with_na_exon.sum[, colnames(wide_tibble_of_psisigma_PSI_with_na_exon.sum) %in% vector_OBseries_timepoints_edited], MARGIN = 1, FUN = function(X) {any(is.na(X))})
 
 # remove those rows that are true (that have any na)
-wide_tibble_of_absolute_PSI_averages_complete.timeseries <- wide_tibble_of_absolute_PSI_averages_sum[which(row.indices_with_na == FALSE), ]
+wide_tibble_of_exon_PSI_no_na <- wide_tibble_of_psisigma_PSI_with_na_exon.sum[which(row.indices_with_na == FALSE), ]
 
-wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum <- dplyr::semi_join(wide_tibble_of_absolute_PSI_averages_complete.timeseries, tibble_unique_differential_LSVs)
+no.sum.exons_differentially.spliced_complete.timeseries <- length(wide_tibble_of_exon_PSI_no_na$diff_exon_coords)
 
-no.exons_differentially.spliced_complete.timeseries_sum <- length(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum$diff_exon_coords)
-
-cat("There are", no.exons_differentially.spliced_complete.timeseries_sum, "exons with a complete time profile of exon-based PSI which are differentially spliced.")
+cat("There are", no.sum.exons_differentially.spliced_complete.timeseries, "exons with a complete time profile of exon-based PSI which are differentially spliced.")
 
 # THIS IS THE FINAL TIBBLE OF ALL THE EXONS WITH A COMPLETE TIME-SERIES PSI PROFILE
+
+```
+
+### scale PSI levels
+
+```{r}
+
+wide_tibble_of_exon_PSI_no_na_scaled <- wide_tibble_of_exon_PSI_no_na
+
+wide_tibble_of_exon_PSI_no_na_scaled[, colnames(wide_tibble_of_exon_PSI_no_na_scaled) %in% vector_OBseries_timepoints_edited] <- wide_tibble_of_exon_PSI_no_na_scaled[, colnames(wide_tibble_of_exon_PSI_no_na_scaled) %in% vector_OBseries_timepoints_edited] %>% genescale(m = ., axis = 1, method = "Z") %>% as_tibble
+
+# write the scaled PSI table
+write.table(x = wide_tibble_of_exon_PSI_no_na_scaled, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(wide_tibble_of_exon_PSI_no_na_scaled), "exons_scaled.PSI_OB_diff.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2002,17 +2434,9 @@ OB_ydim <- 5
 
 number_of_som_clusters <- OB_xdim * OB_ydim
 
-# OB series #####
+somdata_5_by_5_OBseries <- som(wide_tibble_of_exon_PSI_no_na_scaled, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
 
-som_5_by_5_OBseries_table_absolute.PSI <- wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum[, grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum), pattern = "absolute.psi")] %>% setNames(vector_OBseries_timepoints)
-
-som_5_by_5_OBseries_table_scaled.PSI_sum <- som_5_by_5_OBseries_table_absolute.PSI %>% genescale(m = ., axis = 1, method = "Z")
-
-set.seed(som_seed_number)
-
-somdata_5_by_5_OBseries <- som(som_5_by_5_OBseries_table_scaled.PSI_sum, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
-
-wide_table_of_final_SOM_summary_5_by_5_OBseries_sum <- cbind(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum[, -grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum), pattern = "absolute.psi")], som_5_by_5_OBseries_table_scaled.PSI_sum, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]])
+wide_table_of_final_SOM_summary_5_by_5_OBseries_sum <- cbind(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum[, -grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum), pattern = "absolute.psi")], wide_tibble_of_exon_PSI_no_na_scaled, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]])
 
 ```
 
@@ -3311,65 +3735,34 @@ if(! dir.exists(qualitycheck_results_dir) ) {
 # plot pvalue
 pdf(paste(qualitycheck_results_dir, "qualityplot_pvalues_density.distribution.pdf", sep = "")) 
   
-  plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[, "pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "frequency density", main = "PSI-Sigma p-value density distribution")
+  plot(density(long_tibble_of_psisigma_DEXSeq_results[, "DEXSeq_pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "frequency density", main = "PSI-Sigma p-value density distribution")
   
 dev.off()
 
 pdf(paste(qualitycheck_results_dir, "qualityplot_pvalues_CDF.pdf", sep = "")) 
   
-  plot(ecdf(wide_tibble_of_psisigma_results_allcomparisons_final[, "pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "cumulative frequency", main = "PSI-Sigma p-value CDF")
+  plot(ecdf(long_tibble_of_psisigma_DEXSeq_results[, "pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "cumulative frequency", main = "PSI-Sigma p-value CDF")
   
 dev.off()
   
-vector_col.index_absolute.psi.comparison.1 <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final), pattern = "comparison.1_")
-vector_col.index_absolute.psi.comparison.2 <- grep(x = colnames(wide_tibble_of_psisigma_results_allcomparisons_final), pattern = "comparison.2_")
+vector_col.index_absolute.psi.comparison.1 <- grep(x = colnames(long_tibble_of_psisigma_DEXSeq_results), pattern = "comparison.1_")
+vector_col.index_absolute.psi.comparison.2 <- grep(x = colnames(long_tibble_of_psisigma_DEXSeq_results), pattern = "comparison.2_")
 
 # plot all the absolute PSI values
-plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[wide_tibble_of_psisigma_results_allcomparisons_final$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_12h" & wide_tibble_of_psisigma_results_allcomparisons_final$pvalue < 0.4 & wide_tibble_of_psisigma_results_allcomparisons_final$pvalue > 0.35, c(1, vector_col.index_absolute.psi.comparison.1, vector_col.index_absolute.psi.comparison.2)] %>% melt(.,id.vars = "database_ID", variable.name = "comparison.replicate", value.name = "absolute.psi") %>% .$absolute.psi %>% na.omit), main = "distribution of PSI values for comparisons with a p value of \n between 0.35 and 0.4")
+plot(density(long_tibble_of_psisigma_DEXSeq_results[long_tibble_of_psisigma_DEXSeq_results$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_12h" & long_tibble_of_psisigma_DEXSeq_results$pvalue < 0.4 & long_tibble_of_psisigma_DEXSeq_results$pvalue > 0.35, c(1, vector_col.index_absolute.psi.comparison.1, vector_col.index_absolute.psi.comparison.2)] %>% melt(.,id.vars = "database_ID", variable.name = "comparison.replicate", value.name = "absolute.psi") %>% .$absolute.psi %>% na.omit), main = "distribution of PSI values for comparisons with a p value of \n between 0.35 and 0.4")
   
 # plot dpsi distribution
 pdf(paste(qualitycheck_results_dir, "qualityplot_dpsi_density.distribution.pdf", sep = "")) 
   
-  plot(density(wide_tibble_of_psisigma_results_allcomparisons_final[, "dpsi"] %>% na.omit %>% unlist), xlab = "dpsi", ylab = "frequency density", main = "PSI-Sigma dpsi frequency density")
+  plot(density(long_tibble_of_psisigma_DEXSeq_results[, "dpsi"] %>% na.omit %>% unlist), xlab = "dpsi", ylab = "frequency density", main = "PSI-Sigma dpsi frequency density")
   
 dev.off()
 
 pdf(paste(qualitycheck_results_dir, "qualityplot_dpsi_CDF.pdf", sep = "")) 
   
-  plot(ecdf(wide_tibble_of_psisigma_results_allcomparisons_final[, "dpsi"] %>% na.omit %>% unlist), xlab = "dpsi", ylab = "cumulative frequency", main = "PSI-Sigma dpsi CDF")
+  plot(ecdf(long_tibble_of_psisigma_DEXSeq_results[, "dpsi"] %>% na.omit %>% unlist), xlab = "dpsi", ylab = "cumulative frequency", main = "PSI-Sigma dpsi CDF")
   
 dev.off()
-
-```
-
-## check for whether there is any dependence of number of exons detected vs. coverage - CURRENTLY NOT POSSIBLE!
-
-```{r eval=FALSE, include=FALSE}
-
-# number_of_junctions_detected_per_sample <- read.delim(paste(qualitycheck_results_dir, "number_of_junctions_detected_per_sample.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE) %>% as_tibble
-# 
-# coveragedata <- read.delim(paste(qualitycheck_results_dir, "coveragedata.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
-# 
-# num_junctions_vs_coverage <- dplyr::inner_join(number_of_junctions_detected_per_sample, coveragedata, by = "timepoint_name")
-# 
-# num_junctions_vs_coverage_pearson <- cor(num_junctions_vs_coverage[, 2], num_junctions_vs_coverage[, 3], method = "pearson") %>% signif(4)
-# 
-# num_junctions_vs_coverage_gradient <- lm(formula = junction_counts ~ read_count, num_junctions_vs_coverage) %>% .[[1]] %>% .[2] %>% signif(digits = 4)
-# 
-# num_junctions_vs_coverage_intercept <- lm(formula = junction_counts ~ read_count, num_junctions_vs_coverage) %>% .[[1]] %>% .[1] %>% signif(4)
-# 
-# ggplot(num_junctions_vs_coverage, aes(y = junction_counts, x = read_count)) +
-#   geom_point() +
-#   geom_smooth(method = "lm", formula = y~x, colour = "blue") +
-#   annotate(geom = "text", label = bquote("R"^2 ~ "=" ~ .(num_junctions_vs_coverage_pearson)), x = 3.75e7, y = 244000, color = "blue") +
-#   annotate(geom = "text", label = bquote("y =" ~ .(num_junctions_vs_coverage_gradient) ~ "x +" ~ .(num_junctions_vs_coverage_intercept)), x = 3.75e7, y = 240000, color = "blue") +
-#   ggtitle(paste("plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", sep = "")) +
-#   xlab("Sequencing Depth") +
-#   ylab("Number of splice junctions detected") +
-#   theme_bw() +
-#   theme(text = element_text(family = "Helvetica")) +
-#   ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".pdf", sep = ""), device = "pdf", dpi = 600, width = 15, height = 15, units = "cm") +
-#   ggsave(filename = paste(qualitycheck_results_dir, "plot_of_number_of_junctions_per_sample_vs_coverage_OBseries", ".svg", sep = ""), device = "svg", dpi = 600, width = 15, height = 15, units = "cm")
 
 ```
 
@@ -3377,12 +3770,12 @@ dev.off()
 
 ```{r}
 
-# wide_tibble_of_psisigma_results_allcomparisons_final_no.IR <- wide_tibble_of_psisigma_results_allcomparisons_final[grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$splicemode, pattern = "IR"), ]
+# wide_tibble_of_psisigma_results_allcomparisons_final_no.IR <- long_tibble_of_psisigma_DEXSeq_results[grep(x = long_tibble_of_psisigma_DEXSeq_results$splicemode, pattern = "IR"), ]
 
 # get row indices of first/last exon and NMD annotations.
 ## first exon
-row.indices_first_exon_ref <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "first_exon")
-row.indices_first_exon_recon <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "first_exon")
+row.indices_first_exon_ref <- grep(x = long_tibble_of_psisigma_DEXSeq_results$first_or_last_exon_reference, pattern = "first_exon")
+row.indices_first_exon_recon <- grep(x = long_tibble_of_psisigma_DEXSeq_results$first_or_last_exon_recon, pattern = "first_exon")
 
 row.indices_first_exon_ref.recon.intersection <- intersect(row.indices_first_exon_ref, row.indices_first_exon_recon)
 row.indices_first_exon_ref.recon.union <- union(row.indices_first_exon_ref, row.indices_first_exon_recon)
@@ -3393,8 +3786,8 @@ message("number of first exons in BOTH recon and reference: ", row.indices_first
 message("first exons jaccard similarity: ", (row.indices_first_exon_ref.recon.intersection %>% length)/(row.indices_first_exon_ref.recon.union %>% length))
 
 ## last exon
-row.indices_last_exon_ref <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "last_exon")
-row.indices_last_exon_recon <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_recon, pattern = "last_exon")
+row.indices_last_exon_ref <- grep(x = long_tibble_of_psisigma_DEXSeq_results$first_or_last_exon_reference, pattern = "last_exon")
+row.indices_last_exon_recon <- grep(x = long_tibble_of_psisigma_DEXSeq_results$first_or_last_exon_recon, pattern = "last_exon")
 
 row.indices_last_exon_ref.recon.intersection <- intersect(row.indices_last_exon_ref, row.indices_last_exon_recon)
 row.indices_last_exon_ref.recon.union <- union(row.indices_last_exon_ref, row.indices_last_exon_recon)
@@ -3405,8 +3798,8 @@ message("number of last exons in BOTH recon and reference: ", row.indices_last_e
 message("last exons jaccard similarity: ", (row.indices_last_exon_ref.recon.intersection %>% length)/(row.indices_last_exon_ref.recon.union %>% length))
 
 ## NMD
-row.indices_NMD_ref <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$NMD_reference, pattern = "TRUE")
-row.indices_NMD_recon <- grep(x = wide_tibble_of_psisigma_results_allcomparisons_final$NMD_recon, pattern = "TRUE")
+row.indices_NMD_ref <- grep(x = long_tibble_of_psisigma_DEXSeq_results$NMD_reference, pattern = "TRUE")
+row.indices_NMD_recon <- grep(x = long_tibble_of_psisigma_DEXSeq_results$NMD_recon, pattern = "TRUE")
 
 row.indices_NMD_ref.recon.intersection <- intersect(row.indices_NMD_ref, row.indices_NMD_recon)
 row.indices_NMD_ref.recon.union <- union(row.indices_NMD_ref, row.indices_NMD_recon)
@@ -3424,11 +3817,11 @@ message("NMD jaccard similarity: ", (row.indices_NMD_ref.recon.intersection %>% 
 
 ```{r}
 
-avg_exons_per_gene_all <- (wide_tibble_of_psisigma_results_allcomparisons_final$diff_exon_coords %>% unique %>% length)/(wide_tibble_of_psisigma_results_allcomparisons_final$matched_gene_names %>% unique %>% length)
+avg_exons_per_gene_all <- (long_tibble_of_psisigma_DEXSeq_results$diff_exon_coords %>% unique %>% length)/(long_tibble_of_psisigma_DEXSeq_results$matched_gene_names %>% unique %>% length)
 
 print(paste("There are", avg_exons_per_gene_all, "unique exons/gene detected overall"))
 
-tibble_all_exons_per_gene_freq <- wide_tibble_of_psisigma_results_allcomparisons_final %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons = n())
+tibble_all_exons_per_gene_freq <- long_tibble_of_psisigma_DEXSeq_results %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons = n())
 
 tibble_all_exons_per_gene_freq_2 <- tibble_all_exons_per_gene_freq %>% group_by(no_exons) %>% summarise(NumberOfGenesWithExonNumber = n())
 
@@ -3440,7 +3833,7 @@ ggplot(tibble_all_exons_per_gene_freq_2) +
   ggtitle(paste("frequency distribution of exons per gene\n1:2 ratio = ", tibble_all_exons_per_gene_freq_2[1, 2]/tibble_all_exons_per_gene_freq_2[2, 2], sep = "")) +
   # scale_x_continuous(trans = "log2") +
   ylim(c(0, max(tibble_all_exons_per_gene_freq_2$NumberOfGenesWithExonNumber) + 500)) +
-  scale_x_continuous(limits = c(0, 10), breaks = 1:10) +
+  scale_x_continuous(limits = c(0, 11), breaks = 1:11) +
   xlab("number of exons/gene") +
   ylab("number of genes") +
   theme_bw() +
@@ -3456,11 +3849,11 @@ ggplot(tibble_all_exons_per_gene_freq_2) +
 
 ```{r}
 
-avg_exons_per_gene_constitutive <- (tibble_constitutive_LSV_info$diff_exon_coords %>% unique %>% length)/(tibble_constitutive_LSV_info$matched_gene_names %>% unique %>% length)
+avg_exons_per_gene_constitutive <- (tibble_constitutive_LIV_info$diff_exon_coords %>% unique %>% length)/(tibble_constitutive_LIV_info$matched_gene_names %>% unique %>% length)
 
 print(paste("There are", avg_exons_per_gene_constitutive, "unique constitutive exons/gene detected"))
 
-tibble_constitutive_exons_per_gene_freq <- tibble_constitutive_LSV_info %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons = n())
+tibble_constitutive_exons_per_gene_freq <- tibble_constitutive_LIV_info %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons = n())
 
 tibble_constitutive_exons_per_gene_freq_2 <- tibble_constitutive_exons_per_gene_freq %>% group_by(no_exons) %>% summarise(NumberOfGenesWithExonNumber = n())
 
@@ -3471,7 +3864,7 @@ ggplot(tibble_constitutive_exons_per_gene_freq_2) +
   ggtitle(paste("frequency distribution of exons per gene\n1:2 ratio = ", tibble_constitutive_exons_per_gene_freq_2[1, 2]/tibble_constitutive_exons_per_gene_freq_2[2, 2], sep = "")) +
   # scale_x_continuous(trans = "log2") +
   ylim(c(0, max(tibble_constitutive_exons_per_gene_freq_2$NumberOfGenesWithExonNumber) + 500)) +
-  scale_x_continuous(limits = c(0, 10), breaks = 1:10) +
+  scale_x_continuous(limits = c(0, 11), breaks = 1:11) +
   xlab("number of exons/gene") +
   ylab("number of genes") +
   theme_bw() +
@@ -3502,7 +3895,7 @@ ggplot(tibble_differential_exons_per_gene_freq_2) +
   ggtitle(paste("frequency distribution of exons per gene\n1:2 ratio = ", tibble_differential_exons_per_gene_freq_2[1, 2]/tibble_differential_exons_per_gene_freq_2[2, 2], sep = "")) +
   # scale_x_continuous(trans = "log2") +
   ylim(c(0, max(tibble_differential_exons_per_gene_freq_2$NumberOfGenesWithExonNumber) + 200)) +
-  scale_x_continuous(limits = c(0, 10), breaks = 1:10) +
+  scale_x_continuous(limits = c(0, 11), breaks = 1:11) +
   xlab("number of exons/gene") +
   ylab("number of genes") +
   theme_bw() +
@@ -3521,13 +3914,21 @@ incl. NMD, first/last exon.
 ```{r}
 
 # band-aid: add columns for reference first/last exon.
-wide_tibble_of_psisigma_results_allcomparisons_final <- wide_tibble_of_psisigma_results_allcomparisons_final %>% 
-  add_column("first_exon_reference" = grepl(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "first_exon"),
-             "last_exon_reference" = grepl(x = wide_tibble_of_psisigma_results_allcomparisons_final$first_or_last_exon_reference, pattern = "last_exon"))
+long_tibble_of_psisigma_DEXSeq_results_first.last.reference <- long_tibble_of_psisigma_DEXSeq_results %>% 
+  add_column("first_exon_reference" = grepl(x = long_tibble_of_psisigma_DEXSeq_results$first_or_last_exon_reference, pattern = "first_exon"),
+             "last_exon_reference" = grepl(x = long_tibble_of_psisigma_DEXSeq_results$first_or_last_exon_reference, pattern = "last_exon"))
+
+tibble_constitutive_LIV_info_first.last.reference <- tibble_constitutive_LIV_info %>% 
+  add_column("first_exon_reference" = grepl(x = tibble_constitutive_LIV_info$first_or_last_exon_reference, pattern = "first_exon"),
+             "last_exon_reference" = grepl(x = tibble_constitutive_LIV_info$first_or_last_exon_reference, pattern = "last_exon"))
+
+wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% 
+  add_column("first_exon_reference" = grepl(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV$first_or_last_exon_reference, pattern = "first_exon"),
+             "last_exon_reference" = grepl(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV$first_or_last_exon_reference, pattern = "last_exon"))
 
 # category means splicemode + NMD status + first/last exon
 # also clean up the splicemode column
-tibble_exons_per_category_all <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% 
+tibble_exons_per_category_all <- long_tibble_of_psisigma_DEXSeq_results_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% 
   # , any_NMD
   group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_all = n())
 
@@ -3540,7 +3941,7 @@ number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_cat
 message("There are ", number_first_exon_all_exons*100/all_exons_count, "% first exons overall.")
 message("There are ", number_last_exon_all_exons*100/all_exons_count, "% last exons overall.")
 
-tibble_exons_per_category_constitutive <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_constitutive = n())
+tibble_exons_per_category_constitutive <- tibble_constitutive_LIV_info_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_constitutive = n())
 
 constitutive_exons_count <- tibble_exons_per_category_constitutive$no_exons_constitutive %>% sum(na.rm = TRUE)
 # number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
@@ -3551,10 +3952,10 @@ number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[ti
 message("There are ", number_first_exon_constitutive_exons*100/constitutive_exons_count, "% first exons constitutive.")
 message("There are ", number_last_exon_constitutive_exons*100/constitutive_exons_count, "% last exons constitutive.")
 
-tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_differential = n())
+tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_exons_differential = n())
 
 differential_exons_count <- tibble_exons_per_category_differential$no_exons_differential %>% sum(na.rm = TRUE)
-# number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$any_NMD == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+# number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_wide_tibble_of_psisigma_results_allcomparisons_differentialcategory_differential$any_NMD == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$first_exon_reference == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$last_exon_reference == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 
@@ -3599,7 +4000,7 @@ ggplot() +
 
 # upset plot
 message("all exons")
-df <- wide_tibble_of_psisigma_results_allcomparisons_final %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- long_tibble_of_psisigma_DEXSeq_results_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -3626,7 +4027,7 @@ ComplexHeatmap::UpSet(upset_combs,
 dev.off()
 
 message("all constitutive")
-df <- tibble_constitutive_LSV_info %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- tibble_constitutive_LIV_info_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -3653,7 +4054,7 @@ ComplexHeatmap::UpSet(upset_combs,
 dev.off()
 
 message("all differential")
-df <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 # , "any_NMD"
  # + any_NMD
 
@@ -3689,6 +4090,7 @@ pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_pe
 dev.off()
 
 ```
+
 ## graph the no. of exons detected vs. maximum transcript length
 
 ### fetch max. transcript lengths for genes in biomart
@@ -3700,13 +4102,12 @@ tibble_max_transcript_length_per_gene <- getBM(attributes = c("external_gene_nam
 
 ```
 
-
 ```{r}
 
-exons_per_gene_constitutive <- wide_tibble_of_psisigma_results_allcomparisons_constitutive %>% 
+exons_per_gene_constitutive <- tibble_constitutive_LIV_info_first.last.reference %>% 
   dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons_constitutive = n())
 
-exons_per_gene_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% 
+exons_per_gene_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference %>% 
   dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% group_by(matched_gene_names) %>% summarise(no_exons_differential = n())
 
 exons_per_gene_merged <- dplyr::full_join(exons_per_gene_constitutive, exons_per_gene_differential, by = "matched_gene_names")
@@ -3736,37 +4137,26 @@ ggplot(long_tibble_numberof_exons_per_gene_maxCPM_maxtranscriptlength) +
 
 ## Plot PCA to check for technical variation in absolute PSI values
 
-### import the .gct files
+### can use the raw table. Convert it to wide.
 
 ```{r}
 
-list_of_psisigma_gct_tibbles <- future_map(.x = vector_of_comparisons_final, .f = ~read.delim(paste(psisigma_results_dir, .x, "_r5_ir3.gct", sep = ""), sep = "\t", skip = 2, check.names = FALSE, na.strings = c("-")) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble", "psisigma_results_dir"))) %>%
-  # get rid of the stupid bracket in front of every colname
-  purrr::map(.f = function(a1) {
-    colnames(a1) <- gsub(x = colnames(a1), pattern = "\\(\\)", replacement = "")
-    return(a1)
-  } )
+long_tibble_raw_counts_PSI_for_PCA <- wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3[, c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3", "comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3", "comparison")]  %>% 
+  # rename the comparison column
+  dplyr::mutate_at(.vars = "comparison", .funs = function(x) {gsub(x = x, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_(.*)", replacement = "\\1")} )
 
-```
+# group split and left join
+list_of_tibble_raw_counts_PSI_for_PCA_by_comparison <- long_tibble_raw_counts_PSI_for_PCA %>% dplyr::group_split(comparison)
 
-### process the .gct files
+names(list_of_tibble_raw_counts_PSI_for_PCA_by_comparison) <- list_of_tibble_raw_counts_PSI_for_PCA_by_comparison %>% purrr::map(~.x$comparison %>% unique) %>% unlist
 
-```{r}
+# rename tibbles to be timepoint-specific
+list_of_tibble_raw_counts_PSI_for_PCA_by_comparison <- purrr::map2(.x = list_of_tibble_raw_counts_PSI_for_PCA_by_comparison,
+                                                                   .y = names(list_of_tibble_raw_counts_PSI_for_PCA_by_comparison),
+                                                                   .f = ~.x %>% dplyr::select(-comparison) %>% setNames(c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", paste(.y, c("|r1", "|r2", "|r3"), sep = ""), paste("ud", c("|r1", "|r2", "|r3"), sep = ""))) %>% na.omit %>% dplyr::distinct())
 
-list_of_psisigma_gct_tibbles_processed <- purrr::map(.x = list_of_psisigma_gct_tibbles,
-                                                     .f = ~.x %>% 
-                                                       dplyr::select(-Annotation) %>% 
-                                                       # reshape2::melt(id.vars = c("Event ID"), value.name = "PSI", variable.name = "sample") %>% 
-                                                       as_tibble)
-
-# select only the ud comparisons, remove NA and reduce into a left join (we're not keeping the shit not in common anyways.)
-wide_tibble_gct_tibbles_ud.no.na <- list_of_psisigma_gct_tibbles_processed %>% 
-  purrr::map(~.x %>% na.omit) %>% 
-  purrr::keep(.p = ~str_detect(string = colnames(.x), pattern = "ud") %>% any == TRUE) %>% 
-  purrr::reduce(dplyr::left_join)
-
-# rbind and tibblise - yeah... we're not going to do this.
-# tibble_psisigma_gct_processed <- list_of_psisigma_gct_tibbles_processed %>% rbindlist %>% as_tibble %>% unique
+# reduce into a left join
+wide_tibble_raw_counts_PSI_for_PCA <- list_of_tibble_raw_counts_PSI_for_PCA_by_comparison %>% purrr::reduce(.f = inner_join , by = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", paste("ud", c("|r1", "|r2", "|r3"), sep = ""))) %>% dplyr::distinct()
 
 ```
 
@@ -3776,15 +4166,11 @@ colnames should be timepoint|replicate.
 
 ```{r}
 
-wide_matrix.tibble_gct_tibbles_ud.no.na <- wide_tibble_gct_tibbles_ud.no.na %>% 
-  dplyr::select(-`Event ID`)
+# edit timepoint names
+colnames(wide_tibble_raw_counts_PSI_for_PCA) <- gsub(x = colnames(wide_tibble_raw_counts_PSI_for_PCA), pattern = "24h", replacement = "1d")
+colnames(wide_tibble_raw_counts_PSI_for_PCA) <- gsub(x = colnames(wide_tibble_raw_counts_PSI_for_PCA), pattern = "ud", replacement = "MSC")
 
-colnames(wide_matrix.tibble_gct_tibbles_ud.no.na) <- paste(gsub(x = colnames(wide_matrix.tibble_gct_tibbles_ud.no.na), pattern = "BM_MSC_to_OB_(.*d|.*h)_(.*)", replacement = "\\1"), "|", gsub(x = colnames(wide_matrix.tibble_gct_tibbles_ud.no.na), pattern = "BM_MSC_to_OB_(.*d|.*h)_(.*)", replacement = "\\2"), sep = "")
-# edit
-colnames(wide_matrix.tibble_gct_tibbles_ud.no.na) <- gsub(x = colnames(wide_matrix.tibble_gct_tibbles_ud.no.na), pattern = "24h", replacement = "1d")
-colnames(wide_matrix.tibble_gct_tibbles_ud.no.na) <- gsub(x = colnames(wide_matrix.tibble_gct_tibbles_ud.no.na), pattern = "ud", replacement = "MSC")
-
-plot_PCA_for_timepoint_and_replicate(wide_matrix.tibble_gct_tibbles_ud.no.na %>% na.omit, 
+plot_PCA_for_timepoint_and_replicate(wide_tibble_raw_counts_PSI_for_PCA %>% dplyr::select(-database_ID, -event_region_coords, -diff_exon_coords, -splicemode), 
                                      timepoint_order = vector_OBseries_timepoints_edited, 
                                      replicate_order = c("r1", "r2", "r3"), 
                                      PCA_depths_y = c(1, 2, 3), 
@@ -3794,85 +4180,6 @@ plot_PCA_for_timepoint_and_replicate(wide_matrix.tibble_gct_tibbles_ud.no.na %>%
                                      graph_title = "PCA plot of PSI values, PSI-Sigma", 
                                      width = 14, 
                                      height = 12)
-
-```
-
-
-### Define the column indices of the table which contain the absolute PSI values
-
-```{r}
-
-vector_col.indices_absolute.psi <- grep(x = colnames(wide_tibble_of_psisigma_result_tibbles_processed_ud.only), pattern = "absolute.psi")
-
-```
-
-### show that there are quite alot of missing values across the timeseries
-
-```{r}
-
-library(Amelia)
-
-missmap(wide_tibble_of_psisigma_result_tibbles_processed_ud.only[, vector_col.indices_absolute.psi], pdfstub = paste(qualitycheck_results_dir, "heatmap_missingness_absolute.PSI.pdf", sep = ""), margins = c(10, 5))
-
-cat("There are", nrow(wide_tibble_of_psisigma_result_tibbles_processed_ud.only), "differential exons in total detected across the time series.\n")
-cat("Of those,", nrow(wide_tibble_of_psisigma_result_tibbles_processed_ud.only %>% na.omit), "differential exons have a complete time profile with all replicates intact.")
-
-```
-
-### plot PCA using only all intact values, raw
-
-```{r}
-
-# PCA analysis
-
-PCA_combined_count <- prcomp(wide_tibble_of_psisigma_result_tibbles_processed_ud.only[, vector_col.indices_absolute.psi] %>% na.omit)
-
-# plot standard deviations 
-
-PCA_stdev <- tibble(PC = 1:(PCA_combined_count[["sdev"]] %>% length), stdev = PCA_combined_count[["sdev"]])
-PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
-PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
-
-ggplot(PCA_variance) + 
-  geom_col(aes(y = variance_explained, x = PC, fill = PC)) +
-  scale_fill_gradientn(colours = heat.colors(n = (PCA_combined_count[["sdev"]] %>% length))) +
-  ggtitle(paste("PCA variance distribution amongst PCs based on absolute PSI (raw)", sep = "")) +
-  xlab("PC") +
-  ylab("Variance explained (%)") +
-  theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_absolute_PSI_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "barplot_PCA_stdevs_based_on_absolute_PSI_raw.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
-
-# plot loadings
-
-PCA_loadings <- PCA_combined_count[["rotation"]] %>% as_tibble(rownames = "sample")
-PCA_loadings <- add_column(PCA_loadings, timepoint = gsub(x = PCA_loadings$sample, pattern = "(.*)_absolute.psi_(\\d)", replacement = "\\1"))
-PCA_loadings <- add_column(PCA_loadings, replicatenumber = gsub(x = PCA_loadings$sample, pattern = "(.*)_absolute.psi_(\\d)", replacement = "\\2"))
-
-ggplot(PCA_loadings) + 
-  geom_point(aes(y = PC2, x = PC1, shape = replicatenumber, color = timepoint, size = 2)) +
-  scale_color_brewer(palette = "Spectral") +
-  ggtitle(paste("PC2 vs. PC1 loadings based on absolute PSI (raw)", sep = "")) +
-  xlab(paste("PC1 (", PCA_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-  ylab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-  scale_color_manual(breaks = vector_OBseries_timepoints, limits = vector_OBseries_timepoints, labels = vector_OBseries_timepoints, values = brewer.pal(8, "Spectral")) +
-  theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_absolute_PSI_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_absolute_PSI_raw.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm")
-
-ggplot(PCA_loadings) + 
-  geom_point(aes(y = PC3, x = PC2, shape = replicatenumber, color = timepoint, size = 2)) +
-  scale_color_brewer(palette = "Spectral") +
-  ggtitle(paste("PC3 vs. PC2 loadings based on absolute PSI (raw)", sep = "")) +
-  xlab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-  ylab(paste("PC3 (", PCA_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-  scale_color_manual(breaks = vector_OBseries_timepoints, limits = vector_OBseries_timepoints, labels = vector_OBseries_timepoints, values = brewer.pal(8, "Spectral")) +
-  theme_bw() +
-  theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_absolute_PSI_raw.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
-  ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_absolute_PSI_raw.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm")
 
 ```
 
@@ -4014,17 +4321,17 @@ list_of_attributes_to_retrieve <- list("interpro" = c("ensembl_peptide_id", "int
 ```{r eval=FALSE, include=FALSE}
 
 # query biomart
-list_of_tibbles_biomart_domain_annotation <- future_map(.x = list_of_attributes_to_retrieve, .f = ~getBM(attributes = .x, mart = ensembl_mart) %>% as_tibble %>% na.omit, .progress = TRUE, .options = future_options(globals = c("getBM", "ensembl_mart")))
+list_of_tibbles_biomart_domain_annotation <- future_map(.x = list_of_attributes_to_retrieve, .f = ~getBM(attributes = .x, mart = ensembl_mart, curl = RCurl::getCurlMultiHandle()) %>% as_tibble %>% na.omit, .progress = TRUE, .options = future_options(globals = c("getBM", "ensembl_mart")))
 
 # write tables
-future_map2(.x = list_of_tibbles_biomart_domain_annotation, .y = names(list_of_tibbles_biomart_domain_annotation), .f = ~write.table(.x, file = paste(shared_dir, "table_biomart_ENSP_to_", .y, ".txt", sep = ""), row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t"), .progress = TRUE, .options = future_options(globals = FALSE))
+future_map2(.x = list_of_tibbles_biomart_domain_annotation, .y = names(list_of_tibbles_biomart_domain_annotation), .f = ~write.table(.x, file = paste(shared_dir, "table_biomart_ENSP_to_", .y, "_38.98.txt", sep = ""), row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t"), .progress = TRUE, .options = future_options(globals = FALSE))
 
 ```
 
 ```{r}
 
 # read tables
-list_of_tibbles_biomart_domain_annotation <- future_map(.x = names(list_of_attributes_to_retrieve), .f = ~read.delim(paste(shared_dir, "table_biomart_ENSP_to_", .x, ".txt", sep = ""), row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble"))) %>% 
+list_of_tibbles_biomart_domain_annotation <- future_map(.x = names(list_of_attributes_to_retrieve), .f = ~read.delim(paste(shared_dir, "table_biomart_ENSP_to_", .x, "_38.98.txt", sep = ""), row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble"))) %>% 
   set_names(names(list_of_attributes_to_retrieve))
 
 # rename columns of each nested tibble to be consistent
@@ -4113,10 +4420,11 @@ We just consider differential regions to be any differential exon.
 
 query_name <- "all_differential"
 
-# set-up ALL differential exons for looping
-list_constituent_junctions_for_query <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% (function(input_table) {
+# set up list of exon coords for looping
+## split into IR and non-IR
+list_exons_for_query_non.IR <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(!str_detect(string = splicemode, pattern = "IR")) %>% (function(input_table) {
   
-  output_list <- input_table[, c("diff_exon_coords", "splicemode", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% 
+  output_list <- input_table[, c("diff_exon_coords", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% 
     as_tibble %>% 
     unique %>%
     array_tree
@@ -4125,34 +4433,131 @@ list_constituent_junctions_for_query <- wide_tibble_of_psisigma_results_allcompa
   
 } )
 
-## match exons to reference annotation
-list_ref_entries_matched_to_constituent_junctions <- list_constituent_junctions_for_query %>% future_map(
+list_exons_for_query_IR <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(str_detect(string = splicemode, pattern = "IR")) %>% (function(input_table) {
+  
+  output_list <- input_table[, c("diff_exon_coords", "diff_exon_chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% 
+    as_tibble %>% 
+    unique %>%
+    array_tree
+  
+  return(output_list)
+  
+} )
+
+# match exons to reference annotation
+## easy for non-IR
+list_ref_entries_matched_to_exons_non.IR <- list_exons_for_query_non.IR %>% future_map(
   .f = ~purrr::splice(.x,
                       
                       # DEBUG ###
-                      # .x <- list_constituent_junctions_for_query[[1]]
+                      # .x <- list_constituent_junctions_for_query[[100]]
                       ###########
                       
                       "ref_matched_exons" = list(
                         extract_overlapping.exons(.x, tibble_ref_gtf_original, stranded = TRUE)
-                                                )
-                      ) %>% 
+                      )
+  ) %>% 
     # extract vector of matched transcripts from the above
     purrr::splice(
       "vector_matched_transcript_ids" = .$ref_matched_exons %>% .$transcript_id %>% unique %>% na.omit
-    )
-    , 
-                      .progress = TRUE, 
-                      .options = future_options(globals = c("tibble_ref_gtf_original", "extract_overlapping.exons"))) %>% 
-  purrr::discard(.x = ., .p = ~nrow(.x$ref_matched_exons) == 0)
+    ), 
+  .progress = TRUE, 
+  .options = future_options(globals = c("tibble_ref_gtf_original", "extract_overlapping.exons"))) 
+
+# %>% purrr::discard(.x = ., .p = ~nrow(.x$ref_matched_exons) == 0)
+
+## hard for IR
+### junction-flanking exon matches for IR events
+list_ref_entries_matched_to_IR_junctions <- future_imap(.x = list_exons_for_query_IR, .f = ~list(
+  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf_original, .y), 
+  "diff_exon_coords" = .x$diff_exon_coords,
+  "diff_exon_chr" = .x$diff_exon_chr,
+  "diff_exon_start" = .x$diff_exon_start,
+  "diff_exon_end" = .x$diff_exon_end,
+  "matched_strand" = .x$matched_strand), 
+  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf_original", "extract_junction.flanking.exons")))
+
+### use the IR-junction-matched flanking exons to find the IR exon.
+list_ref_entries_matched_to_exons_non.IR <- future_imap(.x = list_ref_entries_matched_to_IR_junctions, .f = function(.x, .y) {
   
-# GENERATE GENOME-RELATIVE COORDS FOR EVERY DIFFERENTIAL POSITION.
-# also generate genome-relative coords for every CDS position of transcripts with a matched exon. this is necessary because we need to deal with gaps.
-list_genome_relative_exonic_coords <- future_map(.x = list_ref_entries_matched_to_constituent_junctions, .f = function(.x) {
+  # message("now processing entry number: ", .y)
   
   # DEBUG ###
-  # .x <- list_ref_entries_matched_to_constituent_junctions[[2]]
+  # .x <- list_ref_matching_exon_entries_all_array.tree_IR[[216]]
+  # tibble_ref_gtf <- tibble_ref_gtf
+  # tibble_recon_gtf <- tibble_recon_gtf
   ###########
+  # 
+  # tibble_ref_gtf <<- tibble_ref_gtf
+  # tibble_recon_gtf <<- tibble_recon_gtf
+  
+  chr <- .x$diff_exon_chr %>% paste %>% trimws
+  start <- .x$diff_exon_start %>% paste %>% trimws %>% type.convert
+  end <- .x$diff_exon_end %>% paste %>% trimws %>% type.convert
+  strand <- .x$matched_strand %>% paste %>% trimws
+  vec_ref_transcripts_matched_to_junction <- .x$matched_ref_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
+  
+  # check reference annotation - but only if the junction was matched to reference in the first place.
+  tibble_all_confirmed_IR_entries_ref <- "uninit"
+  
+  if (all(is.na(vec_ref_transcripts_matched_to_junction)) != TRUE) {
+    
+    # match IR region to reference
+    tibble_ref_gtf_subset_IR_overlap <- tibble_ref_gtf[tibble_ref_gtf$seqnames == chr %>% trimws, ] %>% .[.$strand == strand %>% trimws, ] %>% .[.$start <= ((start %>% as.numeric) - 2) & .$end >= ((end %>% as.numeric) + 2), ] %>% .[.$type == "exon", ]
+  
+    # get all the entries which matched to the junction
+    tibble_ref_gtf_subset_junction_matching_entries <- dplyr::semi_join(tibble_ref_gtf[tibble_ref_gtf$type == "exon", ], vec_ref_transcripts_matched_to_junction, by = "transcript_id")
+    
+    # extract all the start coords of the junction-matched entries
+    vector_junction_matched_start_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "start"]
+    # find which IR matched entry has any same start coord
+    tibble_ref_gtf_subset_IR_overlap_start.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_start_coords)
+    
+    # extract all the end coords of the junction-matched entries
+    vector_junction_matched_end_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "end"]
+    # find which IR matched entry has any same end coord
+    tibble_ref_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_end_coords)
+    
+    # extract all the gene names of the junction-matched entries
+    vector_junction_matched_gene_names <- tibble_ref_gtf_subset_junction_matching_entries[, "gene_name"]
+    # find which IR matched entry has any same end coord
+    tibble_ref_gtf_subset_IR_overlap_gene.name.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_gene_names)
+    
+    tibble_union_start.and.end.matched <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
+                                            tibble_ref_gtf_subset_IR_overlap_end.matched,
+                                            tibble_ref_gtf_subset_IR_overlap_gene.name.matched) %>% purrr::reduce(dplyr::union)
+    
+    if (nrow(tibble_union_start.and.end.matched) == 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- "uninit"
+      
+    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
+      
+      tibble_all_confirmed_IR_entries_ref <- tibble_union_start.and.end.matched
+      
+    }
+    
+  }
+  
+}, .progress = TRUE, .options = future_options(globals = c("as_tibble", "tibble_ref_gtf")))
+
+# add the matched CDS from the exon number and transcript ids of matched exons
+list_ref_entries_matched_to_exons.and.CDS <- list_ref_entries_matched_to_exons %>% future_map(
+  .f = ~purrr::splice(.x,
+                      "ref_matched_CDS" = dplyr::semi_join(tibble_ref_gtf_original[tibble_ref_gtf_original$type == "CDS", ], .x$ref_matched_exons %>% .[, c("transcript_id", "exon_number")], by = c("transcript_id", "exon_number"))
+  ), 
+  .progress = TRUE, 
+  .options = future_options(globals = c("tibble_ref_gtf_original")))
+
+# GENERATE GENOME-RELATIVE COORDS FOR EVERY DIFFERENTIAL POSITION.
+# also generate genome-relative coords for every CDS position of transcripts with a matched exon. this is necessary because we need to deal with gaps.
+list_genome_relative_exonic.and.CDS_coords <- future_imap(.x = list_ref_entries_matched_to_exons.and.CDS, .f = function(.x, .y) {
+  
+  # DEBUG ###
+  # .x <- list_ref_entries_matched_to_exons.and.CDS[[2]]
+  ###########
+  
+  cat("\nprocessing entry number: ", .y)
   
   ref_gtf_table <<- tibble_ref_gtf_original
   input_list <- .x
@@ -4162,42 +4567,17 @@ list_genome_relative_exonic_coords <- future_map(.x = list_ref_entries_matched_t
     input_list,
     
     # take the maximum range (which is at most 4nt bigger than the actual exon) because of the matching tolerance of +/-2 nt
-    "vector_genomic_coords_of_all_differential_exon_positions" = (input_list$ref_matched_exons$start %>% min):(input_list$ref_matched_exons$end %>% max),
-    
-    "genomic_coords_of_all_CDS_positions_per_protein_id" = list(input_list$vector_matched_transcript_ids %>% (function(x) {
-      
-      # DEBUG ###
-      # x <- input_list$vector_matched_transcript_ids
-      ###########
-      
-      # get the CDS entries by referring to the transcript_id of matched exons.
-      list_ref_CDS_entries_from_matched_exons <- x %>% na.omit %>% unique %>% array_tree %>% 
-        purrr::map(.x = ., .f = ~ref_gtf_table[ref_gtf_table$transcript_id == .x & ref_gtf_table$type == "CDS", ] %>% 
-        .[apply(X = ., MARGIN = 1, FUN = function(X) {all(is.na(X)) == FALSE}), ])
-      
-      # get the protein_ids of the CDS entries. this is required downstream.
-      list_CDS_protein_ids <- list_ref_CDS_entries_from_matched_exons %>% purrr::map(~.x$protein_id %>% na.omit %>% unique %>% as.character)
-      
-      # generate sorted CDS positions for each protein_id (technically for each transcript_id)
-      list_genome_relative_coords_of_CDS_positions_per_protein_id <- list_ref_CDS_entries_from_matched_exons %>% purrr::map_if(.p = ~nrow(.x) > 0, .f = ~sort_tibble_according_to_strand(.x))
-      
-      # name the lists using the protein_id
-      names(list_genome_relative_coords_of_CDS_positions_per_protein_id) <- list_CDS_protein_ids
-      
-      list_genome_relative_coords_of_CDS_positions_per_protein_id <- list_genome_relative_coords_of_CDS_positions_per_protein_id[which(names(list_genome_relative_coords_of_CDS_positions_per_protein_id) != "character(0)")]
-      
-      return(list_genome_relative_coords_of_CDS_positions_per_protein_id)
-      
-    } ) )
+    "vector_genomic_coords_of_all_differential_exon_positions" = if (nrow(input_list$ref_matched_exons) !=0) {(input_list$ref_matched_exons$start %>% min):(input_list$ref_matched_exons$end %>% max)} else {return(NA)},
+    "vector_genomic_coords_of_all_differential_CDS_positions" = if (nrow(input_list$ref_matched_CDS) !=0) {(input_list$ref_matched_CDS$start %>% min):(input_list$ref_matched_CDS$end %>% max)} else {return(NA)}
     
     )
   
   return(output_list)
     
-    }, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf_original", "sort_tibble_according_to_strand", "as_tibble", "tibble::enframe", "list_ref_CDS_entries_from_matched_exons")) ) %>%
+    }, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf_original", "as_tibble", "tibble::enframe")) ) %>%
     
     # drop exons that don't have any differential regions.
-    purrr::discard(.x = ., .p = ~length(.x$vector_genomic_coords_of_all_differential_exon_positions) == 0)
+    purrr::discard(.x = list_genome_relative_exonic.and.CDS_coords[1], .p = ~(length(.x$vector_genomic_coords_of_all_differential_exon_positions) == 0) & (length(.x$vector_genomic_coords_of_all_differential_CDS_positions) == 0))
 
 # take only the differential exonic positions
 # first pluck positions by chromosome

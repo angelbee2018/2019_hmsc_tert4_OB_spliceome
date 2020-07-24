@@ -15,8 +15,8 @@ library(tidyverse)
 library(gtools)
 library(extrafont)
 # font_import(paths = "~/.local/share/fonts/")
-loadfonts(device = "pdf")
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# loadfonts(device = "pdf")
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
 library(genefilter)
@@ -34,7 +34,7 @@ plan(multiprocess)
 memory.limit(100000)
 
 # library(biomaRt)
-# ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "uswest")
+ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
 library(systemPipeR)
 library(GOstats)
 library(PFAM.db)
@@ -46,26 +46,26 @@ library(ggdendro)
 library(data.table)
 library(Rfast)
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/media/Ubuntu/sharedfolder/"
+# shared_dir <- "Z:/"
 
-results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
-# results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+sampleandaccessionlists_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/"
 
-results_directory_figures <- paste(results_dir, "figures/", sep="")
+# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
+R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/results/"
 
-if(! dir.exists(results_directory_figures) ) {
-     dir.create(results_directory_figures, recursive = TRUE)}
+if(! dir.exists(R_processing_results_dir) ) {
+     dir.create(R_processing_results_dir, recursive = TRUE)}
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
-# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
+tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
-UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
-# UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+# UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 vector_OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
@@ -1103,7 +1103,7 @@ We do this so that we can get NMD and and first/last exon info
 
 ## import union_junc_coor table
 
-```{r eval=FALSE, include=FALSE}
+```{r}
 
 UNION_junc_coor_table <- read.delim(paste(UNION_junc_coor_path), sep = "\t", stringsAsFactors = FALSE, col.names = c("chr", "start", "end", "strand", "junction_ID")) %>% as_tibble
 
@@ -1127,13 +1127,13 @@ list_gtf_matching_exon_entries_extracted <- purrr::map2(.x = list_gtf_matching_e
 tibble_gtf_matching_exon_entries_extracted <- list_gtf_matching_exon_entries_extracted %>% rbindlist %>% as_tibble
 
 # write table 
-write.table(x = tibble_gtf_matching_exon_entries_extracted, file = paste(results_directory_figures, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_gtf_matching_exon_entries_extracted, file = paste(R_processing_results_dir, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
 ```{r}
 
-tibble_gtf_matching_exon_entries_extracted <- read.delim(paste(results_directory_figures, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+tibble_gtf_matching_exon_entries_extracted <- read.delim(paste(R_processing_results_dir, "wide_table_of_UNION_junc_with_NMD.first.last_info.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
 
 ```
 
@@ -1141,16 +1141,16 @@ tibble_gtf_matching_exon_entries_extracted <- read.delim(paste(results_directory
 
 only the detailed tables can link each AS_event_ID to their contributing junctions.
 
-```{r eval=FALSE, include=FALSE}
+```{r}
 
-list_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree %>% flatten
+list_of_timepoint_comparisons_final <- read.delim(paste(sampleandaccessionlists_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree %>% flatten
 
 list_of_AS_events <- c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events") %>% array_tree %>% flatten
 
 # read tables into environment
 
-list_of_detailed_tables <- future_map(.x = list_of_timepoint_comparisons_final, .f = ~purrr::map2(.x = .x, .y = list_of_AS_events, .f = ~read.delim(file = paste(results_dir, "final_JUM_output_", .x, "/", list.files(path = paste(results_dir, "final_JUM_output_", .x, "/", sep = ""), pattern = paste("(.)", .y, "(.*)detailed.txt", sep = "")), sep = ""), na.strings = c("NONE", "NA", "INF", "Inf") , sep = "\t", stringsAsFactors = FALSE) %>% as_tibble %>% add_column(., "splicemode" = .y)) %>% 
-                                        set_names(list_of_AS_events), .progress = TRUE, .options = future_options(globals = c("list_of_AS_events", "results_dir", "tibble"))) %>% set_names(list_of_timepoint_comparisons_final)
+list_of_detailed_tables <- future_map(.x = list_of_timepoint_comparisons_final, .f = ~purrr::map2(.x = .x, .y = list_of_AS_events, .f = ~read.delim(file = paste(R_processing_results_dir, "final_JUM_output_", .x, "/", list.files(path = paste(R_processing_results_dir, "final_JUM_output_", .x, "/", sep = ""), pattern = paste("(.)", .y, "(.*)detailed.txt", sep = "")), sep = ""), na.strings = c("NONE", "NA", "INF", "Inf") , sep = "\t", stringsAsFactors = FALSE) %>% as_tibble %>% add_column(., "splicemode" = .y)) %>% 
+                                        set_names(list_of_AS_events), .progress = TRUE, .options = future_options(globals = c("list_of_AS_events", "R_processing_results_dir", "tibble"))) %>% set_names(list_of_timepoint_comparisons_final)
 
 # bind rows for each comparison
 list_of_detailed_tables_2 <- future_map(.x = list_of_detailed_tables, .f = ~rbindlist(.x), .progress = TRUE, .options = future_options(globals = c("rbindlist")))
@@ -1173,8 +1173,8 @@ list_AS.structure.ID.processed <- vector_AS.structure.ID.processed %>% gsub(x = 
 unlist_AS.structure.ID.processed <- future_map(.x = list_AS.structure.ID.processed, .f = ~paste("Junction_", .x, sep = "") %>% paste(collapse = ","), .progress = TRUE, .options = future_options(globals = FALSE)) %>% unlist
 wide_tibble_of_all_detailed_tables_with_na <- wide_tibble_of_all_detailed_tables_with_na %>% add_column("contributing_junctions" = unlist_AS.structure.ID.processed, .after = "AS_structure_ID")
 
-save(wide_tibble_of_all_detailed_tables_with_na, file = paste(results_dir, "wide_tibble_of_all_detailed_tables_with_na.tibble", sep = ""))
-load(file = paste(results_dir, "wide_tibble_of_all_detailed_tables_with_na.tibble", sep = ""))
+save(wide_tibble_of_all_detailed_tables_with_na, file = paste(R_processing_results_dir, "wide_tibble_of_all_detailed_tables_with_na.tibble", sep = ""))
+load(file = paste(R_processing_results_dir, "wide_tibble_of_all_detailed_tables_with_na.tibble", sep = ""))
 
 # dedupe the detailed table by AS_event_ID
 wide_tibble_AS.event.ID_mapping_to_composite_coords <- wide_tibble_of_all_detailed_tables_with_na %>% 
@@ -1234,7 +1234,7 @@ plot_PCA_for_timepoint_and_replicate(matrixtable = tibble_PCA_matrix %>% na.omit
                                      replicate_order = c("r1", "r2", "r3"),
                                      width = 14,
                                      height = 12,
-                                     save_dir = results_directory_figures,
+                                     save_dir = R_processing_results_dir,
                                      save_name = paste("PSI_values_JUM", sep = ""))
 
 ```
@@ -1257,7 +1257,7 @@ list_of_AS.event.ID_joined_to_annotation <- future_map2(.x = list_of_contributin
 # tibblise and save
 tibble_of_AS.event.ID_joined_to_annotation <- list_of_AS.event.ID_joined_to_annotation %>% rbindlist %>% as_tibble
 
-write.table(x = tibble_of_AS.event.ID_joined_to_annotation, file = paste(results_directory_figures, "tibble_of_AS.event.ID_joined_to_annotation.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_of_AS.event.ID_joined_to_annotation, file = paste(R_processing_results_dir, "tibble_of_AS.event.ID_joined_to_annotation.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1265,7 +1265,7 @@ write.table(x = tibble_of_AS.event.ID_joined_to_annotation, file = paste(results
 
 ```{r}
 
-vector_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL)
+vector_of_timepoint_comparisons_final <- read.delim(paste(R_processing_results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL)
 
 print(head(vector_of_timepoint_comparisons_final))
 
@@ -1275,7 +1275,7 @@ for (comparison in vector_of_timepoint_comparisons_final[, 1])
   for (AS_event in c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events"))
   {
     
-    assign(x = paste(comparison, "_", AS_event, "_simplified", sep = ""), value = read.delim(file = paste(results_dir, "final_JUM_output_", comparison, "/", list.files(path = paste(results_dir, "final_JUM_output_", comparison, "/", sep = ""), pattern = paste("(.)", AS_event, "(.*)simplified.txt", sep = "")), sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf"), colClasses = "character"))
+    assign(x = paste(comparison, "_", AS_event, "_simplified", sep = ""), value = read.delim(file = paste(R_processing_results_dir, "final_JUM_output_", comparison, "/", list.files(path = paste(R_processing_results_dir, "final_JUM_output_", comparison, "/", sep = ""), pattern = paste("(.)", AS_event, "(.*)simplified.txt", sep = "")), sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf"), colClasses = "character"))
   
   }
   
@@ -1650,14 +1650,14 @@ wide_table_all_splicemodes_split_with_na <- type_convert(wide_table_all_splicemo
 wide_table_all_splicemodes_split_with_na[, "isoform_ID"] <- paste(wide_table_all_splicemodes_split_with_na[, "splicemode"], wide_table_all_splicemodes_split_with_na[, "AS_event_ID"], wide_table_all_splicemodes_split_with_na[, "isoform_number"], sep = "_")
 
 # write table 
-write.table(x = wide_table_all_splicemodes_split_with_na, file = paste(results_directory_figures, "wide_table_of_all_JUM_results_", nrow(wide_table_all_splicemodes_split_with_na), "_entries_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_all_splicemodes_split_with_na, file = paste(R_processing_results_dir, "wide_table_of_all_JUM_results_", nrow(wide_table_all_splicemodes_split_with_na), "_entries_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # write all unique genes as background
 vec_all_JUM_genes_genesymbol <- wide_table_all_splicemodes_split_with_na$Gene %>% unique
-write.table(x = vec_all_JUM_genes_genesymbol, file = paste(results_dir, "table_of_all_JUM_genes_genesymbol.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+write.table(x = vec_all_JUM_genes_genesymbol, file = paste(R_processing_results_dir, "table_of_all_JUM_genes_genesymbol.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 # convert to ENSG
 vec_all_JUM_genes_ENSG <- getBM(filters = "external_gene_name", values = vec_all_JUM_genes_genesymbol, attributes = "ensembl_gene_id", mart = ensembl_mart)
-write.table(x = vec_all_JUM_genes_ENSG, file = paste(results_dir, "table_of_all_JUM_genes_ENSG.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+write.table(x = vec_all_JUM_genes_ENSG, file = paste(R_processing_results_dir, "table_of_all_JUM_genes_ENSG.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 ```
 
@@ -1666,7 +1666,7 @@ write.table(x = vec_all_JUM_genes_ENSG, file = paste(results_dir, "table_of_all_
 ```{r}
 
 # read the table of annotation
-tibble_of_AS.event.ID_joined_to_annotation <- read.delim(paste(results_directory_figures, "tibble_of_AS.event.ID_joined_to_annotation.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
+tibble_of_AS.event.ID_joined_to_annotation <- read.delim(paste(R_processing_results_dir, "tibble_of_AS.event.ID_joined_to_annotation.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
 
 # extract the row indices of IR event entries from the wide_table_all_splicemodes_split_with_na - treatment is more complicated.
 row.indices_IR_events <- which(wide_table_all_splicemodes_split_with_na$splicemode == "intron_retention")
@@ -1874,7 +1874,7 @@ tibble_as.event.id_with_summarised_annotation_all <- rbind(tibble_as.event.id_wi
 wide_table_all_splicemodes_split_with_na_with_ref_annot <- dplyr::left_join(wide_table_all_splicemodes_split_with_na, tibble_as.event.id_with_summarised_annotation_all, by = "AS_event_ID")
 
 # write table 
-write.table(x = wide_table_all_splicemodes_split_with_na_with_ref_annot, file = paste(results_directory_figures, "wide_table_of_all_JUM_results_", nrow(wide_table_all_splicemodes_split_with_na_with_ref_annot), "_entries_with_na_annotated.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_all_splicemodes_split_with_na_with_ref_annot, file = paste(R_processing_results_dir, "wide_table_of_all_JUM_results_", nrow(wide_table_all_splicemodes_split_with_na_with_ref_annot), "_entries_with_na_annotated.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # also write chr start end strand
 
@@ -1887,7 +1887,7 @@ write.table(x = wide_table_all_splicemodes_split_with_na_with_ref_annot, file = 
 wide_table_all_splicemodes_split_with_na_final <- dplyr::left_join(wide_table_all_splicemodes_split_with_na_with_ref_annot, wide_tibble_AS.event.ID_mapping_to_composite_coords, by = c("AS_event_ID", "isoform_number", "splicemode"))
 
 # write table 
-write.table(x = wide_table_all_splicemodes_split_with_na_final, file = paste(results_directory_figures, "wide_table_all_splicemodes_split_with_na_final.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_all_splicemodes_split_with_na_final, file = paste(R_processing_results_dir, "wide_table_all_splicemodes_split_with_na_final.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1907,9 +1907,9 @@ Our trick is to use only the "deltaPSI_BM_MSC_to_OB_[something]d-BM_MSC_to_ud" c
 
 ```{r}
 
-# wide_table_all_splicemodes_split_with_na_with_ref_annot <- read.delim(paste(results_directory_figures, "wide_table_of_all_JUM_results_", 37264, "_entries_with_na_annotated.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE)
+# wide_table_all_splicemodes_split_with_na_with_ref_annot <- read.delim(paste(R_processing_results_dir, "wide_table_of_all_JUM_results_", 37264, "_entries_with_na_annotated.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE)
 
-wide_table_all_splicemodes_split_with_na_final <- read.delim(paste(results_directory_figures, "wide_table_all_splicemodes_split_with_na_final.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE)
+wide_table_all_splicemodes_split_with_na_final <- read.delim(paste(R_processing_results_dir, "wide_table_all_splicemodes_split_with_na_final.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE)
 
 PSI_levels_timeseries_OB_wide_with_na <- wide_table_all_splicemodes_split_with_na_with_ref_annot %>% as.data.frame
 
@@ -1925,14 +1925,14 @@ PSI_levels_timeseries_OB_wide_with_na <- wide_table_all_splicemodes_split_with_n
 vector_PSI_levels_timeseries_OB_wide_pvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "pvalue")
 
 # plot the pvalue distribution - density
-pdf(paste(results_directory_figures, "qualityplot_pvalue_density_distribution_OB_diff.pdf", sep = ""))
+pdf(paste(R_processing_results_dir, "qualityplot_pvalue_density_distribution_OB_diff.pdf", sep = ""))
 
 plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_pvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM pvalue density distribution"), xlab = "pvalue", ylab = "frequency density")
 
 dev.off()
 
 # plot the pvalue distribution - CDF
-pdf(paste(results_directory_figures, "qualityplot_pvalue_CDF_distribution_OB_diff.pdf", sep = ""))
+pdf(paste(R_processing_results_dir, "qualityplot_pvalue_CDF_distribution_OB_diff.pdf", sep = ""))
 
 plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_pvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM pvalue CDF distribution"), xlab = "pvalue", ylab = "cumulative frequency")
 
@@ -1948,14 +1948,14 @@ dev.off()
 vector_PSI_levels_timeseries_OB_wide_qvalue.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "qvalue")
 
 # plot the qvalue distribution - density
-pdf(paste(results_directory_figures, "qualityplot_qvalue_density_distribution_OB_diff.pdf", sep = ""))
+pdf(paste(R_processing_results_dir, "qualityplot_qvalue_density_distribution_OB_diff.pdf", sep = ""))
 
 plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM qvalue density distribution"), xlab = "qvalue", ylab = "frequency density")
 
 dev.off()
 
 # plot the qvalue distribution - CDF
-pdf(paste(results_directory_figures, "qualityplot_qvalue_CDF_distribution_OB_diff.pdf", sep = ""))
+pdf(paste(R_processing_results_dir, "qualityplot_qvalue_CDF_distribution_OB_diff.pdf", sep = ""))
 
 plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_qvalue.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), main = paste("JUM qvalue CDF distribution"), xlab = "qvalue", ylab = "cumulative frequency")
 
@@ -1970,7 +1970,7 @@ dev.off()
 # plot magnitude of dpsi - ALL
 vector_differential_dpsi <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(contains("deltaPSI")) %>% unlist %>% na.omit
 
-pdf(paste(results_directory_figures, "plot_of_absolute_dpsi_changes_all.pdf", sep = ""), width = 5, height = 5)
+pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_all.pdf", sep = ""), width = 5, height = 5)
 plot(density((vector_differential_dpsi * 100) %>% abs, bw = 1), 
      main = "Distribution of absolute magnitude of change in psi, JUM", 
      xlab = "Absolute dPSI in any direction (%)",
@@ -1990,14 +1990,14 @@ dev.off()
 vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums <- grep(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "deltaPSI")
 
 # plot the dpsi distribution - density
-pdf(paste(results_directory_figures, "qualityplot_dpsi_density_distribution_OB_diff.pdf", sep = ""))
+pdf(paste(R_processing_results_dir, "qualityplot_dpsi_density_distribution_OB_diff.pdf", sep = ""))
 
 plot(density(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), xlim = c(-0.4, 0.4), main = paste("JUM dpsi density distribution"), xlab = "dpsi", ylab = "frequency density")
 
 dev.off()
 
 # plot the dpsi distribution - density
-pdf(paste(results_directory_figures, "qualityplot_dpsi_CDF_distribution_OB_diff.pdf", sep = ""))
+pdf(paste(R_processing_results_dir, "qualityplot_dpsi_CDF_distribution_OB_diff.pdf", sep = ""))
 
 plot(ecdf(PSI_levels_timeseries_OB_wide_with_na[, vector_PSI_levels_timeseries_OB_wide_dpsi.col.nums] %>% reshape2::melt(.) %>% .[, 2] %>% na.omit), xlim = c(-0.4, 0.4), main = paste("JUM dpsi CDF distribution"), xlab = "dpsi", ylab = "cumulative frequency")
 axis(side = 2, at = seq(0, 1, by = 0.1))
@@ -2037,7 +2037,7 @@ PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[a
 # plot magnitude of dpsi - differential
 vector_differential_dpsi <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(contains("deltaPSI")) %>% unlist %>% na.omit
 
-pdf(paste(results_directory_figures, "plot_of_absolute_dpsi_changes_diff.pdf", sep = ""), width = 5, height = 5)
+pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_diff.pdf", sep = ""), width = 5, height = 5)
 plot(density((vector_differential_dpsi * 100) %>% abs, bw = 1), 
      main = "Distribution of absolute magnitude of change in dpsi, JUM", 
      xlab = "Absolute dPSI in any direction (%)",
@@ -2056,9 +2056,9 @@ dev.off()
 # also write table of differential information for 12d vs. ud.
 PSI_levels_timeseries_OB_wide_with_na_ud.12d.only <- PSI_levels_timeseries_OB_wide_with_na[PSI_levels_timeseries_OB_wide_with_na$deltaPSI_BM_MSC_to_OB_12d.BM_MSC_to_OB_ud %>% as.numeric %>% abs >= dPSI_cutoff, ]
 # write table
-write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_ud.vs.12d.only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only, file = paste(R_processing_results_dir, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_ud.vs.12d.only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 # export associated gene set
-write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit, file = paste(results_directory_figures, "geneset_", length(PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_ud.vs.12d.only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_", length(PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na_ud.vs.12d.only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 # further subsetting into ud-only comparisons
 
@@ -2082,9 +2082,9 @@ PSI_levels_timeseries_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_
 
 print(paste("There are", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
 
-write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(R_processing_results_dir, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 # export associated gene set
-write.table(x = PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit, file = paste(results_directory_figures, "geneset_", length( PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_", length( PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit), "_genes_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 # remove ALL na to produce the timeseries-ready table
 PSI_levels_timeseries_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, OBseries_timepoints], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
@@ -2095,7 +2095,7 @@ row.names(PSI_levels_timeseries_OB_wide) <- NULL
 
 print(paste("There are", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
 
-write.table(x = PSI_levels_timeseries_OB_wide, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_OB_wide, file = paste(R_processing_results_dir, "wide_table_of_", length(PSI_levels_timeseries_OB_wide$AS_event_ID %>% unique), "_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2160,8 +2160,8 @@ ggplot(tibble_cumulative_diff_changes, aes(y = cumulative_diff_changes_pct, x = 
   scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
-  ggsave(filename = paste(results_directory_figures, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_OBseries.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 12, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "plot_of_cumulative_changes_OBseries.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 12, units = "cm")
 
 ```
 
@@ -2203,7 +2203,7 @@ PSI_levels_timeseries_constitutive_OB_wide_with_na <- dplyr::bind_cols(PSI_level
 
 print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide_with_na$AS_event_ID %>% unique), "unique CONSTITUTIVE junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
 
-write.table(x = PSI_levels_timeseries_constitutive_OB_wide_with_na, file = paste(results_directory_figures, "wide_table_of_", nrow(PSI_levels_timeseries_constitutive_OB_wide_with_na), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_constitutive_OB_wide_with_na, file = paste(R_processing_results_dir, "wide_table_of_", nrow(PSI_levels_timeseries_constitutive_OB_wide_with_na), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # remove ALL na to produce the timeseries-ready table
 
@@ -2215,7 +2215,7 @@ row.names(PSI_levels_timeseries_constitutive_OB_wide) <- NULL
 
 print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide$AS_event_ID %>% unique), "unique CONSTITUTIVE junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with NO missing values (complete timeseries)"))
 
-write.table(x = PSI_levels_timeseries_constitutive_OB_wide, file = paste(results_directory_figures, "wide_table_of_", length(PSI_levels_timeseries_constitutive_OB_wide$AS_event_ID %>% unique), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = PSI_levels_timeseries_constitutive_OB_wide, file = paste(R_processing_results_dir, "wide_table_of_", length(PSI_levels_timeseries_constitutive_OB_wide$AS_event_ID %>% unique), "_constitutive_junctions_dPSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_dPSI_greaterthan_", dPSI_cutoff, "_no_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2299,12 +2299,12 @@ ggplot() +
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2336,18 +2336,18 @@ This gene background shall contain all ensembl protein coding, long noncoding an
 
 ```{r}
 
-# ensembl_mart = useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+# ensembl_mart = ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", version = 98)
 
 # # GOTERM
 # polyA_RNAseq_GO_background <- getBM(filters = "biotype", values = c("protein_coding", "long_noncoding", "transcribed_processed_gene", "transcribed_unitary_gene", "transcribed_unprocessed_gene", "translated_processed_gene"), attributes = c("external_gene_name", "go_id", "namespace_1003"), mart = ensembl_mart) %>% .[.$namespace_1003 != "",]
 # 
 # polyA_RNAseq_GO_background[, "namespace_1003"] <- as.character(polyA_RNAseq_GO_background[, "namespace_1003"])
 # 
-# write.table(x = polyA_RNAseq_GO_background, file = paste(results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+# write.table(x = polyA_RNAseq_GO_background, file = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
 
 ## Create catDB instance (takes a while but needs to be done only once)
 # note: you had to save the GO annotation file to disk in the previous steps above
-catdb <- makeCATdb(myfile = paste(results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+catdb <- makeCATdb(myfile = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
 
 ```
 
@@ -2401,14 +2401,14 @@ ggplot(OB_anysig_GOtest_all_topten, aes(x = reorder(Term, -Phyper), y = -log10(P
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 200, units = "cm", limitsize = FALSE) +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 200, units = "cm", limitsize = FALSE) 
+ ggsave(filename = paste(R_processing_results_dir, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 200, units = "cm", limitsize = FALSE) +
+ ggsave(filename = paste(R_processing_results_dir, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 200, units = "cm", limitsize = FALSE) 
 
 # write the top 30 enrichment table
-write.table(x = OB_anysig_GOtest_all_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = OB_anysig_GOtest_all_topten, file = paste(R_processing_results_dir, "Top 10 significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # write the top everything enrichment table
-write.table(x = bind_rows(OB_anysig_GOtest_MF, OB_anysig_GOtest_BP, OB_anysig_GOtest_CC %>% dplyr::arrange(desc(Padj))), file = paste(results_directory_figures, "Top inf significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = bind_rows(OB_anysig_GOtest_MF, OB_anysig_GOtest_BP, OB_anysig_GOtest_CC %>% dplyr::arrange(desc(Padj))), file = paste(R_processing_results_dir, "Top inf significantly over-represented GO terms for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2477,7 +2477,7 @@ list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topinf <- purrr::map
                                                                                   .f = ~.x %>% add_column("cluster" = .y[[1]]))
 tibble_OBseries_som_hyperGOresult_allGO_clusterwise_topinf <- list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topinf %>% rbindlist %>% as_tibble
 ## write table
-write.table(x = tibble_OBseries_som_hyperGOresult_allGO_clusterwise_topinf, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_GO_topinf.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_OBseries_som_hyperGOresult_allGO_clusterwise_topinf, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_GO_topinf.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 
 # filter topten for plotting
@@ -2503,10 +2503,10 @@ purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_top
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2, .y = names(list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2), .f = ~write.table(x = .x, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2, .y = names(list_of_OBseries_som_hyperGOresult_allGO_clusterwise_tables_topten_2), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_", .y, "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -2545,7 +2545,7 @@ list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = 
 # write geneset of each timepoint
 purrr::map2(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .y = names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered), 
             .f = ~write.table(x = .x,
-                             file = paste(results_directory_figures, "geneset_top10percent_highestPSI_timepointwise_OBseries_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_", .y, ".txt", sep = ""),
+                             file = paste(R_processing_results_dir, "geneset_top10percent_highestPSI_timepointwise_OBseries_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_", .y, ".txt", sep = ""),
                              row.names = FALSE, col.names = FALSE, quote = FALSE, sep = "\t"))
 
 ```
@@ -2563,7 +2563,7 @@ list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered <- purrr::map(.x = l
 # write geneset of each timepoint
 purrr::map2(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .y = names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered), 
             .f = ~write.table(x = .x,
-                             file = paste(results_directory_figures, "geneset_top10percent_lowestPSI_timepointwise_OBseries_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_", .y, ".txt", sep = ""),
+                             file = paste(R_processing_results_dir, "geneset_top10percent_lowestPSI_timepointwise_OBseries_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_", .y, ".txt", sep = ""),
                              row.names = FALSE, col.names = FALSE, quote = FALSE, sep = "\t"))
 
 ```
@@ -2690,10 +2690,10 @@ ggplot(wide_table_of_timepointwise_highestPSI_results_MF_OBseries_processed, aes
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_highestPSI_results_MF_OBseries_processed, file = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_highestPSI_results_MF_OBseries_processed, file = paste(R_processing_results_dir, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # BP highestPSI
 
@@ -2708,10 +2708,10 @@ ggplot(wide_table_of_timepointwise_highestPSI_results_BP_OBseries_processed, aes
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_highestPSI_results_BP_OBseries_processed, file = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_highestPSI_results_BP_OBseries_processed, file = paste(R_processing_results_dir, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # CC highestPSI
 
@@ -2726,10 +2726,10 @@ ggplot(wide_table_of_timepointwise_highestPSI_results_CC_OBseries_processed, aes
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_highestPSI_results_CC_OBseries_processed, file = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_highestPSI_results_CC_OBseries_processed, file = paste(R_processing_results_dir, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # MF lowestPSI
 
@@ -2744,10 +2744,10 @@ ggplot(wide_table_of_timepointwise_lowestPSI_results_MF_OBseries_processed, aes(
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_lowestPSI_results_MF_OBseries_processed, file = paste(results_directory_figures, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_lowestPSI_results_MF_OBseries_processed, file = paste(R_processing_results_dir, "MF_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # BP lowestPSI
 
@@ -2762,10 +2762,10 @@ ggplot(wide_table_of_timepointwise_lowestPSI_results_BP_OBseries_processed, aes(
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_lowestPSI_results_BP_OBseries_processed, file = paste(results_directory_figures, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_lowestPSI_results_BP_OBseries_processed, file = paste(R_processing_results_dir, "BP_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # CC lowestPSI
 
@@ -2780,10 +2780,10 @@ ggplot(wide_table_of_timepointwise_lowestPSI_results_CC_OBseries_processed, aes(
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_lowestPSI_results_CC_OBseries_processed, file = paste(results_directory_figures, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_lowestPSI_results_CC_OBseries_processed, file = paste(R_processing_results_dir, "CC_GOterms_top10_", high_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2806,7 +2806,7 @@ polyA_RNAseq_GO_background <- dplyr::left_join(polyA_RNAseq_GO_background, PFAM_
 
 polyA_RNAseq_GO_background[, "family_description"] <- as.character(polyA_RNAseq_GO_background[, "family_description"])
 
-write.table(x = polyA_RNAseq_GO_background, file = paste(results_dir, "polyA_RNAseq_GO_background_PROTEINFAMILY.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
+write.table(x = polyA_RNAseq_GO_background, file = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_PROTEINFAMILY.txt", sep = ""), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\t")
 
 # create list of gene UNIVERSE
 
@@ -2876,14 +2876,14 @@ ggplot(OB_anysig_family_enrichment_topten, aes(x = reorder(TermID, padj), y = ge
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
 # write result of top 30
-write.table(x = OB_anysig_family_enrichment_topten, file = paste(results_directory_figures, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = OB_anysig_family_enrichment_topten, file = paste(R_processing_results_dir, "Top 10 significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # write result of everything
-write.table(x = OB_anysig_family_enrichment %>% dplyr::arrange(desc(padj)), file = paste(results_directory_figures, "Top inf significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = OB_anysig_family_enrichment %>% dplyr::arrange(desc(padj)), file = paste(R_processing_results_dir, "Top inf significantly over-represented families for OB series dPSI_", dPSI_cutoff,  "_any", p_or_q_value, qpvalue_cutoff, "_", numberofgenes_anysig_OBseries, "_genes_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2948,10 +2948,10 @@ ggplot(wide_table_of_timepointwise_highestPSI_families_OBseries, aes(x = reorder
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_highestPSI_families_OBseries, file = paste(results_directory_figures, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_highestPSI_families_OBseries, file = paste(R_processing_results_dir, "Enrichedfamilies_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # lowest PSI
 
@@ -2966,10 +2966,10 @@ ggplot(wide_table_of_timepointwise_lowestPSI_families_OBseries, aes(x = reorder(
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_lowestPSI_families_OBseries, file = paste(results_directory_figures, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_lowestPSI_families_OBseries, file = paste(R_processing_results_dir, "Enrichedfamilies_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -3006,10 +3006,10 @@ ggplot(wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, aes(x = re
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
-write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_familyenrichment_by_SOM_cluster_OBseries_topten, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -3544,7 +3544,7 @@ tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::
   ## add in gene symbols
   dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "splicemode", "Gene")] %>% unique %>% na.omit, ., by = c("AS_event_ID", "splicemode"))
 # write table
-write.table(x = tibble_final_transcript_feature_annotation, file = paste(results_dir, "table_junction_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "table_junction_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the biomart results and tibblise 
 tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_event_ID", "splicemode", "biomart_annotations")]) %>%
@@ -3555,7 +3555,7 @@ tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("
   ## add in gene symbols
   dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "splicemode", "Gene")] %>% unique %>% na.omit, ., by = c("AS_event_ID", "splicemode"))
 # write table
-write.table(x = tibble_final_biomart_annotation, file = paste(results_dir, "table_junction_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_final_biomart_annotation, file = paste(R_processing_results_dir, "table_junction_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the PTM results and tibblise 
 tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_event_ID", "splicemode", "PTMs")]) %>%
@@ -3566,7 +3566,7 @@ tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("AS_e
   ## add in gene symbols
   dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "splicemode", "Gene")] %>% unique %>% na.omit, ., by = c("AS_event_ID", "splicemode"))
 # write table
-write.table(x = tibble_final_PTM_annotation, file = paste(results_dir, "table_junction_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_final_PTM_annotation, file = paste(R_processing_results_dir, "table_junction_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the other supporting information and tibblise
 tibble_final_annotation_supp <- list_tidied_annotation %>% 
@@ -3580,14 +3580,14 @@ tibble_final_annotation_supp <- list_tidied_annotation %>%
   ## add in gene symbols
   dplyr::right_join(wide_table_all_splicemodes_split_with_na[, c("AS_event_ID", "splicemode", "Gene")] %>% unique %>% na.omit, ., by = c("AS_event_ID", "splicemode"))
 # write table
-write.table(x = tibble_final_annotation_supp, file = paste(results_dir, "table_junction_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_dir, "table_junction_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # try calculating frameshift by just naively looking at whether the differential region is a multiple of 3
 tibble_final_annotation_supp_with_frameshift_test <- tibble_final_annotation_supp %>% 
   add_column("total_differential_region_size" = purrr::map(.x = tibble_final_annotation_supp$vector_genomic_coords_of_all_differential_exon_positions, .f = ~.x %>% strsplit(split = ",") %>% unlist %>% length) %>% unlist, .after = "vector_genomic_coords_of_all_differential_exon_positions") %>%
   add_column("remainder_by_3" = .$total_differential_region_size %% 3, .after = "total_differential_region_size")
 # write table
-write.table(x = tibble_final_annotation_supp_with_frameshift_test, file = paste(results_dir, "table_junction_ontology_supporting_info_frameshift_test_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_final_annotation_supp_with_frameshift_test, file = paste(R_processing_results_dir, "table_junction_ontology_supporting_info_frameshift_test_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 subset_tibble_final_annotation_supp_with_frameshift_test <- tibble_final_annotation_supp_with_frameshift_test %>% dplyr::distinct(AS_event_ID, splicemode, remainder_by_3)
   
@@ -3598,8 +3598,8 @@ ggplot(data = subset_tibble_final_annotation_supp_with_frameshift_test) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "table_junction_ontology_supporting_info_frameshift_test_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "table_junction_ontology_supporting_info_frameshift_test_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm") 
+ ggsave(filename = paste(R_processing_results_dir, "table_junction_ontology_supporting_info_frameshift_test_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "table_junction_ontology_supporting_info_frameshift_test_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 15, units = "cm") 
 
 ```
 
@@ -3658,10 +3658,10 @@ ggplot(tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)) %>
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8), axis.text.y = element_text(size = 20), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 10, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 10, units = "cm") 
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 10, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 10, units = "cm") 
 
-write.table(x = tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)), file = paste(results_directory_figures, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)), file = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 message("total number of unique LSVs with any sort of protein-level annotation: ", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length, " (", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length *100/nrow(tibble_final_transcript_feature_annotation), "% of those which have any transcript annotation)")
 
@@ -3692,8 +3692,8 @@ ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
   ylim(c(0, max(tibble_PTM_tally$tally) + 5)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "tally_overlapping_PTMs_differential_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 4, height = 8, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "tally_overlapping_PTMs_differential_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 4, height = 8, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_junctions_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
 
 ```
 
@@ -3820,10 +3820,10 @@ ggplot(wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_pla
   ylab("Number of genes enriched amongst RBP target genes") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 60)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
- ggsave(filename = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
 
-write.table(x = wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(results_directory_figures, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_RBP_target_enrichment_by_SOM_cluster_OBseries_topten_AS_plausible, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(long_table_of_final_SOM_summary_5_by_5_OBseries_AS_plausible$AS_event_ID %>% unique), "_junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_upstreamRBP_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 
 ```
@@ -3873,10 +3873,10 @@ ggplot(wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible,
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(results_directory_figures, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_highestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(R_processing_results_dir, "UpstreamRBPs_top10_", high_scaledPSIcutoff * 100, "_percent_highestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # lowest PSI
 
@@ -3891,10 +3891,10 @@ ggplot(wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, 
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 15, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 15, units = "cm")
 
-write.table(x = wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(results_directory_figures, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_plausible, file = paste(R_processing_results_dir, "UpstreamRBPs_top10_", low_scaledPSIcutoff * 100, "_percent_lowestPSI_eachtimepoint_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, "_plausibleASlength.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 
 ```
@@ -3905,7 +3905,7 @@ write.table(x = wide_table_of_timepointwise_lowestPSI_upstreamRBP_OBseries_AS_pl
 
 ```{r}
 
-qualitycheck_results_dir <-  paste(results_dir, "qualitycheck/", sep = "")
+qualitycheck_results_dir <-  paste(R_processing_results_dir, "qualitycheck/", sep = "")
 
 if(! dir.exists(qualitycheck_results_dir) ) {
      dir.create(qualitycheck_results_dir, recursive = TRUE)}
@@ -4192,8 +4192,8 @@ ggplot() +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, colour = "black"), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 10, units = "cm") +
-  ggsave(filename = paste(results_directory_figures, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 10, units = "cm") 
+  ggsave(filename = paste(R_processing_results_dir, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 10, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "frequency_distribution_of_junctions_per_NMD.first.last.exon_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 20, height = 10, units = "cm") 
 
 # upset plot
 message("all junctions")
@@ -4205,7 +4205,7 @@ upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$
 
 print(set_size(upset_combs))
 
-pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_alljunctions.pdf", sep = ""), height = 4, width = 10)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_alljunctions.pdf", sep = ""), height = 4, width = 10)
 
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
@@ -4231,7 +4231,7 @@ upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$
 
 print(set_size(upset_combs))
 
-pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 10)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 10)
 
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
@@ -4257,7 +4257,7 @@ upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$
 
 print(set_size(upset_combs))
 
-pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential.pdf", sep = ""), height = 4, width = 10)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential.pdf", sep = ""), height = 4, width = 10)
 
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
@@ -4283,7 +4283,7 @@ upset_combs <- data.frame(df %>% dplyr::select(., -AS_event_ID), row.names = df$
 
 print(set_size(upset_combs))
 
-pdf(file = paste(results_directory_figures, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential_plausible.pdf", sep = ""), height = 4, width = 10)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential_plausible.pdf", sep = ""), height = 4, width = 10)
 
 ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
@@ -4352,13 +4352,13 @@ message("NMD jaccard similarity: ", (row.indices_NMD_ref.recon.intersection %>% 
 
 ```{r message=FALSE, warning=FALSE}
 
-list_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree %>% flatten
+list_of_timepoint_comparisons_final <- read.delim(paste(R_processing_results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL) %>% array_tree %>% flatten
 
 list_of_AS_events <- c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events") %>% array_tree %>% flatten
 
 # read tables into environment
 
-list_of_detailed_tables <- purrr::map(.x = list_of_timepoint_comparisons_final, .f = ~purrr::map2(.x = .x, .y = list_of_AS_events, .f = ~read.delim(file = paste(results_dir, "final_JUM_output_", .x, "/", list.files(path = paste(results_dir, "final_JUM_output_", .x, "/", sep = ""), pattern = paste("(.)", .y, "(.*)detailed.txt", sep = "")), sep = ""), na.strings = c("NONE", "NA", "INF", "Inf") , sep = "\t", stringsAsFactors = FALSE) %>% as_tibble %>% add_column(., "splicemode" = .y)) %>% set_names(list_of_AS_events)) %>% set_names(list_of_timepoint_comparisons_final)
+list_of_detailed_tables <- purrr::map(.x = list_of_timepoint_comparisons_final, .f = ~purrr::map2(.x = .x, .y = list_of_AS_events, .f = ~read.delim(file = paste(R_processing_results_dir, "final_JUM_output_", .x, "/", list.files(path = paste(R_processing_results_dir, "final_JUM_output_", .x, "/", sep = ""), pattern = paste("(.)", .y, "(.*)detailed.txt", sep = "")), sep = ""), na.strings = c("NONE", "NA", "INF", "Inf") , sep = "\t", stringsAsFactors = FALSE) %>% as_tibble %>% add_column(., "splicemode" = .y)) %>% set_names(list_of_AS_events)) %>% set_names(list_of_timepoint_comparisons_final)
 
 # bind rows for each comparison
 
@@ -4540,7 +4540,7 @@ list_of_tibbles_OBseries_absolute_PSI_levels_timeseries_junction.switched <- lis
 tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched <- list_of_tibbles_OBseries_absolute_PSI_levels_timeseries_junction.switched %>% rbindlist %>% as_tibble
 
 # by definition, junctions that go from NA to not NA are switched
-write.table(x = tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched, file = paste(results_directory_figures, "wide_table_of_",  nrow(tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched), "_switched.junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched), "_switched.junctions_PSI_OB_diff_any_", p_or_q_value, qpvalue_cutoff, "_any_deltaPSI_greaterthan_", dPSI_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -5158,9 +5158,9 @@ tibble_combinedexpr_logCPM_PSI_scaled[, 6:ncol(tibble_combinedexpr_logCPM_PSI_sc
 
 # LAST TIME ENSEMBL CHANGED HALFWAY THRU THE ANALYSIS. IM NOT REPEATING THAT MISTAKE AGAIN
 
-write.table(tibble_combinedexpr_logCPM_PSI_scaled, paste(results_directory_figures, "tibble_combinedexpr_logCPM_PSI_scaled_GRCh38.98.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = TRUE)
+write.table(tibble_combinedexpr_logCPM_PSI_scaled, paste(R_processing_results_dir, "tibble_combinedexpr_logCPM_PSI_scaled_GRCh38.98.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = TRUE)
 
-tibble_combinedexpr_logCPM_PSI_scaled <- read_delim(paste(results_directory_figures, "tibble_combinedexpr_logCPM_PSI_scaled_GRCh38.98.txt", sep = ""), delim = "\t")
+tibble_combinedexpr_logCPM_PSI_scaled <- read_delim(paste(R_processing_results_dir, "tibble_combinedexpr_logCPM_PSI_scaled_GRCh38.98.txt", sep = ""), delim = "\t")
 
 set.seed(som_seed_number)
 
@@ -5185,7 +5185,7 @@ rownames(matrix_consensus_matrix_combinedexpr) <- names(list_percentage_consensu
 
 ## HOOOOOOOLY SHIT RBINDLIST IS SO QUICK ##########
 # WE DONT EVEN NEED THIS
-# write.table(tibble_consensus_matrix_combinedexpr, paste(results_directory_figures, "tibble_consensus_matrix_combinedexpr.txt", sep = ""), sep = "\t", row.names = TRUE, quote = FALSE, col.names = TRUE)
+# write.table(tibble_consensus_matrix_combinedexpr, paste(R_processing_results_dir, "tibble_consensus_matrix_combinedexpr.txt", sep = ""), sep = "\t", row.names = TRUE, quote = FALSE, col.names = TRUE)
 
 
 
@@ -5204,7 +5204,7 @@ matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered <- reorder(m
 ggdendrogram(matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered) +
   xlab("Gene/isoform") +
   theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "dendrogram_som_consensus_matrix_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
+  ggsave(filename = paste(R_processing_results_dir, "dendrogram_som_consensus_matrix_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
 
 matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered_order <- matrix_consensus_matrix_combinedexpr_consensus_dendrogram_reordered %>% unlist
  
@@ -5212,7 +5212,7 @@ matrix_consensus_matrix_combinedexpr_reordered <- matrix_consensus_matrix_combin
  
 tibble_consensus_matrix_combinedexpr_long <- reshape2::melt(matrix_consensus_matrix_combinedexpr_reordered, id = c("gene_isoform_ID"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_if(is.factor, as.character)
 
-write.table(x = matrix_consensus_matrix_combinedexpr_reordered, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = matrix_consensus_matrix_combinedexpr_reordered, file = paste(R_processing_results_dir, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ggplot(tibble_consensus_matrix_combinedexpr_long, aes(fill = cocluster_percentage)) +
   geom_tile(aes(x = gene_isoform_ID, y = variable)) +
@@ -5223,9 +5223,9 @@ ggplot(tibble_consensus_matrix_combinedexpr_long, aes(fill = cocluster_percentag
   scale_y_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
   scale_fill_gradientn(colours = c("blue", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.25, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".tiff", sep = ""), device = "tiff", dpi = 1200, width = 40, height = 25, units = "cm", limitsize = FALSE)
+  ggsave(filename = paste(R_processing_results_dir, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".tiff", sep = ""), device = "tiff", dpi = 1200, width = 40, height = 25, units = "cm", limitsize = FALSE)
 
-write.table(x = tibble_consensus_matrix_combinedexpr_long, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_consensus_matrix_combinedexpr_long, file = paste(R_processing_results_dir, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ggplot(tibble_consensus_matrix_combinedexpr_long[1, ], aes(fill = cocluster_percentage)) +
   geom_tile(aes(x = gene_isoform_ID, y = variable)) +
@@ -5233,7 +5233,7 @@ ggplot(tibble_consensus_matrix_combinedexpr_long[1, ], aes(fill = cocluster_perc
   scale_x_discrete(breaks = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, labels = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID, limits = matrix_consensus_matrix_combinedexpr_reordered$gene_isoform_ID) +
   scale_fill_gradientn(colours = c("white", "yellow", "red", "black"), values = c(0, 0.33, 0.67, 1)) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 1, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 1, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_directory_figures, "xlabs_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 400, width = 200, height = 10, units = "cm", limitsize = FALSE)
+  ggsave(filename = paste(R_processing_results_dir, "xlabs_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 400, width = 200, height = 10, units = "cm", limitsize = FALSE)
 
 ```
 
@@ -5241,7 +5241,7 @@ cluster determination from consensus matrix
 
 ```{r message=FALSE, warning=FALSE}
 
-tibble_consensus_matrix_combinedexpr_long <- read_delim(paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), delim = "\t")
+tibble_consensus_matrix_combinedexpr_long <- read_delim(paste(R_processing_results_dir, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), delim = "\t")
 
 list_genes_or_isoforms_from_combinedexpr <- tibble_consensus_matrix_combinedexpr_long$variable %>% unique %>% array_tree
 
@@ -5275,16 +5275,16 @@ list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- bind_cols(co
 
 list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- add_column(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, "jaccard" = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection/(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_setdiff + list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection))
 
-write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, file = paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2, file = paste(R_processing_results_dir, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- read_delim(paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
+list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2 <- read_delim(paste(R_processing_results_dir, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
 
 
 list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3 <- list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2[list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_2$coclustering_intersection > 0, ]
 
 plot(density(list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3$coclustering_intersection %>% as.numeric))
 
-write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3, file = paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_intersection1_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3, file = paste(R_processing_results_dir, "list_genes_or_isoforms_from_combinedexpr_itemwise_intersection1_consensus0.5.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -5296,7 +5296,7 @@ write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3
 
 tibble_combinedexpr_logCPM_PSI_scaled_2 <- bind_cols(tibble_combinedexpr_logCPM_PSI_scaled, gene_isoform_ID = paste(tibble_combinedexpr_logCPM_PSI_scaled$Gene, "_", tibble_combinedexpr_logCPM_PSI_scaled$isoform_ID, sep = ""))
 
-cytoscape_result <- read_delim(paste(results_directory_figures, "consensus_combinedexpr_intersection1_min25_penalty2_haircut0.1_multi_match_overlap0.8_seedeverynode.tab", sep = ""), delim = "\t", col_names = c("cluster", "gene_isoform_ID"))
+cytoscape_result <- read_delim(paste(R_processing_results_dir, "consensus_combinedexpr_intersection1_min25_penalty2_haircut0.1_multi_match_overlap0.8_seedeverynode.tab", sep = ""), delim = "\t", col_names = c("cluster", "gene_isoform_ID"))
 
 cytoscape_result[, "cluster"] <- gsub(x = cytoscape_result$cluster, pattern = "Cluster ", replacement = "") %>% as.numeric
 
@@ -5343,10 +5343,10 @@ ggplot(long_table_combinedexpr_logCPM_PSI_scaled_clustered, aes(x = timepoint, y
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype ="solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = wide_table_combinedexpr_logCPM_PSI_scaled_clustered, file = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_combinedexpr_logCPM_PSI_scaled_clustered, file = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -5396,10 +5396,10 @@ purrr::map2(.x = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clu
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y, "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y, "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y, "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y, "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten_2, .y = names(list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten_2), .f = ~write.table(x = .x, file = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y, "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten_2, .y = names(list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten_2), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y, "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -5429,10 +5429,10 @@ ggplot(wide_table_of_OBseries_consensus_combinedexpr_familyenrichment_clusterwis
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm")
 
-write.table(x = wide_table_of_OBseries_consensus_combinedexpr_familyenrichment_clusterwise_tables_topten, file = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_OBseries_consensus_combinedexpr_familyenrichment_clusterwise_tables_topten, file = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -5462,9 +5462,9 @@ ggplot(wide_table_of_OBseries_consensus_combinedexpr_RBPenrichment_clusterwise_t
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm")
 
-write.table(x = wide_table_of_OBseries_consensus_combinedexpr_RBPenrichment_clusterwise_tables_topten, file = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_OBseries_consensus_combinedexpr_RBPenrichment_clusterwise_tables_topten, file = paste(R_processing_results_dir, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```

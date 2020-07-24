@@ -37,8 +37,8 @@ library(data.table)
 library(crayon)
 library(VennDiagram)
 
-# library(biomaRt)
-# ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "www.ensembl.org")
+library(biomaRt)
+ensembl_mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "http://sep2019.archive.ensembl.org")
 library(systemPipeR)
 library(GOstats)
 library(PFAM.db)
@@ -428,6 +428,13 @@ names(list_of_RBP_target_gene_categories) <- names(list_of_RBP_target_gene_categ
 
 logCPM_OBseries_anysig_DEGs_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_2_eRNA/R_processing_results/edgeR_GLM_DEGs_logCPM.txt"
 
+logCPM_OBseries_anysig_DEGs_import <- read.delim(file = paste(logCPM_OBseries_anysig_DEGs_dir), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf")) %>% as_tibble
+
+ENSG_to_genesymbol_DEGs <- getBM(filters = "ensembl_gene_id", values = logCPM_OBseries_anysig_DEGs_import$ensembl_gene_id, attributes = c("ensembl_gene_id", "external_gene_name"), mart = ensembl_mart)
+
+# append official gene symbol to the DEG table and average the counts
+logCPM_OBseries_anysig_DEGs <- dplyr::right_join(ENSG_to_genesymbol_DEGs, logCPM_OBseries_anysig_DEGs_import, by = "ensembl_gene_id") %>% average_counts_from_triplicate(., 2)
+
 ```
 
 #### define functions
@@ -477,24 +484,30 @@ vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d
 ```{r}
 
 # JUM ###
-tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/5x5_SOM_997_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15_long.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/5x5_SOM_997_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15_long.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_908_differential_VSRs_qvalue0.01_dPSI0.15_timeseries_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_908_differential_VSRs_qvalue0.01_dPSI0.15_timeseries_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_984_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_JUM_all_junctions_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_37264_entries_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_all_JUM_results_13816_VSRs_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_all_junctions_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_13816_VSRs_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 # PSI-Sigma ###
-tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/5x5_SOM_2095_exons_exon.PSI_OB_diff_any_pvalue0.01_any_deltaPSI_greaterthan_10_long.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/5x5_SOM_2095_exons_exon.PSI_OB_diff_any_pvalue0.01_any_deltaPSI_greaterthan_10_long.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_1032LIVs_scaled.PSI_OB_diff.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_1032LIVs_scaled.PSI_OB_diff.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/long_table_of_all_differential_exons_info_dpsi_10_anypvalue0.01_3272_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1704_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1704_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_PSIsigma_all_exons_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/table_of_all_psi.sigma_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_PSIsigma_all_exons_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 ```
 
@@ -836,6 +849,14 @@ JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na <-
 
 cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_common_entries, "\n"))
 
+# constitutive JUM vs. constitutive PSI-Sigma
+JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM constitutive (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma constitutive, (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+
 ```
 
 #### repeat the intersections with only genes in common
@@ -872,6 +893,26 @@ JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes <-
                                                     tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
 
 cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_common_entries, "\n"))
+
+```
+
+### Calculate gene-level spliceome intersections with expression
+
+```{r}
+
+# solo diff. spliced/expressed genes
+cat(magenta("\nRSEM/EdgeR differential genes: ", logCPM_OBseries_anysig_DEGs$external_gene_name %>% unique %>% length))
+cat(magenta("\nJUM differential genes: ", tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene %>% unique %>% length))
+cat(magenta("\nPSI-Sigma differential genes: ", tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names %>% unique %>% length))
+
+# JUM diff spliced vs. diff. expression
+cat(magenta("\nJUM differential genes vs. diff. expressed genes: ", intersect(logCPM_OBseries_anysig_DEGs$external_gene_name, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene) %>% unique %>% length))
+
+# PSI-Sigma diff spliced vs. diff. expression
+cat(magenta("\nPSI-Sigma differential genes vs. diff. expressed genes: ", intersect(logCPM_OBseries_anysig_DEGs$external_gene_name, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names) %>% unique %>% length))
+
+# JUM diff spliced vs. PSI-Sigma diff spliced
+cat(magenta("\nJUM differential genes vs. PSI-Sigma differential genes: ", intersect(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names) %>% unique %>% length))
 
 ```
 
@@ -1052,10 +1093,9 @@ write.table(x = vector_differential_genes_anysig_with_na, file = paste(results_d
   
 ```
 
-
 ## Draw a consensus SOM which merges JUM and PSI-Sigma together.
 
-### Tally up the number of repeated LSVs per gene.
+### Tally up the number of repeated VSRs per gene.
 
 ```{r}
 
@@ -1635,13 +1675,6 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwi
 ### extract the RBPs, lncRNAs and snRNAs etc... from expression data and combine with PSI data
 
 ```{r}
-
-logCPM_OBseries_anysig_DEGs_import <- read.delim(file = paste(logCPM_OBseries_anysig_DEGs_dir), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf")) %>% as_tibble
-
-ENSG_to_genesymbol_DEGs <- getBM(filters = "ensembl_gene_id", values = logCPM_OBseries_anysig_DEGs_import$ensembl_gene_id, attributes = c("ensembl_gene_id", "external_gene_name"), mart = ensembl_mart)
-
-# append official gene symbol to the DEG table and average the counts
-logCPM_OBseries_anysig_DEGs <- dplyr::right_join(ENSG_to_genesymbol_DEGs, logCPM_OBseries_anysig_DEGs_import, by = "ensembl_gene_id") %>% average_counts_from_triplicate(., 2)
 
 # reorder the columns to make them chronological
 

@@ -171,11 +171,13 @@ filtering_genehits_from_background_catalogue <- function(catalogue, genehit_vect
 # input: a list containing ref + recon GTF entries, a single element of a list of all the matches for each exon.
 # things to annotate: gene name, strand, all exons are NMD in the reference GTF, first/last/only exon in reference or recon. GTF
 
-annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
+annotate_differential_exon <- function(list_matched_ref_recon_gtf, original_tibble) {
+  
+  # print(paste("now processing junction number", index))
   
   # DEBUG ######
   
-  # list_matched_ref_recon_gtf <- list_ref_matching_exon_entries[[2]]
+  # list_matched_ref_recon_gtf <- list_gtf_matching_exon_entries[[1]]
   
   ##############
   
@@ -227,31 +229,99 @@ annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
     
   }
   
-  # NMD - reference
-  NMD_reference <- FALSE
+  # KNOWN NMD annotation - reference
+  NMD_biotype_reference <- FALSE
   
   if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
     
     if (all(list_matched_ref_recon_gtf[["reference_gtf_match"]]$transcript_biotype == "nonsense_mediated_decay")) {
       
-      NMD_reference <- TRUE 
+      NMD_biotype_reference <- TRUE 
       
     }
     
   }
   
-  # NMD - recon
-  NMD_recon <- FALSE
+  # flagged NMD candidates - reference
+  NMD_flagged_ref <- FALSE
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    if (all(list_matched_ref_recon_gtf[["reference_gtf_match"]]$NMD_candidate == TRUE)) {
+      
+      NMD_flagged_ref <- TRUE 
+      
+    }
+    
+  } 
+  
+  # flagged NMD candidates - recon
+  NMD_flagged_recon <- FALSE
   
   if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
     
     if (all(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$NMD_candidate == TRUE)) {
       
-      NMD_recon <- TRUE 
+      NMD_flagged_recon <- TRUE 
       
     }
     
   } 
+  
+  # PTC-containing exons or poison exon candidates - reference and recon
+  poison_exon_candidate_ref <- NA
+  poison_exon_candidate_recon <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    poison_exon_candidate_ref_temp <- list_matched_ref_recon_gtf[["reference_gtf_match"]]$poison_exon_candidate %>% unique 
+    
+    if (any(is.na(poison_exon_candidate_ref_temp)) != TRUE) {
+      
+      poison_exon_candidate_ref <- TRUE
+      
+    }
+    
+  }
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    poison_exon_candidate_ref_temp <- list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$poison_exon_candidate %>% unique 
+    
+    if (any(is.na(poison_exon_candidate_ref_temp)) != TRUE) {
+      
+      poison_exon_candidate_recon <- TRUE
+      
+    }
+    
+  }
+  
+  contains_PTC_ref <- NA
+  contains_PTC_recon <- NA
+  
+  if (nrow(list_matched_ref_recon_gtf[["reference_gtf_match"]]) != 0) {
+    
+    contains_PTC_ref_temp <- list_matched_ref_recon_gtf[["reference_gtf_match"]]$contains_PTC %>% unique 
+    
+    if (any(is.na(contains_PTC_ref_temp)) != TRUE) {
+      
+      contains_PTC_ref <- TRUE
+      
+    }
+    
+  }
+  
+  if (nrow(list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]) != 0) {
+    
+    contains_PTC_recon_temp <- list_matched_ref_recon_gtf[["reconstructed_gtf_match"]]$contains_PTC %>% unique 
+    
+    if (any(is.na(contains_PTC_recon_temp)) != TRUE) {
+      
+      contains_PTC_recon <- TRUE
+      
+    }
+    
+  }
   
   # first/last/only exon - reference and recon
   first_or_last_exon_reference <- NA
@@ -282,22 +352,25 @@ annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
     
   }
   
-  return(list("diff_exon_coords" = list_matched_ref_recon_gtf$diff_exon_coords,
-              "splicemode" = list_matched_ref_recon_gtf$splicemode,
-              "matched_gene_names" = matched_gene_names,
-              "matched_ref_transcript_names" = matched_ref_transcript_names,
-              "matched_recon_transcript_names" = matched_recon_transcript_names,
-              "matched_strand" = matched_strand,
-              "diff_exon_chr" = list_matched_ref_recon_gtf$diff_exon_chr,
-              "diff_exon_start" = list_matched_ref_recon_gtf$diff_exon_start,
-              "diff_exon_end" = list_matched_ref_recon_gtf$diff_exon_end,
-              "NMD_reference" = NMD_reference,
-              "NMD_recon" = NMD_recon,
-              "first_or_last_exon_reference" = first_or_last_exon_reference,
-              "first_or_last_exon_recon" = first_or_last_exon_recon))
+  return(purrr::splice("diff_exon_coords" = list_matched_ref_recon_gtf$diff_exon_coords,
+                       "matched_gene_names" = matched_gene_names,
+                       "matched_strand" = matched_strand,
+                       "splicemode" = list_matched_ref_recon_gtf$splicemode,
+                       "matched_ref_transcript_names" = matched_ref_transcript_names,
+                       "matched_recon_transcript_names" = matched_recon_transcript_names,
+                       "NMD_biotype_reference" = NMD_biotype_reference,
+                       "NMD_flagged_ref" = NMD_flagged_ref,
+                       "NMD_flagged_recon" = NMD_flagged_recon,
+                       "poison_exon_candidate_ref" = poison_exon_candidate_ref,
+                       "poison_exon_candidate_recon" = poison_exon_candidate_recon,
+                       "contains_PTC_ref" = contains_PTC_ref,
+                       "contains_PTC_recon" = contains_PTC_recon,
+                       "first_or_last_exon_reference" = first_or_last_exon_reference,
+                       "first_or_last_exon_recon" = first_or_last_exon_recon
+  ))
   
 }
-
+  
 ```
 
 ```{r}
@@ -1744,7 +1817,7 @@ list_DEXSeq_results_tibble.only_with_PSI <- purrr::map2(.x = list_DEXSeq_results
                                                             dplyr::filter(featureID == "E001") %>%
                                                             dplyr::mutate("DEXSeq_PSI_first" = DEXSeq_IR_first/DEXSeq_pseudotranscript_IR_plus_ER_first,
                                                                           "DEXSeq_PSI_second" = DEXSeq_IR_second/DEXSeq_pseudotranscript_IR_plus_ER_second) %>%
-                                                            dplyr::mutate("DEXSeq_dpsi_first_minus_second" = DEXSeq_PSI_first - DEXSeq_PSI_second)
+                                                            dplyr::mutate("dpsi" = DEXSeq_PSI_first - DEXSeq_PSI_second)
                                                             
                                                         } )
 
@@ -1754,11 +1827,11 @@ future_map2(.x = list_DEXSeq_results_tibble.only_with_PSI,
            .f = function(a1, a2) {
              
              pdf(paste(DEXSeq_dir, "DEXSeq_dpsi_density_distributions_", a2, ".pdf", sep = ""))
-             plot(density(a1$DEXSeq_dpsi_first_minus_second %>% na.omit))
+             plot(density(a1$dpsi %>% na.omit))
              dev.off()
              
              pdf(paste(DEXSeq_dir, "DEXSeq_dpsi_cdf_distributions_", a2, ".pdf", sep = ""))
-             plot(ecdf(a1$DEXSeq_dpsi_first_minus_second %>% na.omit))
+             plot(ecdf(a1$dpsi %>% na.omit))
              dev.off()
              
            }, .progress = TRUE, .options = future_options(globals = FALSE))
@@ -1772,7 +1845,7 @@ future_map2(.x = list_DEXSeq_results_tibble.only_with_PSI,
 # rbind and tibblise
 long_tibble_DEXSeq_results_with_PSI <- list_DEXSeq_results_tibble.only_with_PSI %>% rbindlist %>% as_tibble %>%
 # select only cols that are informative
-  dplyr::select(id, DEXSeq_exonBaseMean, DEXSeq_dispersion, DEXSeq_stat, DEXSeq_pvalue, DEXSeq_padj, DEXSeq_log2FC_second_minus_first, comparison, DEXSeq_IR_first, DEXSeq_IR_second, DEXSeq_pseudotranscript_IR_plus_ER_first, DEXSeq_pseudotranscript_IR_plus_ER_second, DEXSeq_PSI_first, DEXSeq_PSI_second, DEXSeq_dpsi_first_minus_second)
+  dplyr::select(id, DEXSeq_exonBaseMean, DEXSeq_dispersion, DEXSeq_stat, DEXSeq_pvalue, DEXSeq_padj, DEXSeq_log2FC_second_minus_first, comparison, DEXSeq_IR_first, DEXSeq_IR_second, DEXSeq_pseudotranscript_IR_plus_ER_first, DEXSeq_pseudotranscript_IR_plus_ER_second, DEXSeq_PSI_first, DEXSeq_PSI_second, dpsi)
 
 long_tibble_of_psisigma_DEXSeq_results <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3, long_tibble_DEXSeq_results_with_PSI, by = c("id", "comparison"))
 
@@ -1791,7 +1864,7 @@ long_tibble_of_psisigma_DEXSeq_results <- read.delim(paste(R_processing_results_
 # 2 choices: "pvalue" or "FDR" or DEXSeq_pvalue or DEXSeq_padj
 pvalue_or_FDR <- "DEXSeq_padj"
 
-dpsi_cutoff <- 0.10
+dpsi_cutoff <- 15
 
 pvalue_cutoff <- 0.01
 
@@ -1805,7 +1878,7 @@ pvalue_cutoff <- 0.01
 ```{r}
 
 # filter dpsi, pvalue and also remove exons which have less than 2 observations in both comparisons
-wide_tibble_of_psisigma_results_allcomparisons_differential <- long_tibble_of_psisigma_DEXSeq_results %>% dplyr::filter(., !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2)
+wide_tibble_of_psisigma_results_allcomparisons_differential <- long_tibble_of_psisigma_DEXSeq_results %>% dplyr::filter(., !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2)
 
 number.of.LIVs_differential_anysig_with_na <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand) %>% nrow
 number.of.exons_differential_anysig_with_na <- wide_tibble_of_psisigma_results_allcomparisons_differential$diff_exon_coords %>% unique %>% length
@@ -1828,7 +1901,7 @@ wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons <- dplyr:
 write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # also write table of differential information for 12d vs. ud.
-tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff)
+tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff)
 # write table
 write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV", tibble_differential_results_12d_vs_ud %>% nrow, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 # export associated gene set
@@ -1854,37 +1927,37 @@ wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR <- w
 tibble_cumulative_diff_changes_total <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
   add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
 
 tibble_cumulative_diff_changes_IR <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
   add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
 
 tibble_cumulative_diff_changes_non.IR <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff) %>% .$diff_exon_coords %>% unique %>% length)) %>% 
   add_column("cumulative_diff_changes_pct" = .$cumulative_diff_changes * 100 / (.$cumulative_diff_changes %>% max))
 
 ```
@@ -1972,7 +2045,7 @@ dev.off()
 
 # exon PSI - differential
 pdf(paste(R_processing_results_dir, "plot_of_absolute_dpsi_changes_exon_diff.pdf", sep = ""), width = 5, height = 5)
-plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(DEXSeq_dpsi_first_minus_second, na.rm = TRUE)) %>% .$exon_dpsi %>% abs), 
+plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(dpsi, na.rm = TRUE)) %>% .$exon_dpsi %>% abs), 
      main = "Distribution of absolute magnitude of change in dpsi, PSI-Sigma (exons)", 
      xlab = "Absolute dPSI in any direction (%)",
      ylab = "Frequency density",
@@ -1980,7 +2053,7 @@ plot(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_ex
   # ,
   # xaxt = "n",
   # xlim = c(0, 100)) 
-  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(DEXSeq_dpsi_first_minus_second, na.rm = TRUE)) %>% .$exon_dpsi %>% abs),
+  polygon(density(wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons %>% dplyr::group_by(diff_exon_coords) %>% dplyr::summarise("exon_dpsi" = sum(dpsi, na.rm = TRUE)) %>% .$exon_dpsi %>% abs),
           col = alpha("firebrick4", 0.33),
           border = FALSE,
           xaxt = "n")
@@ -2003,7 +2076,7 @@ In order to apply the constitutive cutoff (which requires that ALL timepoints mu
 wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV <- long_tibble_of_psisigma_DEXSeq_results %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, diff_exon_chr, diff_exon_start, diff_exon_end, matched_strand)
 ## create logical of whether each LIV has all pvalue and dpsi cutoff AS WELL AS having all comparisons intact (and not missing)
 ## if return NA, then it's not constitutive.
-wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV_constitutive.test <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV %>% dplyr::summarise("LIV_is_constitutive" = all(!!as.name(pvalue_or_FDR) > pvalue_cutoff & abs(DEXSeq_dpsi_first_minus_second) < dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2) & n() == vector_of_comparisons_final %>% length) %>% dplyr::mutate_at("LIV_is_constitutive", .funs = function(x) {
+wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV_constitutive.test <- wide_tibble_of_psisigma_results_allcomparisons_final_grouped.by.LIV %>% dplyr::summarise("LIV_is_constitutive" = all(!!as.name(pvalue_or_FDR) > pvalue_cutoff & abs(dpsi) < dpsi_cutoff & num.replicates_comparison.1 >= 2 & num.replicates_comparison.2 >= 2) & n() == vector_of_comparisons_final %>% length) %>% dplyr::mutate_at("LIV_is_constitutive", .funs = function(x) {
   
   y <- x 
   
@@ -3735,19 +3808,32 @@ if(! dir.exists(qualitycheck_results_dir) ) {
 # plot pvalue
 pdf(paste(qualitycheck_results_dir, "qualityplot_pvalues_density.distribution.pdf", sep = "")) 
   
-  plot(density(long_tibble_of_psisigma_DEXSeq_results[, "DEXSeq_pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "frequency density", main = "PSI-Sigma p-value density distribution")
+  plot(density(long_tibble_of_psisigma_DEXSeq_results[, "DEXSeq_pvalue"] %>% na.omit %>% unlist), xlab = "DEXSeq_pvalue", ylab = "frequency density", main = "PSI-Sigma/DEXSeq p-value density distribution")
   
 dev.off()
 
 pdf(paste(qualitycheck_results_dir, "qualityplot_pvalues_CDF.pdf", sep = "")) 
   
-  plot(ecdf(long_tibble_of_psisigma_DEXSeq_results[, "pvalue"] %>% na.omit %>% unlist), xlab = "pvalue", ylab = "cumulative frequency", main = "PSI-Sigma p-value CDF")
+  plot(ecdf(long_tibble_of_psisigma_DEXSeq_results[, "DEXSeq_pvalue"] %>% na.omit %>% unlist), xlab = "DEXSeq_pvalue", ylab = "cumulative frequency", main = "PSI-Sigma/DEXSeq p-value CDF")
   
 dev.off()
   
 vector_col.index_absolute.psi.comparison.1 <- grep(x = colnames(long_tibble_of_psisigma_DEXSeq_results), pattern = "comparison.1_")
 vector_col.index_absolute.psi.comparison.2 <- grep(x = colnames(long_tibble_of_psisigma_DEXSeq_results), pattern = "comparison.2_")
 
+# plot qvalue
+pdf(paste(qualitycheck_results_dir, "qualityplot_FDR_density.distribution.pdf", sep = "")) 
+  
+  plot(density(long_tibble_of_psisigma_DEXSeq_results[, "DEXSeq_padj"] %>% na.omit %>% unlist), xlab = "DEXSeq_padj", ylab = "frequency density", main = "PSI-Sigma/DEXSeq FDR density distribution")
+  
+dev.off()
+
+pdf(paste(qualitycheck_results_dir, "qualityplot_FDR_CDF.pdf", sep = "")) 
+  
+  plot(ecdf(long_tibble_of_psisigma_DEXSeq_results[, "DEXSeq_padj"] %>% na.omit %>% unlist), xlab = "DEXSeq_padj", ylab = "cumulative frequency", main = "PSI-Sigma/DEXSeq FDR CDF")
+  
+dev.off()
+  
 # plot all the absolute PSI values
 plot(density(long_tibble_of_psisigma_DEXSeq_results[long_tibble_of_psisigma_DEXSeq_results$comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_12h" & long_tibble_of_psisigma_DEXSeq_results$pvalue < 0.4 & long_tibble_of_psisigma_DEXSeq_results$pvalue > 0.35, c(1, vector_col.index_absolute.psi.comparison.1, vector_col.index_absolute.psi.comparison.2)] %>% melt(.,id.vars = "database_ID", variable.name = "comparison.replicate", value.name = "absolute.psi") %>% .$absolute.psi %>% na.omit), main = "distribution of PSI values for comparisons with a p value of \n between 0.35 and 0.4")
   

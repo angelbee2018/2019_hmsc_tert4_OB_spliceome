@@ -1,13 +1,17 @@
-script_description <- "# NMD FLAGGER ######
-Accepts an input of a reconstructed/assembled transcriptome annotation (e.g. strawberry, stringtie) and flags potential candidate NMD transcripts using the 51nt rule as described in <<Hsu, M.K., Lin, H.Y. and Chen, F.C., 2017. NMD Classifier: A reliable and systematic classification tool for nonsense-mediated decay events. PloS one, 12(4)>>.
+script_description <- "# Poison Exon Finder ######
+Accepts an input of exon/VSR chr, start, end, strand. Each row describes an alternative exon. (Like from PSI-Sigma).
 
-Behaviour: loads reconstructed transcriptome, then subsets each transcript. For each transcript, look-up the reference FASTA sequence and 3FT to find ALL start codons that occur more than 54nt upstream of the last exon-exon junction. Then look for any in-frame stop codons downstream. Transcript is an NMD candidate when the FIRST nucleotide of the stop codon is within 51 - 50nt of the last exon junction (the stop codon is fully encapsulated in the 51nt window).
+This program will use the reference GTF (like Ensembl) to deduce whether each alternative exon would contain a premature termination codon (PTC), hence becoming a poison exon.
 
-Option is available to use already-annotated start codon to tell the program which translation frame is the correct one.
+To do this, the program needs the reference GTF as well as the reference genome assembly.
 
-NMD candidature is flagged in the \"PTC\" entry of the GTF. First/last exon is flagged in a separate entry. Poison exons are defined on a per-transcript basis, with candidature flagged as a separate entry with the \"type\" attribute == \"poison_exon\"
-
-Recommended system requirements: 6 threads/64GB memory. Minimum system requirements: 1 thread/16GB memory"
+BEHAVIOUR:
+1. Match VSRs (Event Region) to reference transcripts (protein_coding only!!!!)
+2. Delete any reference exons overlapping with the alternative exon in question
+3. Replace the reference transcript with the exon in question and the associated upstream transcript segment.
+4. Three-frame translation, using start-codon frame whenever possible
+5. Any PTCs which touch the alternative exon means that the alternative exon is a poison exon.
+6. Annotate each Event Region/Target Exon pair with the column \"introduces_PTC\" along with the information associatd with the matched reference transcript."
 
 # print the arguments received by the R script
 cat("Arguments input:", commandArgs(), sep = "\n")
@@ -36,30 +40,26 @@ tictoc::tic("Overall execution time")
 
 # manage arguments
 list_input_arg_info = list(
-  "1" = make_option(c("-R", "--reconstructed_transcript_gtf"), type = "character", default = NULL, 
-                    help = "Compulsory. path to the actual reconstructed GTF file (e.g. from Cufflinks, Strawberry) that you want checked for NMD candidates. NOT THE CONTAINING DIRECTORY.", metavar = "character"),
-  "2" = make_option(c("-F", "--reference_genome_fasta_dir"), type = "character", default = NULL, 
+  "1" = make_option(c("-E", "--exon_table"), type = "character", default = NULL, 
+                    help = "Compulsory. path to the actual exon table file (e.g. from PSI-Sigma) that you want checked for poison exon candidates. NOT THE CONTAINING DIRECTORY. Must be tab-separated, with two options of column names. You can either have two columns with identifier coords like: 1:230124:230245 or chr, start, end, (optional) strand. If the former, the first column must be called \"VSR_coords\", and the second column \"alternative_exon_coords\". If the latter, then VSR_chr, VSR_start, VSR_end etc..., and alternative_exon_chr, alternative_exon_start etc...", metavar = "character"),
+  "2" = make_option(c("-R", "--reference_transcript_gtf"), type = "character", default = NULL, 
+                    help = "Compulsory. path to the actual reference GTF file (e.g. from Cufflinks, Strawberry) that you want checked for NMD candidates. NOT THE CONTAINING DIRECTORY.", metavar = "character"),
+  "3" = make_option(c("-F", "--reference_genome_fasta_dir"), type = "character", default = NULL, 
                     help = "Compulsory. path to the directory containing the genome FASTA files. Ideally from Ensembl... you need separate files by chromosomes, NOT the primary assembly. 
               FORMATTING IMPORTANT!!!! MAKE SURE THE REF. GENOME FASTA FILES ARE IN THE FORMAT: <_anything_><chr>.fa e.g. \"Homo_sapiens.GRCh38.dna.chromosome.MT.fa\" OR \"chr16.fa\" OR \"Y.fa\". What will not work: anything which does not have .fa extension e.g. \"chr16.fasta\", anything between the chromosome number and the .fa extension e.g. \"chromosome1.ensembl.fa\"", metavar = "character"),
-  "3" = make_option(c("-D", "--output_dir"), type = "character", default = NULL, 
-                    help = "Compulsory. output file directory. where do you want to save the newly annotated reconstructed GTF? IMPORTANT: MUST BE A FULL DIRECTORY AND NOT A FILE PATH. e.g. correct: ~/outputdir/ correct: ~/outputdir incorrect: /outputdir/annotated_sample.gtf", metavar = "character"),
-  "4" = make_option(c("-O", "--output_name"), type = "character", default = NULL, 
-                    help = "Compulsory. output file name, to be saved in the output directory a.k.a. what do you want to save the newly annotated reconstructed GTF as? IMPORTANT: MUST BE A STRING WITHOUT THE .GTF EXTENSION AND NOT A DIRECTORY. THE .GTF EXTENSION WILL AUTOMATICALLY BE ADDED FOR THE OUTPUT FILE. e.g. correct: annotated_sample incorrect: annotated_sample.gtf incorrect: annotated_sample/", metavar = "character"),
-  "5" = make_option(c("-C", "--ncores"), type = "integer", default = 0, 
+  "4" = make_option(c("-D", "--output_dir"), type = "character", default = NULL, 
+                    help = "Compulsory. output file directory. where do you want to save the annotated exon table? IMPORTANT: MUST BE A FULL DIRECTORY AND NOT A FILE PATH. e.g. correct: ~/outputdir/ correct: ~/outputdir incorrect: /outputdir/annotated_exons.txt", metavar = "character"),
+  "5" = make_option(c("-O", "--output_name"), type = "character", default = NULL, 
+                    help = "Compulsory. output file name, to be saved in the output directory a.k.a. what do you want to save the annotated exon table as? IMPORTANT: MUST BE A STRING WITHOUT THE EXTENSION AND NOT A DIRECTORY. THE .txt EXTENSION WILL AUTOMATICALLY BE ADDED FOR THE OUTPUT FILE. e.g. correct: annotated_sample incorrect: annotated_exons.txt incorrect: annotated_sample/", metavar = "character"),
+  "6" = make_option(c("-C", "--ncores"), type = "integer", default = 0, 
                     help = "Optional. Number of cores to use. possible inputs: numbers 1 to any integer. By default, uses all cores (ncores = 0).", metavar = "integer"),
-  "6" = make_option(c("-S", "--use_start_codon"), type = "logical", default = TRUE, 
+  "7" = make_option(c("-S", "--use_start_codon"), type = "logical", default = TRUE, 
                     help = "Optional but you should really choose the right option. This option tells the program whether or not there are start codons provided for each transcript (where available). It's useful if you want to re-annotate e.g. the reference Ensembl GTF for the presence of PTCs, so that the program will not consider all 3 translation frames but only consider the frame containing the annotated start codon. If for any reason a transcript doesn't have an associated start codon, the program will revert to considering all 3 frames. By default, start codons are used where applicable.", metavar = "logical"),
-  "7" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
-                    help = "Optional. Specifies which chromosomes to do: select what chromosomes you want translated. possible inputs: numbers 0-2. 0 (default): nuclear chromosomes only i,e, 1:22, X & Y. 1: nuclear + mitochondrial i.e. 1:22, X & Y, M. 2: everything including haplotype/fusion chromosomes etc... this is possible provided the chromosome names.", metavar = "integer"),
-  "8" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
+  "8" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
+                    help = "Optional. Specifies which chromosomes to do: select what chromosomes you want considered. possible inputs: numbers 0-2. 0 (default): nuclear chromosomes only i,e, 1:22, X & Y. 1: nuclear + mitochondrial i.e. 1:22, X & Y, M. 2: everything including haplotype/fusion chromosomes etc... this is possible provided the chromosome names.", metavar = "integer"),
+  "9" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
                     help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you want to consider haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The program won't try to search for a second file. In ensembl, this file is called something like \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So if you want to use that file, then for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character"),
-  "9" = make_option(c("-W", "--checking_window_size"), type = "double", default = 51,
-                    help = "ADVANCED. Use this parameter to change the nucleotide window from the default of 51. 
-                    DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double"),
-  "10" = make_option(c("-E", "--min_exons_per_transcript"), type = "integer", default = 3,
-                    help = "ADVANCED. Use this parameter to change the minimum number of exons that a transcript must have in order to be flagged for NMD. As a general rule of thumb, the false positive rate:false negative rate ratio will decrease as you increase this parameter. Default is 3, meaning 2-exon transcripts and below will not be considered for NMD. 
-                    DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double"),
-  "11" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
+  "10" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
                      help = "Turn this on if you want to save the R workspace in the same name as the --output_name. YES: saves at the end. DEBUG: saves at each critical step. NO: doesn't save.", metavar = "character")
 )
 
@@ -76,41 +76,36 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
   
 }
 
+
 # DEBUG #######
 
-# reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
-# reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-# output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/"
-# output_name <- "Homo_sapiens.GRCh38.98.gtf_NMD_PTC_E4_test"
+exon_table <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1323_dpsi0.1_DEXSeq_padj0.01_anysig_with_na.txt"
+reference_transcript_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
+output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/"
+output_name <- "long_tibble_of_psisigma_results_allcomparisons_differential_poison_exon_finder.txt"
 
-# reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
-# reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+# reference_transcript_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+# reference_transcript_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 # reference_genome_fasta_dir <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
 # output_name <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck.gtf"
 
-# window_size <- 51
-# min_exons_per_transcript <- 4
-# use_start_codon <- TRUE
+use_start_codon <- TRUE
 
 ###############
 
-reconstructed_gtf_path <- input_args$reconstructed_transcript_gtf
+exon_table <- exon_table
+reference_transcript_gtf_path <- input_args$reference_transcript_gtf
 reference_genome_fasta_dir <- input_args$reference_genome_fasta_dir
 output_dir <- input_args$output_dir
 output_name <- input_args$output_name
-window_size <- input_args$checking_window_size
-min_exons_per_transcript <- input_args$min_exons_per_transcript
 use_start_codon <- input_args$use_start_codon
 save_workspace_when_done <- input_args$save_workspace_when_done
 
-cat("reconstructed_gtf_path:", reconstructed_gtf_path, "\n")
+cat("reference_transcript_gtf_path:", reference_transcript_gtf_path, "\n")
 cat("reference_genome_fasta_dir:", reference_genome_fasta_dir, "\n")
 cat("output_name:", output_name, "\n")
-cat("window_size:", window_size, "\n")
-cat("min_exons_per_transcript:", min_exons_per_transcript, "\n")
 
-# if(!dir.exists(output_name) ) {
-#   dir.create(output_name, recursive = TRUE)}
 
 # manage parrallellisation rrlllRll
 
@@ -160,87 +155,35 @@ test_for_any_valid_ORF <- function(vector_AA_sequence) {
 
 # END test_for_any_valid_ORF()
 
-# FUNCTION TO LABEL THE FIRST AND LAST EXON OF A SUBSET GTF (DESCRIBING A SINGLE TRANSCRIPT) WITH "first_exon" or "last_exon"
-
-label_first_last_exon <- function(tibble_gtf_subset_by_transcript_id) {
-  
-  max_exon_number <- max(tibble_gtf_subset_by_transcript_id$exon_number)
-  
-  # account for transcripts which only have one exon
-  if (max_exon_number == 1) {
-    
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "only_one_exon"
-    
-  } else if (exon_order == "increasing" & tibble_gtf_subset_by_transcript_id$strand %>% unique == "-") {
-    
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "first_exon"
-    
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "last_exon"
-    
-  } else {
-    
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "last_exon"
-    
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "first_exon"
-    
-  }
-  
-  return(tibble_gtf_subset_by_transcript_id)
-  
-}
-
-# END label_first_last_exon() ######
-
-# MAIN FUNCTION TO LABEL THE FIRST/LAST EXONS OF GTF
-
-add_first.last.exon_info <- function(input_gtf) {
-  
-  # add in the first_or_last_exon column
-  input_gtf_2 <- input_gtf %>% add_column("first_or_last_exon" = NA)
-  
-  # remove rows which have an NA exon number
-  input_gtf_2 <- input_gtf_2[-which(is.na(input_gtf_2$exon_number)), ]
-  
-  # remove rows which don't have strand info
-  input_gtf_2 <- input_gtf_2 %>% dplyr::filter(input_gtf_2$strand != "+" | input_gtf_2$strand != "-")
-  
-  # get all the unique transcript IDs for looping
-  list_unique_transcript.ids <- input_gtf_2$transcript_id %>% unique %>% array_tree
-  
-  output_gtf <- future_map(.x = list_unique_transcript.ids, .f = ~label_first_last_exon(input_gtf_2[input_gtf_2$transcript_id == .x, ]), .progress = TRUE, .options = future_options(globals = c("input_gtf_2", "label_first_last_exon"))) %>% rbindlist %>% as_tibble
-  
-  return(output_gtf)
-  
-}
-
 # BEGIN EXECUTION ###########################
 
-cat("import reconstructed transcriptome GTF\n")
-tibble_reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
-
+cat("checking reference genome directory\n")
 vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(reference_genome_fasta_dir)[list.files(reference_genome_fasta_dir) %>% grep(., pattern = ".*.fa$")], sep = "")
+cat("import reference transcriptome GTF\n")
+tibble_reference_gtf <- rtracklayer::import(reference_transcript_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
-# automatically detect if exons are always numbered in increasing order regardless of strand (common for recon. transcripts)
+cat("checking reference transcriptome GTF\n")
+# automatically detect if exons are always numbered in increasing order regardless of strand (common for ref. transcripts)
 ## sample the first transcript on the negative strand with more than 1 exon
 temp_number <- 1
 
-first_transcript_id <- tibble_reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+first_transcript_id <- tibble_reference_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
 
-while (tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
-       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
-       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
-       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
+while (tibble_reference_gtf[tibble_reference_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
+       tibble_reference_gtf[tibble_reference_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
+       tibble_reference_gtf[tibble_reference_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
+       tibble_reference_gtf[tibble_reference_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
   
   temp_number <- temp_number + 1
   
-  first_transcript_id <- tibble_reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+  first_transcript_id <- tibble_reference_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
   
 }
 
 # the test condition
-max_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
-max_exon_start_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id & tibble_reconstructed_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
-min_exon_start_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id & tibble_reconstructed_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
+max_test <- tibble_reference_gtf[tibble_reference_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
+max_exon_start_test <- tibble_reference_gtf[tibble_reference_gtf$transcript_id == first_transcript_id & tibble_reference_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
+min_exon_start_test <- tibble_reference_gtf[tibble_reference_gtf$transcript_id == first_transcript_id & tibble_reference_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
 
 exon_order <- NULL
 
@@ -293,9 +236,9 @@ for (chr in chr_to_run) {
   cat("temporary allocation to ref genome fasta list\n")
   reference_genome_fasta_chr_temp <- seqinr::read.fasta(file = paste(vector_ref_genome_paths_by_chr[vector_ref_genome_paths_by_chr_position]), forceDNAtolower = FALSE)
   
-  tibble_reconstructed_gtf_tempchr <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$seqnames == chr, ]
+  tibble_reconstructed_gtf_tempchr <- tibble_reference_gtf[tibble_reference_gtf$seqnames == chr, ]
   
-  cat("subset reconstructed transcriptome GTF by filtering for exon entries only.\n")
+  cat("subset reference transcriptome GTF by filtering for exon entries only.\n")
   # leave aside the remaining entries for later inclusion
   ## rows which do not describe an exon or start_codon entry
   row_indices_recon.gtf_non.exon.entries <- which(tibble_reconstructed_gtf_tempchr$type != "exon" & tibble_reconstructed_gtf_tempchr$type != "start_codon")
@@ -308,7 +251,7 @@ for (chr in chr_to_run) {
   # generate list of all 'transcript_id's to loop thru
   list_transcript_ids <- tibble_reconstructed_gtf_tempchr$transcript_id %>% unique %>% na.omit %>% array_tree
   
-  cat("load the exon entries of the recon. GTF table into the list\n")
+  cat("load the exon entries of the ref. GTF table into the list\n")
   list_reconstructed_gtf_exon.entries.only_by_transcript_id <- future_map(.x = list_transcript_ids, .f = ~reconstructed_gtf_exon.entries.only[reconstructed_gtf_exon.entries.only$transcript_id == .x, ], .progress = TRUE, .options = future_options(globals = c("reconstructed_gtf_exon.entries.only"))) %>% set_names(list_transcript_ids %>% unlist)
   
   # filter out transcript entries which only have one exon
@@ -548,8 +491,8 @@ for (chr in chr_to_run) {
 list_ORF_test <- ls(pattern = "tibble_logical_NMD_or_not_temp_chr_") %>% array_tree %>% purrr::map(.x = ., .f = ~get(.x)) %>% compact
 # rbindlist into a tibble
 tibble_ORF_test <- list_ORF_test %>% rbindlist(use.names = TRUE) %>% as_tibble
-# table join for final annotated reconstructed GTF
-tibble_annotated_recon_gtf <- dplyr::left_join(x = tibble_reconstructed_gtf, y = tibble_ORF_test[, c("transcript_id", "NMD_candidate")], by = "transcript_id")
+# table join for final annotated reference GTF
+tibble_annotated_recon_gtf <- dplyr::left_join(x = tibble_reference_gtf, y = tibble_ORF_test[, c("transcript_id", "NMD_candidate")], by = "transcript_id")
 # turn NA in the NMD column to FALSE
 tibble_annotated_recon_gtf[which(is.na(tibble_annotated_recon_gtf$NMD_candidate)), "NMD_candidate"] <- "FALSE"
 
@@ -570,9 +513,9 @@ tibble_ORF_test <- tibble_ORF_test %>% dplyr::mutate_at(.vars = colnames(tibble_
 
 list_tibble_ORF_test_array.tree <- tibble_ORF_test %>% array_tree
 
-## subset recon. GTF for exonic entries only
-tibble_reconstructed_gtf_exonic_entries_only <- tibble_reconstructed_gtf %>% dplyr::filter(type == "exon") %>% dplyr::select(transcript_id, type, start, end)
-## subset recon. GTF for each element
+## subset ref. GTF for exonic entries only
+tibble_reconstructed_gtf_exonic_entries_only <- tibble_reference_gtf %>% dplyr::filter(type == "exon") %>% dplyr::select(transcript_id, type, start, end)
+## subset ref. GTF for each element
 list_recon_GTF_matched_to_PTC_per_transcript_id <- future_map(.x = list_tibble_ORF_test_array.tree, .f = function(a1) {
   
   # DEBUG ###
@@ -601,7 +544,7 @@ list_recon_GTF_matched_to_PTC_per_transcript_id <- future_map(.x = list_tibble_O
   
   return(tibble_subset_recon.GTF_for_transcript_id_annotated)
   
-  }, .progress = TRUE)
+}, .progress = TRUE)
 
 ## rbind and tibblise
 tibble_subset_recon_GTF_matched_to_PTC_per_transcript_id <- list_recon_GTF_matched_to_PTC_per_transcript_id %>% rbindlist(use.names = TRUE) %>% as_tibble
@@ -639,13 +582,11 @@ rtracklayer::export(tibble_annotated_recon_gtf_first.last, con = paste(output_di
 # write stats summary
 fileConn <- file(paste(output_dir, "/", output_name, "_stats_summary.txt", sep = ""))
 writeLines(paste("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique), "\n", sep = ""), con = fileConn)
-writeLines(paste("number of transcripts which were in the GTF:", length(tibble_reconstructed_gtf$transcript_id %>% unique), "\n", sep = ""), con = fileConn)
-writeLines(paste("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(tibble_reconstructed_gtf$transcript_id %>% unique))) * 100, "%\n", sep = ""), con = fileConn)
+writeLines(paste("number of transcripts which were in the GTF:", length(tibble_reference_gtf$transcript_id %>% unique), "\n", sep = ""), con = fileConn)
+writeLines(paste("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(tibble_reference_gtf$transcript_id %>% unique))) * 100, "%\n", sep = ""), con = fileConn)
 close(fileConn)
 
 # finish counting
 tictoc::toc()
 
 q()
-
-

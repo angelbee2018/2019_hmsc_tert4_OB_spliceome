@@ -1579,6 +1579,8 @@ write.table(x = vec_all_JUM_genes_ENSG, file = paste(R_processing_results_dir, "
 
 ```{r}
 
+# read the wide JUM results table
+# wide_tibble_all_splicemodes_split_with_na <- read.delim(paste(R_processing_results_dir, "wide_table_of_all_JUM_results_13137_VSRs_with_na.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
 # read the table of annotation
 # tibble_of_AS.event.ID_joined_to_annotation <- read.delim(paste(R_processing_results_dir, "tibble_of_AS.event.ID_joined_to_annotation.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
 
@@ -1613,10 +1615,10 @@ list_as.event.id_with_summarised_annotation_not.IR <- future_map(.x = as.event.i
                                          "matched_ref_transcript_names" = subset_tibble_annotation$matched_ref_transcript_names %>% paste(collapse = ";"),
                                          "matched_recon_transcript_names" = subset_tibble_annotation$matched_recon_transcript_names %>% paste(collapse = ";"),
                                          "NMD_biotype_reference" = subset_tibble_annotation$NMD_biotype_reference %>% unique %>% all == TRUE,
-                                         "NMD_reference" = subset_tibble_annotation$NMD_reference %>% unique %>% all == TRUE,
-                                         "NMD_recon" = subset_tibble_annotation$NMD_recon %>% unique %>% all == TRUE,
-                                         "any_NMD" = any(c(grep(x = subset_tibble_annotation$NMD_reference, pattern = "TRUE") %>% na.omit,
-                                                           grep(x = subset_tibble_annotation$NMD_recon, pattern = "TRUE") %>% na.omit)),
+                                         "NMD_flagged_ref" = subset_tibble_annotation$NMD_flagged_ref %>% unique %>% all == TRUE,
+                                         "NMD_flagged_recon" = subset_tibble_annotation$NMD_flagged_recon %>% unique %>% all == TRUE,
+                                         "any_NMD" = any(c(grep(x = subset_tibble_annotation$NMD_flagged_ref, pattern = "TRUE") %>% na.omit,
+                                                           grep(x = subset_tibble_annotation$NMD_flagged_recon, pattern = "TRUE") %>% na.omit)),
                                          "poison_exon_candidate_ref" = any(subset_tibble_annotation$poison_exon_candidate_ref == TRUE),
                                          "poison_exon_candidate_recon" = any(subset_tibble_annotation$poison_exon_candidate_recon == TRUE),
                                          "contains_PTC_ref" = any(subset_tibble_annotation$contains_PTC_ref == TRUE),
@@ -1759,12 +1761,12 @@ list_as.event.id_with_summarised_annotation_IR <- future_imap(.x = as.event.id_a
                                          } else {
                                            all(tibble_all_confirmed_IR_entries_ref$transcript_biotype == "nonsense_mediated_decay")
                                          },
-                                         "NMD_reference" = if (tibble_all_confirmed_IR_entries_ref == "uninit") {
+                                         "NMD_flagged_ref" = if (tibble_all_confirmed_IR_entries_ref == "uninit") {
                                            FALSE
                                          } else {
                                            all(tibble_all_confirmed_IR_entries_ref$NMD_candidate == TRUE)
                                          },
-                                         "NMD_recon" = if (tibble_all_confirmed_IR_entries_recon == "uninit") {
+                                         "NMD_flagged_recon" = if (tibble_all_confirmed_IR_entries_recon == "uninit") {
                                            FALSE
                                          } else {
                                            all(tibble_all_confirmed_IR_entries_recon$NMD_candidate == TRUE)
@@ -1772,22 +1774,22 @@ list_as.event.id_with_summarised_annotation_IR <- future_imap(.x = as.event.id_a
                                          "poison_exon_candidate_ref" = if (tibble_all_confirmed_IR_entries_ref == "uninit") {
                                            FALSE
                                          } else {
-                                           any(tibble_all_confirmed_IR_entries_ref$poison_exon_candidate_ref == TRUE)
+                                           any(tibble_all_confirmed_IR_entries_ref$poison_exon_candidate == TRUE)
                                          },
                                          "poison_exon_candidate_recon" = if (tibble_all_confirmed_IR_entries_recon == "uninit") {
                                            FALSE
                                          } else {
-                                           any(tibble_all_confirmed_IR_entries_recon$poison_exon_candidate_recon == TRUE)
+                                           any(tibble_all_confirmed_IR_entries_recon$poison_exon_candidate == TRUE)
                                          },
                                          "contains_PTC_ref" = if (tibble_all_confirmed_IR_entries_ref == "uninit") {
                                            FALSE
                                          } else {
-                                           any(tibble_all_confirmed_IR_entries_ref$contains_PTC_ref == TRUE)
+                                           any(tibble_all_confirmed_IR_entries_ref$contains_PTC == TRUE)
                                          },
                                          "contains_PTC_recon" = if (tibble_all_confirmed_IR_entries_recon == "uninit") {
                                            FALSE
                                          } else {
-                                           any(tibble_all_confirmed_IR_entries_recon$contains_PTC_recon == TRUE)
+                                           any(tibble_all_confirmed_IR_entries_recon$contains_PTC == TRUE)
                                          },
                                          "first_or_last_exon_reference" = subset_tibble_annotation$first_or_last_exon_reference %>% paste(collapse = ";"),
                                          "first_or_last_exon_recon" = subset_tibble_annotation$first_or_last_exon_recon %>% paste(collapse = ";"),
@@ -1795,8 +1797,8 @@ list_as.event.id_with_summarised_annotation_IR <- future_imap(.x = as.event.id_a
                                                                   grep(x = subset_tibble_annotation$first_or_last_exon_recon, pattern = "first_exon") %>% na.omit)),
                                          "any_last_exon" = any(c(grep(x = subset_tibble_annotation$first_or_last_exon_reference, pattern = "last_exon") %>% na.omit, 
                                                                   grep(x = subset_tibble_annotation$first_or_last_exon_recon, pattern = "last_exon") %>% na.omit))
-                                         ) %>% add_column("any_NMD" = any(c(grep(x = .$NMD_reference, pattern = "TRUE") %>% na.omit,
-                                                           grep(x = .$NMD_recon, pattern = "TRUE") %>% na.omit)), .after = "NMD_recon")
+                                         ) %>% add_column("any_NMD" = any(c(grep(x = .$NMD_flagged_ref, pattern = "TRUE") %>% na.omit,
+                                                           grep(x = .$NMD_flagged_recon, pattern = "TRUE") %>% na.omit)), .after = "NMD_flagged_recon")
   
   return(summarised_tibble_annotation)
   
@@ -2458,7 +2460,7 @@ Plan:
 
 # OB series ###
 
-list_of_scaled_PSI_OBseries <- purrr::map(.x = vector_OBseries_timepoints, .f = ~PSI_levels_timeseries_OB_wide_scaled[, c("Gene", "AS_event_ID", "splicemode", "sub_LSV_ID", "sub_junction_start_coor", "sub_junction_end_coor", "NMD_reference", "NMD_recon", "any_NMD", "first_or_last_exon_reference", "first_or_last_exon_recon", "any_first_exon", "any_last_exon", .x)])
+list_of_scaled_PSI_OBseries <- purrr::map(.x = vector_OBseries_timepoints, .f = ~PSI_levels_timeseries_OB_wide_scaled[, c("Gene", "AS_event_ID", "splicemode", "sub_LSV_ID", "sub_junction_start_coor", "sub_junction_end_coor", "NMD_flagged_ref", "NMD_recon", "any_NMD", "first_or_last_exon_reference", "first_or_last_exon_recon", "any_first_exon", "any_last_exon", .x)])
 
 ```
 
@@ -4108,38 +4110,56 @@ PSI_levels_timeseries_OB_wide_with_na_2 <- PSI_levels_timeseries_OB_wide_with_na
 # ALL JUNCTIONS
 # category means splicemode + NMD status + first/last junction
 # also clean up the splicemode column
-tibble_junctions_per_category_all <- wide_tibble_all_splicemodes_split_with_na_with_ref_annot_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_all = n())
+tibble_junctions_per_category_all <- wide_tibble_all_splicemodes_split_with_na_with_ref_annot_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, NMD_flagged_ref, poison_exon_candidate_ref, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_all = n())
+
+tibble_junctions_per_category_all[is.na(tibble_junctions_per_category_all)] <- FALSE
+
+tibble_junctions_per_category_all <- tibble_junctions_per_category_all %>% group_by(splicemode, NMD_flagged_ref, poison_exon_candidate_ref, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_all = sum(no_junctions_all))
 
 all_junctions_count <- tibble_junctions_per_category_all$no_junctions_all %>% sum(na.rm = TRUE)
-# number_NMD_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$any_NMD == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
+number_NMD_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$NMD_flagged_ref == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
+number_poison_exon_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$poison_exon_candidate_ref == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
 number_first_junction_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$first_exon_reference == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
 number_last_junction_all_junctions <- tibble_junctions_per_category_all[tibble_junctions_per_category_all$last_exon_reference == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
 
-# message("There are ", number_NMD_all_junctions*100/all_junctions_count, "% NMD junctions overall.")
+message("There are ", number_NMD_all_junctions*100/all_junctions_count, "% NMD junctions overall.")
+message("There are ", number_poison_exon_all_junctions*100/all_junctions_count, "% junctions touching at least one poison exon candidate.")
 message("There are ", number_first_junction_all_junctions*100/all_junctions_count, "% first junctions overall.")
 message("There are ", number_last_junction_all_junctions*100/all_junctions_count, "% last junctions overall.")
 
 # CONSTITUTIVE JUNCTIONS
-tibble_junctions_per_category_constitutive <- PSI_levels_timeseries_constitutive_OB_wide_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_constitutive = n())
+tibble_junctions_per_category_constitutive <- PSI_levels_timeseries_constitutive_OB_wide_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, NMD_flagged_ref, poison_exon_candidate_ref, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_constitutive = n())
+
+tibble_junctions_per_category_constitutive[is.na(tibble_junctions_per_category_constitutive)] <- FALSE
+
+tibble_junctions_per_category_constitutive <- tibble_junctions_per_category_constitutive %>% group_by(splicemode, NMD_flagged_ref, poison_exon_candidate_ref, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_constitutive = sum(no_junctions_constitutive))
 
 constitutive_junctions_count <- tibble_junctions_per_category_constitutive$no_junctions_constitutive %>% sum(na.rm = TRUE)
-# number_NMD_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_NMD_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$NMD_flagged_ref == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
+number_poison_exon_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$poison_exon_candidate_ref == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
 number_first_junction_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$first_exon_reference == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
 number_last_junction_constitutive_junctions <- tibble_junctions_per_category_constitutive[tibble_junctions_per_category_constitutive$last_exon_reference == TRUE, ] %>% .$no_junctions_constitutive %>% sum(na.rm = TRUE)
 
-# message("There are ", number_NMD_constitutive_junctions*100/constitutive_junctions_count, "% NMD junctions constitutive.")
+message("There are ", number_NMD_constitutive_junctions*100/constitutive_junctions_count, "% NMD junctions constitutive.")
+message("There are ", number_poison_exon_constitutive_junctions*100/constitutive_junctions_count, "% junctions touching at least one poison exon candidate.")
 message("There are ", number_first_junction_constitutive_junctions*100/constitutive_junctions_count, "% first junctions constitutive.")
 message("There are ", number_last_junction_constitutive_junctions*100/constitutive_junctions_count, "% last junctions constitutive.")
 
 # DIFFERENTIAL JUNCTIONS
-tibble_junctions_per_category_differential <- PSI_levels_timeseries_OB_wide_with_na_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_differential = n())
+tibble_junctions_per_category_differential <- PSI_levels_timeseries_OB_wide_with_na_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% group_by(splicemode, NMD_flagged_ref, poison_exon_candidate_ref, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_differential = n())
+
+tibble_junctions_per_category_differential[is.na(tibble_junctions_per_category_differential)] <- FALSE
+
+tibble_junctions_per_category_differential <- tibble_junctions_per_category_differential %>% group_by(splicemode, NMD_flagged_ref, poison_exon_candidate_ref, first_exon_reference, last_exon_reference) %>% summarise(no_junctions_differential = sum(no_junctions_differential))
 
 differential_junctions_count <- tibble_junctions_per_category_differential$no_junctions_differential %>% sum(na.rm = TRUE)
-# number_NMD_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$any_NMD == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
+number_NMD_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$NMD_flagged_ref == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
+number_poison_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$poison_exon_candidate_ref == TRUE, ] %>% .$no_junctions_all %>% sum(na.rm = TRUE)
 number_first_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$first_exon_reference == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
 number_last_exon_differential_junctions <- tibble_junctions_per_category_differential[tibble_junctions_per_category_differential$last_exon_reference == TRUE, ] %>% .$no_junctions_differential %>% sum(na.rm = TRUE)
 
-# message("There are ", number_NMD_differential_junctions*100/differential_junctions_count, "% NMD junctions differential.")
+message("There are ", number_NMD_differential_junctions*100/differential_junctions_count, "% NMD junctions differential.")
+message("There are ", number_poison_exon_differential_junctions*100/differential_junctions_count, "% junctions touching at least one poison exon candidate.")
 message("There are ", number_first_exon_differential_junctions*100/differential_junctions_count, "% first junctions differential.")
 message("There are ", number_last_exon_differential_junctions*100/differential_junctions_count, "% last junctions differential.")
 
@@ -4147,7 +4167,7 @@ message("There are ", number_last_exon_differential_junctions*100/differential_j
 tibble_junctions_per_category_summary <- list(tibble_junctions_per_category_all, tibble_junctions_per_category_constitutive, tibble_junctions_per_category_differential) %>% purrr::reduce(dplyr::full_join)
 
 # melt the sample
-long_tibble_junctions_per_category_summary <- reshape2::melt(tibble_junctions_per_category_summary, id.vars = c("splicemode", "first_exon_reference", "last_exon_reference"), variable.name = "sample", value.name = "number_of_junctions_per_category") %>% as_tibble %>% 
+long_tibble_junctions_per_category_summary <- reshape2::melt(tibble_junctions_per_category_summary, id.vars = c("splicemode", "NMD_flagged_ref", "poison_exon_candidate_ref", "first_exon_reference", "last_exon_reference"), variable.name = "sample", value.name = "number_of_junctions_per_category") %>% as_tibble %>% 
   # add the overall counts for each splicemode
   dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_junctions_per_splicemode" = sum(number_of_junctions_per_category %>% na.omit))
 
@@ -4181,7 +4201,7 @@ ggplot() +
 
 # upset plot
 message("all junctions")
-df <- wide_tibble_all_splicemodes_split_with_na_with_ref_annot_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- wide_tibble_all_splicemodes_split_with_na_with_ref_annot_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "NMD_flagged_ref", "poison_exon_candidate_ref", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + NMD_flagged_ref + poison_exon_candidate_ref + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -4191,7 +4211,7 @@ print(set_size(upset_combs))
 
 pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_alljunctions.pdf", sep = ""), height = 4, width = 10)
 
-ComplexHeatmap::UpSet(upset_combs, 
+ht <- draw(ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
                       left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
                                                                      "first_exon_reference" = "Junction ontology",
@@ -4202,12 +4222,19 @@ ComplexHeatmap::UpSet(upset_combs,
                                                                      "composite_events" = "Splicemode",
                                                                      "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
                                                       col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
-                                                      ))
+                                                      )))
+od <- column_order(ht)
+cs <- comb_size(upset_combs)
+
+decorate_annotation("Intersection\nsize", {
+  grid.text(cs[od], x = seq_along(cs), y = unit(cs[od], "native") + unit(2, "pt"), 
+            default.units = "native", just = c("left", "centre"), gp = gpar(fontsize = 8), rot = 90)
+})
 
 dev.off()
 
 message("all constitutive")
-df <- PSI_levels_timeseries_constitutive_OB_wide_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- PSI_levels_timeseries_constitutive_OB_wide_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "NMD_flagged_ref", "poison_exon_candidate_ref", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + NMD_flagged_ref + poison_exon_candidate_ref + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -4217,7 +4244,7 @@ print(set_size(upset_combs))
 
 pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 10)
 
-ComplexHeatmap::UpSet(upset_combs, 
+ht <- draw(ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
                       left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
                                                                      "first_exon_reference" = "Junction ontology",
@@ -4228,12 +4255,19 @@ ComplexHeatmap::UpSet(upset_combs,
                                                                      "composite_events" = "Splicemode",
                                                                      "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
                                                       col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
-                                                      ))
+                                                      )))
+od <- column_order(ht)
+cs <- comb_size(upset_combs)
+
+decorate_annotation("Intersection\nsize", {
+  grid.text(cs[od], x = seq_along(cs), y = unit(cs[od], "native") + unit(2, "pt"), 
+            default.units = "native", just = c("left", "centre"), gp = gpar(fontsize = 8), rot = 90)
+})
 
 dev.off()
 
 message("all differential")
-df <- PSI_levels_timeseries_OB_wide_with_na_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- PSI_levels_timeseries_OB_wide_with_na_2 %>% dplyr::distinct(., AS_event_ID, .keep_all = TRUE) %>% .[, c("AS_event_ID", "splicemode", "NMD_flagged_ref", "poison_exon_candidate_ref", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = AS_event_ID + NMD_flagged_ref + poison_exon_candidate_ref + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
@@ -4243,7 +4277,7 @@ print(set_size(upset_combs))
 
 pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_junctions_per_NMD.first.last.exon_per_splicemode_", p_or_q_value, qpvalue_cutoff, "_dpsi", dPSI_cutoff, "_differential.pdf", sep = ""), height = 4, width = 10)
 
-ComplexHeatmap::UpSet(upset_combs, 
+ht <- draw(ComplexHeatmap::UpSet(upset_combs, 
                       comb_order = order(-comb_size(upset_combs)), 
                       left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Junction ontology",
                                                                      "first_exon_reference" = "Junction ontology",
@@ -4254,7 +4288,14 @@ ComplexHeatmap::UpSet(upset_combs,
                                                                      "composite_events" = "Splicemode",
                                                                      "intron_retention" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
                                                       col = list("Set Type" = c("Junction ontology" = "tomato1", "Splicemode" = "blue2"))
-                                                      ))
+                                                      )))
+od <- column_order(ht)
+cs <- comb_size(upset_combs)
+
+decorate_annotation("Intersection\nsize", {
+  grid.text(cs[od], x = seq_along(cs), y = unit(cs[od], "native") + unit(2, "pt"), 
+            default.units = "native", just = c("left", "centre"), gp = gpar(fontsize = 8), rot = 90)
+})
 
 dev.off()
 
@@ -4290,7 +4331,7 @@ message("number of last exons in BOTH recon and reference: ", row.indices_last_e
 message("last exons jaccard similarity: ", (row.indices_last_exon_ref.recon.intersection %>% length)/(row.indices_last_exon_ref.recon.union %>% length))
 
 ## NMD
-row.indices_NMD_ref <- grep(x = wide_tibble_all_splicemodes_split_with_na_with_ref_annot$NMD_reference, pattern = "TRUE")
+row.indices_NMD_ref <- grep(x = wide_tibble_all_splicemodes_split_with_na_with_ref_annot$NMD_flagged_ref, pattern = "TRUE")
 row.indices_NMD_recon <- grep(x = wide_tibble_all_splicemodes_split_with_na_with_ref_annot$NMD_recon, pattern = "TRUE")
 
 row.indices_NMD_ref.recon.intersection <- intersect(row.indices_NMD_ref, row.indices_NMD_recon)

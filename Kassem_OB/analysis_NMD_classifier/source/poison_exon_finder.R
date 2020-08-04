@@ -469,7 +469,7 @@ if (save_workspace_when_done == "DEBUG") {
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
 }
 
-c("modify each matched transcript by tacking on the alternative exon.\n")
+cat("modify each matched transcript by tacking on the alternative exon.\n")
 # for reference entries overlapping the alternative exon, remove them.
 list_modified_reference_transcript_segments <- future_imap(.x = list_GTF_entries_matched_to_VSRs_pruned,
                                                .f = function(a1, a2) { 
@@ -478,7 +478,9 @@ list_modified_reference_transcript_segments <- future_imap(.x = list_GTF_entries
                                                  # a1 <- list_GTF_entries_matched_to_VSRs[[1]]
                                                  ###########
                                                  
-                                                 cat(a2, "\n")
+                                                 if (save_workspace_when_done == "DEBUG") {
+                                                   cat(a2, "\n")
+                                                 }
                                                  
                                                  # get the exon numbers of the reference exons overlapping the alternative exon
                                                  list_ref_exon_numbers_overlapping_alternative_exon <- purrr::map(
@@ -650,7 +652,9 @@ list_genome_relative_positions_of_transcript_segments <- future_imap(.x = list_m
                                                                        # a1 <- list_modified_reference_transcript_segments_pruned[[12]]
                                                                        ###########
                                                                        
-                                                                       cat(a2, "\n")
+                                                                       if (save_workspace_when_done == "DEBUG") {
+                                                                         cat(a2, "\n")
+                                                                       }
                                                                        
                                                                        # create genome-relative nucleotide positions of each transcript
                                                                        vector_transcript_segment_forward_genome_relative_coords <- purrr::map(
@@ -887,7 +891,9 @@ list_three_frame_translation <- future_imap(.x = list_genome_relative_positions_
                                              # a1 <- list_genome_relative_positions_of_transcript_segments[[10]]
                                              ##########
                                              
-                                             cat(a2, "\n")
+                                             if (save_workspace_when_done == "DEBUG") {
+                                               cat(a2, "\n")
+                                             }
                                              
                                              list_three_frame_translation <- purrr::pmap(
                                                .l = list("b1" = a1$list_forward_nucleotides,
@@ -921,7 +927,7 @@ list_three_frame_translation <- future_imap(.x = list_genome_relative_positions_
                                                      list_raw_3FT_results <- list_raw_3FT_results %>% purrr::map(.f = ~list_raw_3FT_results[[1]])
                                                    }
                                                  } else if (current_strand == "-") {
-                                                   list_raw_3FT_results <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = transcript_segment_forward_nucleotides %>% rev %>% .[transcript_segment_relative_first_nt_of_start_codon_position:length(transcript_segment_forward_nucleotides)], strand = "+")
+                                                   list_raw_3FT_results <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = transcript_segment_forward_nucleotides %>% rev %>% .[transcript_segment_relative_first_nt_of_start_codon_position:length(transcript_segment_forward_nucleotides)] %>% seqinr::comp(seq = ., forceToLower = FALSE), strand = "+")
                                                    # if start codon was present, then all frames = 0th frame
                                                    if (b4 == TRUE) {
                                                      list_raw_3FT_results <- list_raw_3FT_results %>% purrr::map(.f = ~list_raw_3FT_results[[1]])
@@ -1024,6 +1030,7 @@ list_test_for_PTC <- future_imap(.x = list_three_frame_translation,
                                     } ) # L2
                                   
                                   return(splice(a1,
+                                                "matched_strand" = current_strand,
                                                 "list_transcript_segment_relative_last_nt_of_stop_codon_positions" = list_PTC_testing_info %>% purrr::map(~.x$list_transcript_segment_relative_last_nt_of_stop_codon_positions) %>% list,
                                                 "list_logical_PTC_exists_in_alternative_exon" = list_PTC_testing_info %>% purrr::map(~.x$list_logical_PTC_exists_in_alternative_exon) %>% list,
                                                 "list_genome_relative_coords_of_stop_codons" = list_PTC_testing_info %>% purrr::map(~.x$list_genome_relative_coords_of_stop_codons) %>% list))
@@ -1045,7 +1052,9 @@ list_results <- future_imap(.x = list_test_for_PTC_pruned,
                              # a1 <- list_test_for_PTC[[1017]]
                              ##########
                              
-                             cat(a2, "\n")
+                             if (save_workspace_when_done == "DEBUG") {
+                               cat(a2, "\n")
+                             }
                              
                              # test line
                              # a1$list_logical_PTC_exists_in_alternative_exon %>% purrr::map_depth(.depth = 2, .f = ~.x %>% paste(collapse = ",")) %>% purrr::map(~ .x %>% as_tibble %>% t %>% (function(x) {tibble <- x; colnames(tibble) <- c("PTC_exists_in_alternative_exon"); return(tibble)} ) %>% as_tibble(rownames = "translation_frame"))

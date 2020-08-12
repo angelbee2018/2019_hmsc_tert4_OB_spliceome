@@ -375,7 +375,6 @@ list_of_pfam_gene_family_categories <- list_of_pfam_gene_family_categories %>% p
 
 ```
 
-
 ## import MBNL (HiTS-CLiP) and SRSF (FLASH-Seq) data and match with GTF information
 
 ### set directories
@@ -418,9 +417,9 @@ names(list_of_RBP_target_gene_categories) <- names(list_of_RBP_target_gene_categ
 
 ```
 
-## Import files
+### Import files
 
-### RNA expression section
+#### RNA expression section
 
 #### import expression tables of DE genes
 
@@ -468,9 +467,9 @@ return(output_matrix)
 
 ```
 
-### JUM/PSI-Sigma section
+#### JUM/PSI-Sigma section
 
-#### set global vars.
+##### set global vars.
 
 ```{r}
 
@@ -479,53 +478,59 @@ vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d
 
 ```
 
-#### Import differential/constitutive/all detected tables
+##### Import differential/constitutive/all detected tables
 
 ```{r}
 
 # JUM ###
-tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_908_differential_VSRs_qvalue0.01_dPSI0.15_timeseries_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_5x5_som_clustered <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/5x5_SOM_869_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15_wide.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_5x5_som_clustered <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/5x5_SOM_869_junctions_PSI_OB_diff_any_qvalue0.01_any_deltaPSI_greaterthan_0.15_wide.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_906_differential_VSRs_qvalue0.01_dPSI0.15_timeseries_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_908_differential_VSRs_qvalue0.01_dPSI0.15_timeseries_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_984_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7855_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_all_JUM_results_13816_VSRs_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_all_JUM_results_13137_VSRs_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # tibble_JUM_all_junctions_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_all_JUM_results_13816_VSRs_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 # PSI-Sigma ###
-tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_1032LIVs_scaled.PSI_OB_diff.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_1032LIVs_scaled.PSI_OB_diff.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_PSIsigma_5x5_som_clustered <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/5x5_SOM_1368_exons_LIV.PSI_OB_diff_any_DEXSeq_padj0.01_any_deltaPSI_greaterthan_15_wide.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_5x5_som_clustered <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/5x5_SOM_1368_exons_LIV.PSI_OB_diff_any_DEXSeq_padj0.01_any_deltaPSI_greaterthan_15_wide.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1704_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1704_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/wide_table_of_1368LIVs_scaled.PSI_OB_diff.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/wide_table_of_1368LIVs_scaled.PSI_OB_diff.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/wide_table_of_8294_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1854_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1854_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_PSIsigma_all_exons_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_table_of_all_constitutive_LIV7532_dpsi15_DEXSeq_padj0.01.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_table_of_all_constitutive_LIV7532_dpsi15_DEXSeq_padj0.01.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_PSIsigma_all_exons_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_all_exons_with_na <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 ```
 
-#### Import gene ontology enrichment tables
+##### Import gene ontology enrichment tables
 
 ```{r}
 
-tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented GO terms for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_all.GO <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/Top inf significantly over-represented GO terms for OB series dPSI_0.15_anyqvalue0.01_915_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/Top inf significantly over-represented families for OB series dPSI_0.15_anyqvalue0.01_983_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/Top inf significantly over-represented families for OB series dPSI_0.15_anyqvalue0.01_915_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_GOterms_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/top_inf_GOterms_OB_series_dPSI_15_anyDEXSeq_padj0.01_1137_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
-tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_2_psi.sigma.1.9_in_parallel/R_processing_results/top_inf_PFAM_families_OB_series_dPSI_10_anypvalue0.01_1899_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/top_inf_PFAM_families_OB_series_dPSI_15_anyDEXSeq_padj0.01_1137_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 ```
 
-#### Import junction/exon ontology supporting info
+##### Import junction/exon ontology supporting info
 
 ```{r}
 
@@ -541,7 +546,7 @@ tibble_PSIsigma_exon_ontology_supp_info <- read.delim("/media/Ubuntu/sharedfolde
 
 ```
 
-#### Import junction/exon ontology tables
+##### Import junction/exon ontology tables
 
 ```{r}
 
@@ -850,12 +855,12 @@ JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na <-
 cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na$number_of_common_entries, "\n"))
 
 # constitutive JUM vs. constitutive PSI-Sigma
-JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <-
-  calculate_intersections_from_chr_strand_start_end(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end,
-                                                    tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
                                                     tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
 
-cat(magenta("JUM constitutive (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma constitutive, (", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_differential_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+cat(magenta("JUM constitutive (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma constitutive, (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
 
 ```
 
@@ -893,6 +898,13 @@ JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes <-
                                                     tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
 
 cat(magenta("JUM all junctions/with_na (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma all exons/with_na, (", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_all_junctions_with_na_vs_PSIsigma_all_exons_with_na_common.genes$number_of_common_entries, "\n"))
+
+# constitutive JUM vs. constitutive PSI-Sigma
+JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na_common.genes <-
+  calculate_intersections_from_chr_strand_start_end(dplyr::semi_join(tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na, tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na %>% dplyr::rename("Gene" = "matched_gene_names"), by = "Gene") %>% JUM_AS.event.ID_to_chr_strand_start_end,
+                                                    dplyr::semi_join(tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na, tibble_JUM_constitutive_dpsi0.15_qvalue0.01_with_na %>% dplyr::select(-matched_gene_names) %>% dplyr::rename("matched_gene_names" = "Gene"), by = "matched_gene_names") %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("JUM constitutive (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma constitutive, (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_common_entries, "\n"))
 
 ```
 
@@ -1077,7 +1089,7 @@ ggplot(long_tibble_GO_test_anysig_with_na_top.hits, aes(x = reorder(Term, -Phype
   facet_wrap(Ont ~ ., ncol = 3, scales = "free_y") +
   ggtitle(paste("Top 900 significantly over-represented GO terms for OB series for JUM and PSI-Sigma combined")) +
   xlab("GO term") +
-  ylab(expression(log["10"](P["b-hoch"]))) +
+  ylab(expression(log["10"](P))) +
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype="solid", colour ="black"), text = element_text(family ="Helvetica")) +
@@ -1099,16 +1111,16 @@ write.table(x = vector_differential_genes_anysig_with_na, file = paste(results_d
 
 ```{r}
 
-tibble_exon_tally_per_gene_PSIsigma <- tibble_PSIsigma_scaled_PSI_timeseries_wide %>% 
+tibble_exon_tally_per_gene_PSIsigma <- tibble_PSIsigma_5x5_som_clustered %>% 
   split_delimited_column_in_table(input_table = ., target_colname = "matched_gene_names", split = ",") %>%
   dplyr::distinct(matched_gene_names, cluster, .keep_all = TRUE) %>%
-  dplyr::distinct(diff_exon_coords, .keep_all = TRUE) %>%
+  dplyr::distinct(event_region_coords, .keep_all = TRUE) %>%
   dplyr::group_by(matched_gene_names) %>% 
   dplyr::summarise("PSIsigma_tally" = n()) %>%
   dplyr::arrange(desc(PSIsigma_tally)) %>%
   dplyr::rename("Gene" = "matched_gene_names")
 
-ggplot(data = tibble_exon_tally_per_gene_PSIsigma %>% na.omit %>% dplyr::filter(tally > 1), aes(x = tally)) +
+ggplot(data = tibble_exon_tally_per_gene_PSIsigma %>% na.omit, aes(x = PSIsigma_tally)) +
   geom_bar() +
   geom_text(stat = "count", aes(label = ..count..), position = position_nudge(x = 0, y = 5), angle = 90) +
   scale_x_reverse() +
@@ -1117,14 +1129,14 @@ ggplot(data = tibble_exon_tally_per_gene_PSIsigma %>% na.omit %>% dplyr::filter(
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica"))
 
-tibble_AS_event_ID_tally_per_gene_JUM <- tibble_JUM_scaled_PSI_timeseries_wide %>% 
+tibble_AS_event_ID_tally_per_gene_JUM <- tibble_JUM_5x5_som_clustered %>% 
   dplyr::distinct(Gene, cluster, .keep_all = TRUE) %>%
   dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>%
   dplyr::group_by(Gene) %>% 
   dplyr::summarise("JUM_tally" = n()) %>%
   dplyr::arrange(desc(JUM_tally))
 
-ggplot(data = tibble_AS_event_ID_tally_per_gene_JUM %>% na.omit %>% dplyr::filter(tally > 1), aes(x = tally)) +
+ggplot(data = tibble_AS_event_ID_tally_per_gene_JUM %>% na.omit, aes(x = JUM_tally)) +
   geom_bar() +
   geom_text(stat = "count", aes(label = ..count..), position = position_nudge(x = 0, y = 5), angle = 90) +
   scale_x_reverse() +
@@ -1158,15 +1170,15 @@ long_tibble_AS_event_ID_tally_per_gene_combined_tally <- long_tibble_AS_event_ID
 ggplot(data = long_tibble_AS_event_ID_tally_per_gene_combined_tally, aes(x = tally, y = frequency, fill = tool)) +
   geom_bar(stat = "identity", position = position_dodge(width = 1)) +
   geom_text(stat = "identity", aes(label = frequency), position = position_dodge(width = 1), angle = 90, hjust = -0.1) +
-  scale_x_discrete(breaks = c(max(long_tibble_AS_event_ID_tally_per_gene_combined$tally) : 2) %>% as.character, limits = c(max(long_tibble_AS_event_ID_tally_per_gene_combined$tally) : 2) %>% as.character) +
+  scale_x_discrete(breaks = c(1 : max(long_tibble_AS_event_ID_tally_per_gene_combined$tally)) %>% as.character, limits = c(1 : max(long_tibble_AS_event_ID_tally_per_gene_combined$tally)) %>% as.character) +
   scale_fill_manual(breaks = c("JUM_tally", "PSIsigma_tally"), labels = c("JUM", "PSI-Sigma"), values = c("purple3", "firebrick4")) +
-  ylim(c(0, 280)) +
-  ggtitle("Combined tally, AS_event_ID/diff_exon_coords per gene") +
+  ylim(c(0, 900)) +
+  ggtitle("Combined tally, AS_event_ID/event_region_coords per gene") +
   ylab("Frequency") +
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "tally_highest_exons_LSVs_per_gene_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 6, units = "cm") +
-  ggsave(filename = paste(results_dir, "tally_highest_exons_LSVs_per_gene_combined_JUM_PSIsigma.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 6, units = "cm")
+  ggsave(filename = paste(results_dir, "tally_highest_LSVs_per_gene_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 6, units = "cm") +
+  ggsave(filename = paste(results_dir, "tally_highest_LSVs_per_gene_combined_JUM_PSIsigma.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 6, units = "cm")
 
 ```
 
@@ -1177,23 +1189,15 @@ ggplot(data = long_tibble_AS_event_ID_tally_per_gene_combined_tally, aes(x = tal
 # create unique ID that can be traced.
 tibble_PSIsigma_scaled_PSI_timeseries_wide_processed <- tibble_PSIsigma_scaled_PSI_timeseries_wide %>% 
   add_column("id" = paste("PSIsigma", .$matched_gene_names, .$diff_exon_coords, .$splicemode, .$matched_strand, sep = "|")) %>%
-  dplyr::select(id, timepoint, scaled_PSI_value)
+  dplyr::select(id, vector_OBseries_timepoints_edited)
 
 tibble_JUM_scaled_PSI_timeseries_wide_processed <- tibble_JUM_scaled_PSI_timeseries_wide %>% 
   add_column("id" = paste("JUM", .$Gene, .$AS_event_ID, .$sub_junction_start_coor, .$sub_junction_end_coor, .$splicemode, sep = "|")) %>%
-  dplyr::select(id, timepoint, scaled_PSI_value)
+  dplyr::select(id, c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")) %>%
+  dplyr::rename("1d" = "24h")
 
 # join
-tibble_JUM_PSIsigma_PSI_timeseries_merged <- dplyr::bind_rows(tibble_PSIsigma_scaled_PSI_timeseries_wide_processed, tibble_JUM_scaled_PSI_timeseries_wide_processed)
-## fix the timepoint names
-tibble_JUM_PSIsigma_PSI_timeseries_merged[, "timepoint"] <- gsub(x = tibble_JUM_PSIsigma_PSI_timeseries_merged$timepoint, pattern = "ud", replacement = "MSC")
-tibble_JUM_PSIsigma_PSI_timeseries_merged[, "timepoint"] <- gsub(x = tibble_JUM_PSIsigma_PSI_timeseries_merged$timepoint, pattern = "24h", replacement = "1d")
-
-# dcast into a wide tibble
-wide_tibble_JUM_PSIsigma_PSI_timeseries_merged <- reshape2::dcast(data = tibble_JUM_PSIsigma_PSI_timeseries_merged,
-                                                                  formula = id ~ timepoint,
-                                                                  fun.aggregate = sum,
-                                                                  value.var = "scaled_PSI_value") %>% as_tibble %>% .[, c("id", vector_OBseries_timepoints_edited)]
+wide_tibble_JUM_PSIsigma_PSI_timeseries_merged <- dplyr::bind_rows(tibble_PSIsigma_scaled_PSI_timeseries_wide_processed, tibble_JUM_scaled_PSI_timeseries_wide_processed)
 
 # rescale values
 wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, vector_OBseries_timepoints_edited] <- wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, vector_OBseries_timepoints_edited] %>% genescale(m = ., axis = 1, method = "Z")
@@ -1245,17 +1249,12 @@ OB_ydim <- 5
 
 number_of_som_clusters <- OB_xdim * OB_ydim
 
-# OB series #####
+# remove na
+wide_tibble_JUM_PSIsigma_PSI_timeseries_merged <- wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, vector_OBseries_timepoints_edited] %>% add_column("id" = rownames(.)) %>% na.omit %>% .$id, ]
 
-som_5_by_5_OBseries_table  <- wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, vector_OBseries_timepoints_edited]
+somdata_5_by_5_OBseries <- som(wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, vector_OBseries_timepoints_edited] %>% as.matrix, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
 
-som_5_by_5_OBseries_table <- som_5_by_5_OBseries_table %>% genescale(m = ., axis = 1, method = "Z")
-
-set.seed(som_seed_number)
-
-somdata_5_by_5_OBseries <- som(som_5_by_5_OBseries_table, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
-
-wide_table_of_final_SOM_summary_5_by_5_OBseries <- cbind(wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, c("id")], som_5_by_5_OBseries_table, cluster = somdata_5_by_5_OBseries[["unit.classif"]]) %>% as_tibble
+wide_table_of_final_SOM_summary_5_by_5_OBseries <- cbind(wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, c("id", vector_OBseries_timepoints_edited)], cluster = somdata_5_by_5_OBseries[["unit.classif"]]) %>% as_tibble
 
 ```
 
@@ -1359,6 +1358,8 @@ wide_table_som_sweep_clusters <- future_imap(.x = list_seeds_and_dimensions_to_l
   
 }, .progress = TRUE, .options = future_options(globals = c("wide_tibble_JUM_PSIsigma_PSI_timeseries_merged", "dplyr", "som")) ) %>% as.data.frame
 
+wide_tibble_JUM_PSIsigma_PSI_timeseries_merged[, "id"] <- paste(1:nrow(wide_tibble_JUM_PSIsigma_PSI_timeseries_merged), wide_tibble_JUM_PSIsigma_PSI_timeseries_merged$id, sep = "_")
+
 # use "id" column as rownames
 rownames(wide_table_som_sweep_clusters) <- wide_tibble_JUM_PSIsigma_PSI_timeseries_merged$id
 
@@ -1376,7 +1377,7 @@ matrix_consensus_matrix <- list_percentage_consensus_per_item %>% rbindlist %>% 
 rownames(matrix_consensus_matrix) <- wide_tibble_JUM_PSIsigma_PSI_timeseries_merged$id
 
 # re-order the consensus matrix
-matrix_consensus_matrix_dist_result <- matrix_consensus_matrix %>% Rfast::Dist(method = "euclidean") %>% as.dist
+matrix_consensus_matrix_dist_result <- matrix_consensus_matrix %>% parallelDist::parDist(method = "euclidean", threads = 32)
 matrix_consensus_matrix_hclust_result <- fastcluster::hclust(matrix_consensus_matrix_dist_result, method = "ward.D2")
 matrix_consensus_matrix_dendrogram <- as.dendrogram(matrix_consensus_matrix_hclust_result)
 # take rowmeans: cols/rows should get darker as you move right/down
@@ -1389,7 +1390,6 @@ matrix_consensus_matrix_dendrogram_reordered <- reorder(matrix_consensus_matrix_
 save(matrix_consensus_matrix_dendrogram_reordered, file = paste(results_dir, "matrix_consensus_matrix_dendrogram_reordered.matrix", sep = ""))
 
 ggdendrogram(matrix_consensus_matrix_dendrogram_reordered) +
-  xlab(b2) +
   theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
   ggsave(filename = paste(results_dir, "dendrogram_som_consensus_matrix_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
 
@@ -1473,12 +1473,12 @@ write.table(x = tibble_pairwise_edges_filtered, file = paste(results_dir, "conse
 
 ### GO TO CYTOSCAPE HERE
 
-### RETURN FROM CYTOSCAPE, CREATE CLUSTERED SCALED MQ RATIOS
+### RETURN FROM CYTOSCAPE, CREATE CLUSTERED SCALED LEVELS
 
 ```{r}
 
 # grep the corresponding cluster table from file
-filename_of_clusterGO_result <- list.files(path = results_dir, pattern = paste("consensus_combined.*tab$", sep = ""))
+filename_of_clusterGO_result <- list.files(path = results_dir, pattern = paste("consensus_combined_.*seedeverynode.tab$", sep = ""))
 
 tibble_cytoscape_result <- read.delim(paste(results_dir, filename_of_clusterGO_result, sep = ""), sep = "\t", header = TRUE, row.names = NULL) %>% setNames(c("cluster", "id")) %>% as_tibble
 
@@ -1495,21 +1495,53 @@ list_MQ_ratios_scaled_clustered <- purrr::map(.x = list_cytoscape_cluster_result
 wide_tibble_consensus_clusters_MQ_ratios <- list_MQ_ratios_scaled_clustered %>% purrr::reduce(dplyr::bind_rows)
 
 # demultiplex the id column
-wide_tibble_consensus_clusters_MQ_ratios <- dplyr::bind_cols(stringr::str_split_fixed(string = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "\\|", n = 5) %>% as_tibble %>% setNames(c("tool", "gene", "event_or_exon_coords", "splicemode", "matched_strand")),
-                                                             wide_tibble_consensus_clusters_MQ_ratios %>% dplyr::select(-id))
+wide_tibble_consensus_clusters_MQ_ratios <- dplyr::bind_cols(stringr::str_split_fixed(string = gsub(x = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "^[^_]+_(.*)", replacement = "\\1"), pattern = "\\|", n = 6) %>% as_tibble %>% setNames(c("S1", "S2", "S3", "S4", "S5", "S6")),
+                                                             wide_tibble_consensus_clusters_MQ_ratios) %>%
+  # preallocate columns
+  add_column("method" = "NA",
+             "gene" = "NA", 
+             "item_id" = "NA", 
+             "category" = "NA", 
+             "sub_junction_start" = "NA",
+             "sub_junction_end" = "NA", 
+             "matched_strand" = "NA", .after = "S6")
+
+# shuffle the ids around
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "method"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "S1"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "method"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S2"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "gene"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "S2"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "gene"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S1"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "item_id"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM|PSIsigma"), "S3"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "item_id"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S4"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "category"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "S6"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "category"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "S4"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "category"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S2, pattern = "RNASeq"), "S3"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "sub_junction_start"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "S4"]
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "sub_junction_end"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "JUM"), "S5"]
+
+wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "matched_strand"] <- wide_tibble_consensus_clusters_MQ_ratios[grep(x = wide_tibble_consensus_clusters_MQ_ratios$S1, pattern = "PSIsigma"), "S5"]
+
+wide_tibble_consensus_clusters_MQ_ratios <- wide_tibble_consensus_clusters_MQ_ratios %>%
+  dplyr::select(-S1, -S2, -S3, -S4, -S5, -S6) %>% 
+  type_convert %>%
+  dplyr::mutate_at(.vars = "cluster", as.character)
 
 # reorder the cluster factor for correct facet order
 wide_tibble_consensus_clusters_MQ_ratios[, "cluster"] <- factor(wide_tibble_consensus_clusters_MQ_ratios$cluster %>% mixedsort, levels = wide_tibble_consensus_clusters_MQ_ratios$cluster %>% unique %>% mixedsort)
 
-cat("\nnumber of unique items originally: ", wide_tibble_JUM_PSIsigma_PSI_timeseries_merged$id %>% unique %>% length)
-cat("\nnumber of unique items after ClusterONE: ", wide_tibble_consensus_clusters_MQ_ratios$id %>% unique %>% length)
+cat("\nnumber of unique items originally: ", gsub(x = wide_tibble_JUM_PSIsigma_PSI_timeseries_merged$id, pattern = "^[^_]+_(.*)", replacement = "\\1") %>% unique %>% length)
+cat("\nnumber of unique items after ClusterONE: ", gsub(x = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "^[^_]+_(.*)", replacement = "\\1") %>% unique %>% length)
 
 # get a list of items which were chucked out by clusterONE
 vector_items_chucked_out <- setdiff(wide_tibble_JUM_PSIsigma_PSI_timeseries_merged$id %>% unique, wide_tibble_consensus_clusters_MQ_ratios$id %>% unique)
 
 ### convert the som table to a long form interprable by ggplot
 # reshaping into long table
-long_tibble_consensus_clusters_MQ_ratios <- reshape2::melt(wide_tibble_consensus_clusters_MQ_ratios, id.vars = c("tool", "gene", "event_or_exon_coords", "splicemode", "matched_strand", "cluster"), variable.name = "timepoint", value.name = "scaled_PSI") %>% as_tibble
+long_tibble_consensus_clusters_MQ_ratios <- reshape2::melt(wide_tibble_consensus_clusters_MQ_ratios, id.vars = c("method", "gene", "item_id", "category", "sub_junction_start", "sub_junction_end", "matched_strand", "cluster", "id"), variable.name = "timepoint", value.name = "scaled_PSI") %>% as_tibble
 
 # create the tibble of average line 
 long_tibble_consensus_clusters_average.line <- long_tibble_consensus_clusters_MQ_ratios %>% dplyr::group_by(cluster, timepoint) %>% 
@@ -1517,7 +1549,7 @@ long_tibble_consensus_clusters_average.line <- long_tibble_consensus_clusters_MQ
 
 # ggplot of consensus som PSI profiles
 ggplot() +
-  geom_line(data = long_tibble_consensus_clusters_MQ_ratios, aes(x = timepoint, y = scaled_PSI, group = paste(tool, gene, event_or_exon_coords, splicemode)), alpha = 0.33) +
+  geom_line(data = long_tibble_consensus_clusters_MQ_ratios, aes(x = timepoint, y = scaled_PSI, group = paste(id)), alpha = 0.33) +
   geom_line(data = long_tibble_consensus_clusters_average.line, aes(x = timepoint, y = avg_PSI, group = cluster), colour = "white", size = 1) +
   scale_colour_manual(values = c("black")) +
   facet_wrap(~cluster) +
@@ -1529,8 +1561,8 @@ ggplot() +
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype ="solid", colour = "black"), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "consensus_timeseries_PSI_profiles_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
-  ggsave(filename = paste(results_dir, "consensus_timeseries_PSI_profiles_combined_JUM_PSIsigma.svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+  ggsave(filename = paste(results_dir, "consensus_timeseries_PSI_profiles_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(results_dir, "consensus_timeseries_PSI_profiles_combined_JUM_PSIsigma.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 write.table(x = wide_tibble_consensus_clusters_MQ_ratios, file = paste(results_dir, "consensus_timeseries_PSI_profiles_combined_JUM_PSIsigma_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -1593,10 +1625,10 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hit
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
    
-purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -1609,10 +1641,16 @@ Separate and sum PSI
 # note: elements will look like: sep.PSI/MF, sum.PSI/MF, sep.PSI/BP, sum.PSI/BP etc...
 # gene ontology for each combination
 
-list_of_tibbles_consensus.SOM_family.enrichment_clusterwise <- purrr::map(.x = list_of_vectors_genesets_per_consensus.SOM_cluster_diffsplicedonly, .f = ~future_map(.x = .x, .f = ~bc3net::enrichment(genes = .x, reference = reference_geneset_universe, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble, .progress = TRUE))
+list_of_tibbles_consensus.SOM_family.enrichment_clusterwise <- future_map2(.x = list_of_genesets_by_cluster, .y = names(list_of_genesets_by_cluster), .f = ~bc3net::enrichment(genes = .x, reference = reference_geneset_universe, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble %>% add_column("cluster" = .y), .progress = TRUE)
+
+# tibble of everything PFAM results
+tibble_consensus.SOM_family.enrichment_clusterwise <- list_of_tibbles_consensus.SOM_family.enrichment_clusterwise %>% rbindlist %>% as_tibble
+
+# save PFAM family tables (all)
+write.table(x = tibble_consensus.SOM_family.enrichment_clusterwise, file = paste(results_dir, "tibble_consensus.SOM_PFAM_clusterwise_combined_JUM_PSIsigma_topinf.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # filter gene ontology tables for top hits
-list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits <- purrr::map_depth(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise, .depth = 2, .ragged = FALSE, .f = ~dplyr::arrange(.x, pval) %>% head(n = 10))
+list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise, .f = ~dplyr::arrange(.x, pval) %>% head(n = 10))
 
 # add cluster number into each tibble and combine into single tibble
 list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits <- purrr::map(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top.hits, .f = ~purrr::map2(.x = .x, .y = names(.x), .f = ~cbind(.x, "cluster" = .y)) %>% rbindlist %>% as_tibble)
@@ -1629,10 +1667,10 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_PFAM_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_PFAM_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -1663,10 +1701,10 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwi
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_upstreamRBP.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -1774,6 +1812,8 @@ wide_table_som_sweep_clusters <- future_imap(.x = list_seeds_and_dimensions_to_l
 }, .progress = TRUE, .options = future_options(globals = c("tibble_combinedexpr_logCPM_PSI_scaled", "dplyr", "genescale", "som")) ) %>% as.data.frame
 
 # use "id" column as rownames
+tibble_combinedexpr_logCPM_PSI_scaled[, "id"] <- paste(1:nrow(tibble_combinedexpr_logCPM_PSI_scaled), tibble_combinedexpr_logCPM_PSI_scaled$id, sep = "_")
+
 rownames(wide_table_som_sweep_clusters) <- tibble_combinedexpr_logCPM_PSI_scaled$id
 
 # pairwise test between all items for every sweep to see if they were co-occurring
@@ -1800,12 +1840,11 @@ matrix_consensus_matrix_rowmeans <- rowMeans(matrix_consensus_matrix, na.rm = T)
 
 matrix_consensus_matrix_dendrogram_reordered <- reorder(matrix_consensus_matrix_dendrogram, matrix_consensus_matrix_rowmeans)
 
-save(matrix_consensus_matrix_dendrogram_reordered, file = paste(results_dir, "matrix_consensus_matrix_dendrogram_reordered.matrix", sep = ""))
+save(matrix_consensus_matrix_dendrogram_reordered, file = paste(results_dir, "matrix_consensus_combinedexpr_matrix_dendrogram_reordered.matrix", sep = ""))
 
 ggdendrogram(matrix_consensus_matrix_dendrogram_reordered) +
-  xlab(b2) +
   theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "dendrogram_som_consensus_matrix_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
+  ggsave(filename = paste(results_dir, "dendrogram_som_consensus_matrix_combinedexpr_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
 
 # retrieve the order of rows from the dendrogram
 matrix_consensus_matrix_dendrogram_reordered_order <- matrix_consensus_matrix_dendrogram_reordered %>% unlist
@@ -1813,17 +1852,17 @@ matrix_consensus_matrix_dendrogram_reordered_order <- matrix_consensus_matrix_de
 tibble_consensus_matrix_reordered <- matrix_consensus_matrix[matrix_consensus_matrix_dendrogram_reordered_order, matrix_consensus_matrix_dendrogram_reordered_order] %>% as_tibble(rownames = "id")
 
 # write the consensus matrix table to file
-write.table(x = tibble_consensus_matrix_reordered, file = paste(results_dir, "heatmap_som_consensus_matrix_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-save(tibble_consensus_matrix_reordered, file = paste(results_dir, "tibble_consensus_matrix_reordered.tibble", sep = ""))
-load(file = paste(results_dir, "tibble_consensus_matrix_reordered.tibble", sep = ""))
+write.table(x = tibble_consensus_matrix_reordered, file = paste(results_dir, "heatmap_som_consensus_matrix_combinedexpr_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+save(tibble_consensus_matrix_reordered, file = paste(results_dir, "tibble_combinedexpr_consensus_matrix_reordered.tibble", sep = ""))
+load(file = paste(results_dir, "tibble_combinedexpr_consensus_matrix_reordered.tibble", sep = ""))
 
 # tibble_consensus_matrix_reordered <- read.delim(file = paste(results_dir, "heatmap_som_consensus_matrix_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
 
 # melt table for ggplot
 tibble_consensus_matrix_long <- reshape2::melt(tibble_consensus_matrix_reordered, id = c("id"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_at(.vars = c("id", "variable"), as.character)
 
-save(tibble_consensus_matrix_long, file = paste(results_dir, "tibble_consensus_matrix_long.tibble", sep = ""))
-load(file = paste(results_dir, "tibble_consensus_matrix_long.tibble", sep = ""))
+save(tibble_consensus_matrix_long, file = paste(results_dir, "tibble_combinedexpr_consensus_matrix_long.tibble", sep = ""))
+load(file = paste(results_dir, "tibble_combinedexpr_consensus_matrix_long.tibble", sep = ""))
 
 ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
   geom_tile(aes(x = id, y = variable)) +
@@ -1832,7 +1871,7 @@ ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
   scale_y_discrete(breaks = tibble_consensus_matrix_reordered$id, labels = tibble_consensus_matrix_reordered$id, limits = tibble_consensus_matrix_reordered$id) +
   scale_fill_gradientn(colours = c("lightblue2", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.25, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "heatmap_som_consensus_matrix_combined_JUM_PSIsigma.tiff", sep = ""), device = "tiff", dpi = 600, width = 30, height = 25, units = "cm", limitsize = FALSE)
+  ggsave(filename = paste(results_dir, "heatmap_som_combinedexpr_consensus_matrix_combined_JUM_PSIsigma.tiff", sep = ""), device = "tiff", dpi = 600, width = 30, height = 25, units = "cm", limitsize = FALSE)
 
 # CLUSTER DETERMINATION #####
 # loop along the consensus matrix variables
@@ -1865,26 +1904,26 @@ tibble_pairwise_edges_unfiltered <- bind_cols(pairwise_comparisons_between_items
 
 tibble_pairwise_edges_unfiltered <- add_column(tibble_pairwise_edges_unfiltered, "jaccard" = tibble_pairwise_edges_unfiltered$coclustering_intersection/(tibble_pairwise_edges_unfiltered$coclustering_setdiff + tibble_pairwise_edges_unfiltered$coclustering_intersection))
 
-write.table(x = tibble_pairwise_edges_unfiltered, file = paste(results_dir, "consensus_edge_table_anyintersection_consensus0.5_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_pairwise_edges_unfiltered, file = paste(results_dir, "consensus_edge_table_anyintersection_consensus0.5_combinedexpr_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # tibble_pairwise_edges_unfiltered <- read_delim(paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
 
 # filter for pairwise neighbours in common > 0
 tibble_pairwise_edges_filtered <- tibble_pairwise_edges_unfiltered[tibble_pairwise_edges_unfiltered$coclustering_intersection > 0, ]
 
-save(tibble_pairwise_edges_filtered, file = paste(results_dir, "tibble_pairwise_edges_filtered.tibble", sep = ""))
+save(tibble_pairwise_edges_filtered, file = paste(results_dir, "tibble_pairwise_edges_combinedexpr_filtered.tibble", sep = ""))
 
-pdf(file = paste(results_dir, "densityplot_PNC_distribution_combined_JUM_PSIsigma.pdf", sep = ""), width = 20, height = 15)
+pdf(file = paste(results_dir, "densityplot_PNC_distribution_combinedexpr_JUM_PSIsigma.pdf", sep = ""), width = 20, height = 15)
 plot(density(tibble_pairwise_edges_filtered$coclustering_intersection %>% as.numeric), 
      main = paste("Density distribution of pairwise neighbours in common", sep = "\n"))
 dev.off()
 
-pdf(file = paste(results_dir, "densityplot_jaccard_distribution_combined_JUM_PSIsigma.pdf", sep = ""), width = 20, height = 15)
+pdf(file = paste(results_dir, "densityplot_jaccard_distribution_combinedexpr_JUM_PSIsigma.pdf", sep = ""), width = 20, height = 15)
 plot(density(tibble_pairwise_edges_filtered$jaccard %>% as.numeric), 
      main = paste("Density distribution of jaccard similarity", sep = "\n"))
 dev.off()
 
-write.table(x = tibble_pairwise_edges_filtered, file = paste(results_dir, "consensus_edge_table_intersection1_consensus0.5_combined_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = tibble_pairwise_edges_filtered, file = paste(results_dir, "consensus_edge_table_intersection1_consensus0.5_combinedexpr_JUM_PSIsigma.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1895,7 +1934,7 @@ write.table(x = tibble_pairwise_edges_filtered, file = paste(results_dir, "conse
 ```{r}
 
 # grep the corresponding cluster table from file
-filename_of_clusterGO_result <- list.files(path = results_dir, pattern = paste("consensus_combinedexpr.*tab$", sep = ""))
+filename_of_clusterGO_result <- list.files(path = results_dir, pattern = paste("consensus_combinedexpr_.*seedeverynode.tab$", sep = ""))
 
 tibble_cytoscape_result <- read.delim(paste(results_dir, filename_of_clusterGO_result, sep = ""), sep = "\t", header = TRUE, row.names = NULL) %>% setNames(c("cluster", "id")) %>% as_tibble
 
@@ -1927,7 +1966,7 @@ wide_tibble_consensus_clusters_MQ_ratios[, "id"] <- gsub(x = wide_tibble_consens
 wide_tibble_consensus_clusters_MQ_ratios[, "id"] <- gsub(x = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "_ENSG", replacement = "\\|ENSG")
 
 # demultiplex the id column
-wide_tibble_consensus_clusters_MQ_ratios <- dplyr::bind_cols(stringr::str_split_fixed(string = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "\\|", n = 6) %>% as_tibble %>% setNames(c("S1", "S2", "S3", "S4", "S5", "S6")),
+wide_tibble_consensus_clusters_MQ_ratios <- dplyr::bind_cols(stringr::str_split_fixed(string = gsub(x = wide_tibble_consensus_clusters_MQ_ratios$id, pattern = "^[^_]+_(.*)", replacement = "\\1"), pattern = "\\|", n = 6) %>% as_tibble %>% setNames(c("S1", "S2", "S3", "S4", "S5", "S6")),
                                                              wide_tibble_consensus_clusters_MQ_ratios) %>%
   # preallocate columns
   add_column("method" = "NA",
@@ -1987,8 +2026,8 @@ ggplot() +
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype ="solid", colour = "black"), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "consensus_combinedexpr_timeseries_profiles.pdf", sep = ""), device = "pdf", dpi = 600, width = 35, height = 20, units = "cm") +
-  ggsave(filename = paste(results_dir, "consensus_combinedexpr_timeseries_profiles.svg", sep = ""), device = "svg", dpi = 600, width = 35, height = 20, units = "cm")
+  ggsave(filename = paste(results_dir, "consensus_combinedexpr_timeseries_profiles.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(results_dir, "consensus_combinedexpr_timeseries_profiles.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 write.table(x = wide_tibble_consensus_clusters_MQ_ratios, file = paste(results_dir, "consensus_combinedexpr_timeseries_profiles_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -2051,10 +2090,10 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hit
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
    
-purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(R_processing_results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_tibbles_consensus.SOM_hyperGOresult_clusterwise_top.hits, .y = list_of_combinations_of_consensus.SOM_genes_and_GOterms_names, .f = ~write.table(x = .x, file = paste(results_dir, "consensus_som_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y[[1]] %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_", .y[[2]], "_GO.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -2083,10 +2122,10 @@ purrr::map2(.x = list_of_tibbles_consensus.SOM_family.enrichment_clusterwise_top
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), strip.background = element_blank(), strip.text.x = element_blank(), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
+ ggsave(filename = paste(results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.pdf", sep = ""), device = "pdf", dpi = 600, width = 50, height = 30, units = "cm") +
+ ggsave(filename = paste(results_dir, "consensus_som_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_exons_OBseries_any_", pvalue_or_FDR, pvalue_cutoff, "_dPSI", dpsi_cutoff, "_sweep_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_PFAM_families.svg", sep = ""), device = "svg", dpi = 600, width = 50, height = 30, units = "cm"))
 
-purrr::map2(.x = list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_PFAM_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
+purrr::map2(.x = list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits, .y = names(list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits), .f = ~write.table(x = .x, file = paste(results_dir, OB_xdim, "x", OB_ydim, "_SOM_", .y %>% strsplit(split = "_") %>% unlist %>% .[1], "_", .y %>% strsplit(split = "_") %>% unlist %>% .[3], "_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_PFAM_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE))
 
 ```
 
@@ -2108,7 +2147,7 @@ tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits <- purrr::map2
 # reorder cluster as factor
 tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits[, "cluster"] <- factor(tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits$cluster, levels = tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits$cluster %>% unique %>% mixedsort)
 
-# plot family enrichment per cluster
+# plot RBP enrichment per cluster
 ggplot(tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits %>% dplyr::arrange(pval), aes(x = reorder(TermID, pval), y = -log10(pval), size = (padj < 0.05) %>% as.character)) +
   geom_col(aes(fill = genes), colour = "black") +
   scale_fill_distiller(name = "Number of genes targeted by RBP", type = "seq", palette = "Spectral", direction = -1, aesthetics = "fill", na.value = "yellow") +
@@ -2122,8 +2161,8 @@ ggplot(tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits %>% dpl
   # coord_cartesian(ylim = c(0, 20)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 5, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 20, units = "cm") +
- ggsave(filename = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 20, units = "cm")
+ ggsave(filename = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 20, units = "cm") +
+ ggsave(filename = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 20, units = "cm")
 
 write.table(x = tibble_consensus.SOM_upstream.RBP.enrichment_clusterwise_top.hits, file = paste(results_dir, "consensus.SOM_upstreamRBP_clusterwise_combinedexpr_top10.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 

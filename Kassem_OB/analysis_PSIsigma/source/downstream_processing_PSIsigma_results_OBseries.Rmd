@@ -17,7 +17,7 @@ v
 Long table of all comparisons (has NA/timepoint, replicate) ----> Differential exons (with na)
 |
 v
-Wide table of absolute PSI with any na (using ud) - (separate/sum) -----> Exon switching
+Wide table of absolute PSI with any na (using MSC) - (separate/sum) -----> Exon switching
 |
 v
 Wide table of absolute PSI (complete timepoints) - (separate/sum) -----> SOM
@@ -78,7 +78,7 @@ R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/r
 if(! dir.exists(R_processing_results_dir) ) {
   dir.create(R_processing_results_dir, recursive = TRUE)}
 
-vector_OBseries_timepoints <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
 vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
@@ -2114,6 +2114,9 @@ write.table(x = long_tibble_of_psisigma_DEXSeq_results, file = paste(R_processin
 
 long_tibble_of_psisigma_DEXSeq_results <- read.delim(paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results_poison_exon_finder.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
+long_tibble_of_psisigma_DEXSeq_results[, "comparison"] <- gsub(x = long_tibble_of_psisigma_DEXSeq_results$comparison, pattern = "ud", replacement = "MSC")
+long_tibble_of_psisigma_DEXSeq_results[, "comparison"] <- gsub(x = long_tibble_of_psisigma_DEXSeq_results$comparison, pattern = "24h", replacement = "1d")
+
 # 2 choices: "pvalue" or "FDR" or DEXSeq_pvalue or DEXSeq_padj
 pvalue_or_FDR <- "DEXSeq_padj"
 
@@ -2155,14 +2158,14 @@ write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info
 # write coords for poison exon finder
 # write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons[, c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode")] %>% dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords"), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_allcomparisons_differential_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na_poison_exon_finder.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-# also write table of differential information for 12d vs. ud.
-tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_ud" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff)
+# also write table of differential information for 12d vs. MSC
+tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_MSC" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff)
 # write table
 write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV", tibble_differential_results_12d_vs_ud %>% nrow, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 # export associated gene set
 write.table(x = tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% mixedsort, file = paste(R_processing_results_dir, "geneset_differential_LIV_", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% length, "genes_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
-cat("There are", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% length, "differential genes between ud and 12d only, using the specified cutoff of", pvalue_or_FDR, "<", pvalue_cutoff, "and dpsi > ", dpsi_cutoff)
+cat("There are", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% length, "differential genes between MSC and 12d only, using the specified cutoff of", pvalue_or_FDR, "<", pvalue_cutoff, "and dpsi > ", dpsi_cutoff)
 
 ```
 
@@ -2182,8 +2185,8 @@ wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR <- w
 tibble_cumulative_diff_changes_total <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "1d") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "1d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
@@ -2194,8 +2197,8 @@ tibble_cumulative_diff_changes_total <- tibble("timepoint" = vector_OBseries_tim
 tibble_cumulative_diff_changes_IR <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "1d") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "1d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
@@ -2206,8 +2209,8 @@ tibble_cumulative_diff_changes_IR <- tibble("timepoint" = vector_OBseries_timepo
 tibble_cumulative_diff_changes_non.IR <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
-                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "24h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "1d") & !str_detect(string = comparison, pattern = "12h")) %>% .$diff_exon_coords %>% unique %>% length,
+                                             wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d") & !str_detect(string = comparison, pattern = "1d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d") & !str_detect(string = comparison, pattern = "3d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d") & !str_detect(string = comparison, pattern = "6d")) %>% .$diff_exon_coords %>% unique %>% length,
                                              wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_non.IR %>% dplyr::filter(pvalue <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff & !str_detect(string = comparison, pattern = "12d") & !str_detect(string = comparison, pattern = "9d")) %>% .$diff_exon_coords %>% unique %>% length,
@@ -2364,19 +2367,23 @@ write.table(x = tibble_constitutive_LIV_info, file = paste(R_processing_results_
 
 ## Retrieve wide table of absolute PSI with timepoint/replicate NA
 
-### subset the table of comparisons for comparisons to ud timepoint only
+### subset the table of comparisons for comparisons to MSC timepoint only
 
 Join table separately by local isoform topology.
 
 ```{r}
 
-# get a vector containing all the comparison names which have ud in them
-vector_of_ud_comparisons <- vector_of_comparisons_final[grep(x = vector_of_comparisons_final, pattern = "ud")]
+vector_of_comparisons_final_edited <- vector_of_comparisons_final
+vector_of_comparisons_final_edited <- gsub(x = vector_of_comparisons_final_edited, pattern = "ud", replacement = "MSC")
+vector_of_comparisons_final_edited <- gsub(x = vector_of_comparisons_final_edited, pattern = "24h", replacement = "1d")
 
-# subset the wide table of all comparisons for only comparisons which have ud
+# get a vector containing all the comparison names which have MSC in them
+vector_of_ud_comparisons <- vector_of_comparisons_final_edited[grep(x = vector_of_comparisons_final_edited, pattern = "MSC$")]
+
+# subset the wide table of all comparisons for only comparisons which have MSC
 wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 <- dplyr::filter(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV, comparison %in% vector_of_ud_comparisons) %>% dplyr::select(database_ID, event_region_coords, diff_exon_coords, splicemode, chr, diff_exon_start, diff_exon_end, matched_gene_names, matched_recon_transcript_names, matched_ref_transcript_names, matched_strand, NMD_biotype_reference, NMD_flagged_ref, NMD_flagged_recon, any_NMD, poison_exon_candidate_ref, poison_exon_candidate_recon, contains_PTC_ref, contains_PTC_recon, first_or_last_exon_reference, first_or_last_exon_recon, any_first_exon, any_last_exon, comparison, DEXSeq_PSI_first, DEXSeq_PSI_second) %>% dplyr::rename("DEXSeq_PSI_ud" = "DEXSeq_PSI_second")
 
-# rename the columns. replace "comparison name" with "timepoint", rename the comparison 2 to ud
+# rename the columns. replace "comparison name" with "timepoint", rename the comparison 2 to MSC
 # >
 colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0)[which(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0) == "comparison")] <- "timepoint"
 
@@ -2385,16 +2392,16 @@ wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0[, "timepoint"
 
 # rbind to shake off the timepointwise comparison
 wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1 <- dplyr::bind_rows(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-DEXSeq_PSI_ud) %>% dplyr::rename("PSI" = "DEXSeq_PSI_first"),
-                                                                                       wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-DEXSeq_PSI_first) %>% dplyr::rename("PSI" = "DEXSeq_PSI_ud") %>% dplyr::mutate_at(.vars = "timepoint", .funs = function(x) {"ud" %>% return}) %>% dplyr::group_by_at(.vars = setdiff(colnames(.), "PSI")) %>% dplyr::mutate_at(.vars = "PSI", .funs = mean )) %>% dplyr::distinct()
+                                                                                       wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-DEXSeq_PSI_first) %>% dplyr::rename("PSI" = "DEXSeq_PSI_ud") %>% dplyr::mutate_at(.vars = "timepoint", .funs = function(x) {"MSC" %>% return}) %>% dplyr::group_by_at(.vars = setdiff(colnames(.), "PSI")) %>% dplyr::mutate_at(.vars = "PSI", .funs = mean )) %>% dplyr::distinct()
 
 # recast into a wide tibble
 ## aggregate function taken as the mean
 ## wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0[c(2200:2206, 2665:2670), ]
 wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1, formula = database_ID + event_region_coords + diff_exon_coords + splicemode + chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_ref_transcript_names + matched_strand + NMD_biotype_reference + NMD_flagged_ref + NMD_flagged_recon + any_NMD + poison_exon_candidate_ref + poison_exon_candidate_recon + contains_PTC_ref + contains_PTC_recon + first_or_last_exon_reference + first_or_last_exon_recon + any_first_exon + any_last_exon ~ timepoint, value.var = "PSI") %>% as_tibble
 
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only %>% dplyr::select(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[!colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) %in% vector_OBseries_timepoints], all_of(vector_OBseries_timepoints))
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only %>% dplyr::select(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[!colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) %in% vector_OBseries_timepoints_edited], all_of(vector_OBseries_timepoints_edited))
 
-colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) <- c(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[!colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) %in% vector_OBseries_timepoints], vector_OBseries_timepoints_edited)
+colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) <- c(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[!colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) %in% vector_OBseries_timepoints_edited], vector_OBseries_timepoints_edited)
 
 wide_tibble_of_psisigma_PSI_with_na_LIV <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only
 
@@ -2428,7 +2435,7 @@ list_of_tables_absolute_PSI_average_subset_by_region_sum <- future_map(.x = list
 
                                                                                         } 
                                                                                       
-                                                                                      }) %>% t), .progress = TRUE, .options = future_options(globals = FALSE))
+                                                                                      }) %>% t), .progress = TRUE, .options = future_options(globals = c("vector_OBseries_timepoints_edited")))
 
 wide_tibble_of_psisigma_PSI_with_na_exon.sum <- list_of_tables_absolute_PSI_average_subset_by_region_sum %>% rbindlist %>% as_tibble
 
@@ -2646,13 +2653,11 @@ OB_ydim <- 5
 
 number_of_som_clusters <- OB_xdim * OB_ydim
 
-
 set.seed(som_seed_number)
 
-somdata_5_by_5_OBseries <- som(tibble_matrix_LIV_PSI_no_na_scaled, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
+somdata_5_by_5_OBseries <- som(wide_tibble_of_LIV_PSI_no_na_scaled[, vector_OBseries_timepoints_edited] %>% as.matrix, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
 
-wide_table_of_final_SOM_summary_5_by_5_OBseries_separate <- cbind(wide_tibble_of_LIV_PSI_no_na[, -grep(x = colnames(wide_tibble_of_LIV_PSI_no_na), pattern = "absolute.psi")], som_5_by_5_OBseries_table_scaled.PSI_separate, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]])
-
+wide_table_of_final_SOM_summary_5_by_5_OBseries_separate <- cbind(wide_tibble_of_LIV_PSI_no_na_scaled, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]]) %>% as_tibble
 
 ```
 
@@ -2671,8 +2676,7 @@ Steps:
 # OB series #####
 
 # reshaping into long table
-
-long_table_of_final_SOM_summary_5_by_5_OBseries_separate <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, id.vars = c(colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate)[-grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_separate), pattern = "absolute.psi")], "cluster"), variable.name = "timepoint", value.name = "scaled_PSI_value")
+long_table_of_final_SOM_summary_5_by_5_OBseries_separate <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, id.vars = colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate)[!colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate) %in% vector_OBseries_timepoints_edited], variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
 
 # calculating the facet coordinates for 5x5 plot in ggplot
 
@@ -2703,18 +2707,18 @@ ggplot() +
   facet_grid(quotient_facet.y ~ remainder_facet.x) +
   ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate), "LIV PSI values during OB diff (any", pvalue_or_FDR, 
                " < ", pvalue_cutoff, "any deltaPSI >", dpsi_cutoff, ")")) +
-  scale_x_discrete(limits = vector_OBseries_timepoints, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   xlab("Time-point") +
   ylab("Normalised PSI Level") +
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_separate %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode) %>% nrow, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_separate %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode) %>% nrow, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_separate %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode) %>% nrow, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_separate, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_separate %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, splicemode) %>% nrow, "_exons_LIV.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2726,10 +2730,10 @@ write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_separate, file =
 ```{r}
 
 # get row indices which have any na.
-row.indices_with_na <- apply(X = wide_tibble_of_psisigma_PSI_with_na_exon.sum[, colnames(wide_tibble_of_psisigma_PSI_with_na_exon.sum) %in% vector_OBseries_timepoints_edited], MARGIN = 1, FUN = function(X) {any(is.na(X))})
+row.indices_with_na <- apply(X = tibble_of_absolute_PSI_averages_exon.switched_sum[, colnames(tibble_of_absolute_PSI_averages_exon.switched_sum) %in% vector_OBseries_timepoints_edited], MARGIN = 1, FUN = function(X) {any(is.na(X))})
 
 # remove those rows that are true (that have any na)
-wide_tibble_of_exon_PSI_no_na <- wide_tibble_of_psisigma_PSI_with_na_exon.sum[which(row.indices_with_na == FALSE), ]
+wide_tibble_of_exon_PSI_no_na <- tibble_of_absolute_PSI_averages_exon.switched_sum[which(row.indices_with_na == FALSE), ]
 
 no.sum.exons_differentially.spliced_complete.timeseries <- length(wide_tibble_of_exon_PSI_no_na$diff_exon_coords)
 
@@ -2763,9 +2767,9 @@ OB_ydim <- 5
 
 number_of_som_clusters <- OB_xdim * OB_ydim
 
-somdata_5_by_5_OBseries <- som(wide_tibble_of_exon_PSI_no_na_scaled, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
+somdata_5_by_5_OBseries <- som(wide_tibble_of_exon_PSI_no_na_scaled[, vector_OBseries_timepoints_edited] %>% as.matrix, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
 
-wide_table_of_final_SOM_summary_5_by_5_OBseries_sum <- cbind(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum[, -grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum), pattern = "absolute.psi")], wide_tibble_of_exon_PSI_no_na_scaled, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]])
+wide_table_of_final_SOM_summary_5_by_5_OBseries_sum <- cbind(wide_tibble_of_exon_PSI_no_na_scaled, "cluster" = somdata_5_by_5_OBseries[["unit.classif"]]) %>% as_tibble
 
 ```
 
@@ -2785,7 +2789,7 @@ Steps:
 
 # reshaping into long table
 
-long_table_of_final_SOM_summary_5_by_5_OBseries_sum <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum, id.vars = c(colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum)[-grep(x = colnames(wide_tibble_of_absolute_PSI_averages_complete.timeseries_differential_sum), pattern = "absolute.psi")], "cluster"), variable.name = "timepoint", value.name = "scaled_PSI_value")
+long_table_of_final_SOM_summary_5_by_5_OBseries_sum <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum, id.vars = colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum)[!colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum) %in% vector_OBseries_timepoints_edited], variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
 
 # calculating the facet coordinates for 5x5 plot in ggplot
 
@@ -2816,18 +2820,18 @@ ggplot() +
   facet_grid(quotient_facet.y ~ remainder_facet.x) +
   ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum), "exon PSI values during OB diff (any", pvalue_or_FDR, 
                " < ", pvalue_cutoff, "any deltaPSI >", dpsi_cutoff, ")")) +
-  scale_x_discrete(limits = vector_OBseries_timepoints, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   xlab("Time-point") +
   ylab("Normalised PSI Level") +
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size=0.5, linetype="solid", colour ="black"), text = element_text(family="Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_sum %>% dplyr::distinct(diff_exon_coords, splicemode) %>% nrow, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 33, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_sum %>% dplyr::distinct(diff_exon_coords, splicemode) %>% nrow, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, ".svg", sep = ""), device = "svg", dpi = 600, width = 33, height = 20, units = "cm")
 
-write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_sum, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries_sum, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_sum %>% dplyr::distinct(diff_exon_coords, splicemode) %>% nrow, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_sum, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", no.exons_differentially.spliced_complete.timeseries_sum, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(x = wide_table_of_final_SOM_summary_5_by_5_OBseries_sum, file = paste(R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", long_table_of_final_SOM_summary_5_by_5_OBseries_sum %>% dplyr::distinct(diff_exon_coords, splicemode) %>% nrow, "_exons_exon.PSI_OB_diff_any_", pvalue_or_FDR, pvalue_cutoff, "_any_deltaPSI_greaterthan_", dpsi_cutoff, "_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2851,6 +2855,8 @@ This gene background shall contain all ensembl protein coding, long noncoding an
 ## Create catDB instance (takes a while but needs to be done only once)
 # note: you had to save the GO annotation file to disk in the previous steps above
 # catdb <- makeCATdb(myfile = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+
+load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 
 ```
 
@@ -3016,12 +3022,12 @@ cutoff_string <- paste("H", high_scaled.PSI.cutoff, "L", low_scaled.PSI.cutoff, 
 ```{r}
 
 # column names corresponding to PSI observations are just the OB series timepoints
-list_of_tibbles_scaled_PSI_subset_by_timepoint <- list(list(purrr::map(.x = vector_OBseries_timepoints, .f = ~wide_table_of_final_SOM_summary_5_by_5_OBseries_separate[, colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate)[
-  c(-which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate) %in% vector_OBseries_timepoints[vector_OBseries_timepoints != .x]), 
-    -which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate) == "cluster"))]]) %>% set_names(vector_OBseries_timepoints), "PSI_type" = "separate.PSI"), 
-                                                       list(purrr::map(.x = vector_OBseries_timepoints, .f = ~wide_table_of_final_SOM_summary_5_by_5_OBseries_sum[, colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum)[
-  c(-which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum) %in% vector_OBseries_timepoints[vector_OBseries_timepoints != .x]), 
-    -which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum) == "cluster"))]]) %>% set_names(vector_OBseries_timepoints), "PSI_type" = "sum.PSI"))
+list_of_tibbles_scaled_PSI_subset_by_timepoint <- list(list(purrr::map(.x = vector_OBseries_timepoints_edited, .f = ~wide_table_of_final_SOM_summary_5_by_5_OBseries_separate[, colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate)[
+  c(-which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate) %in% vector_OBseries_timepoints_edited[vector_OBseries_timepoints_edited != .x]), 
+    -which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_separate) == "cluster"))]]) %>% set_names(vector_OBseries_timepoints_edited), "PSI_type" = "separate.PSI"), 
+                                                       list(purrr::map(.x = vector_OBseries_timepoints_edited, .f = ~wide_table_of_final_SOM_summary_5_by_5_OBseries_sum[, colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum)[
+  c(-which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum) %in% vector_OBseries_timepoints_edited[vector_OBseries_timepoints_edited != .x]), 
+    -which(colnames(wide_table_of_final_SOM_summary_5_by_5_OBseries_sum) == "cluster"))]]) %>% set_names(vector_OBseries_timepoints_edited), "PSI_type" = "sum.PSI"))
 
 ```
 
@@ -3033,9 +3039,9 @@ list_of_tibbles_highest.lowest_PSI_by_timepoint <- purrr::cross2(.x = list_of_ti
 
 # the result: individual tibbles with the PSI type and highest/lowest PSI alongside it
 ## map the highest PSI tibbles
-list_of_tibbles_highest.lowest_PSI_by_timepoint <- purrr::map_if(.x = list_of_tibbles_highest.lowest_PSI_by_timepoint, .p = ~.x[["highest_or_lowest_PSI"]] == "highest_PSI", .f = ~list("data" = purrr::map2(.x = .x[["data"]], .y = vector_OBseries_timepoints, .f = ~.x[order(.x[, .y], decreasing = TRUE), ] %>% head(.x, n = floor(nrow(.x) * high_scaled.PSI.cutoff))), "PSI_type" = .x[["PSI_type"]], "highest_or_lowest_PSI" = .x[["highest_or_lowest_PSI"]]))
+list_of_tibbles_highest.lowest_PSI_by_timepoint <- purrr::map_if(.x = list_of_tibbles_highest.lowest_PSI_by_timepoint, .p = ~.x[["highest_or_lowest_PSI"]] == "highest_PSI", .f = ~list("data" = purrr::map2(.x = .x[["data"]], .y = vector_OBseries_timepoints_edited, .f = ~.x[order(.x[, .y], decreasing = TRUE), ] %>% head(.x, n = floor(nrow(.x) * high_scaled.PSI.cutoff))), "PSI_type" = .x[["PSI_type"]], "highest_or_lowest_PSI" = .x[["highest_or_lowest_PSI"]]))
 ## map the lowest PSI tibbles
-list_of_tibbles_highest.lowest_PSI_by_timepoint <- purrr::map_if(.x = list_of_tibbles_highest.lowest_PSI_by_timepoint, .p = ~.x[["highest_or_lowest_PSI"]] == "lowest_PSI", .f = ~list("data" = purrr::map2(.x = .x[["data"]], .y = vector_OBseries_timepoints, .f = ~.x[order(.x[, .y], decreasing = FALSE), ] %>% head(.x, n = floor(nrow(.x) * low_scaled.PSI.cutoff))), "PSI_type" = .x[["PSI_type"]], "highest_or_lowest_PSI" = .x[["highest_or_lowest_PSI"]]))
+list_of_tibbles_highest.lowest_PSI_by_timepoint <- purrr::map_if(.x = list_of_tibbles_highest.lowest_PSI_by_timepoint, .p = ~.x[["highest_or_lowest_PSI"]] == "lowest_PSI", .f = ~list("data" = purrr::map2(.x = .x[["data"]], .y = vector_OBseries_timepoints_edited, .f = ~.x[order(.x[, .y], decreasing = FALSE), ] %>% head(.x, n = floor(nrow(.x) * low_scaled.PSI.cutoff))), "PSI_type" = .x[["PSI_type"]], "highest_or_lowest_PSI" = .x[["highest_or_lowest_PSI"]]))
 
 # write each highest/lowest table for use in cytoscape
 future_map(.x = list_of_tibbles_highest.lowest_PSI_by_timepoint, .f = function(.x) {
@@ -3064,7 +3070,7 @@ list_of_tibbles_hyperGOresult_timepointwise <- future_map(.x = list_of_tibbles_h
                                                                                   "PSI_type" = .x[[2]], 
                                                                                   "highest_or_lowest_PSI" = .x[[3]], 
                                                                                   "GO_category" = .x[[4]],
-                                                                                  "timepoint" = vector_OBseries_timepoints %>% array_tree), .f = ~GOHyperGAll(catdb = catdb, gocat = ..4, Nannot = 2, sample = ..1$matched_gene_names) %>% GOHyperGAll_benjamini_correction),
+                                                                                  "timepoint" = vector_OBseries_timepoints_edited %>% array_tree), .f = ~GOHyperGAll(catdb = catdb, gocat = ..4, Nannot = 2, sample = ..1$matched_gene_names) %>% GOHyperGAll_benjamini_correction),
                                                                          "PSI_type" = .x[[2]],
                                                                          "highest_or_lowest_PSI" = .x[[3]],
                                                                          "GO_category" = .x[[4]]), .progress = TRUE)
@@ -3096,7 +3102,7 @@ list_of_tibbles_hyperGOresult_timepointwise_topten <- purrr::map(.x = list_of_ti
 future_map(.x = list_of_tibbles_hyperGOresult_timepointwise_topten, .f = ~ggplot(.x[["GO_enrichment"]], aes(x = reorder(Term, -SampleMatch), y = SampleMatch)) +
   geom_col(aes(fill = log10(Padj))) +
   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-  facet_wrap(~timepoint %>% as.factor %>% fct_relevel(., vector_OBseries_timepoints), scales = "free") +
+  facet_wrap(~timepoint %>% as.factor %>% fct_relevel(., vector_OBseries_timepoints_edited), scales = "free") +
   ggtitle(paste("Top 10 significantly over-represented ", .x[["GO_category"]], " GO terms for the ", cutoff_string, .x[["highest_or_lowest_PSI"]], " exons in each OB timepoint")) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
   xlab("GO term") +
@@ -3241,7 +3247,7 @@ list_of_tibbles_family.enrichment_timepointwise <- future_map(.x = list_of_tibbl
                                                               .f = ~list("family_enrichment" = pmap(.l = list("data" = .x[[1]], 
                                                                                   "PSI_type" = .x[[2]], 
                                                                                   "highest_or_lowest_PSI" = .x[[3]],
-                                                                                  "timepoint" = vector_OBseries_timepoints %>% array_tree), .f = ~bc3net::enrichment(genes = ..1$matched_gene_names, reference = reference_geneset_universe, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], ..1$matched_gene_names) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble),
+                                                                                  "timepoint" = vector_OBseries_timepoints_edited %>% array_tree), .f = ~bc3net::enrichment(genes = ..1$matched_gene_names, reference = reference_geneset_universe, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], ..1$matched_gene_names) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble),
                                                                          "PSI_type" = .x[[2]],
                                                                          "highest_or_lowest_PSI" = .x[[3]]), .progress = TRUE)
 
@@ -3270,7 +3276,7 @@ list_of_tibbles_family.enrichment_timepointwise_topten <- purrr::map(.x = list_o
 future_map(.x = list_of_tibbles_family.enrichment_timepointwise_topten, .f = ~ggplot(.x[["family_enrichment"]], aes(x = reorder(TermID, -genes), y = genes)) +
   geom_col(aes(fill = log10(padj))) +
   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-  facet_wrap(~timepoint %>% as.factor %>% fct_relevel(., vector_OBseries_timepoints), scales = "free") +
+  facet_wrap(~timepoint %>% as.factor %>% fct_relevel(., vector_OBseries_timepoints_edited), scales = "free") +
   ggtitle(paste("Top 10 significantly over-represented protein families for the ", cutoff_string, .x[["highest_or_lowest_PSI"]], " exons in each OB timepoint")) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
   xlab("Protein Family (PFAM)") +
@@ -3404,7 +3410,7 @@ list_of_tibbles_upstream.RBP.enrichment_timepointwise <- future_map(.x = list_of
                                                               .f = ~list("family_enrichment" = pmap(.l = list("data" = .x[[1]], 
                                                                                   "PSI_type" = .x[[2]], 
                                                                                   "highest_or_lowest_PSI" = .x[[3]],
-                                                                                  "timepoint" = vector_OBseries_timepoints %>% array_tree), .f = ~bc3net::enrichment(genes = ..1$matched_gene_names, reference = reference_geneset_universe, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], ..1$matched_gene_names) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble),
+                                                                                  "timepoint" = vector_OBseries_timepoints_edited %>% array_tree), .f = ~bc3net::enrichment(genes = ..1$matched_gene_names, reference = reference_geneset_universe, genesets = list_of_RBP_target_gene_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_RBP_target_gene_categories[.$TermID %>% as.character], ..1$matched_gene_names) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble),
                                                                          "PSI_type" = .x[[2]],
                                                                          "highest_or_lowest_PSI" = .x[[3]]), .progress = TRUE)
 
@@ -3433,7 +3439,7 @@ list_of_tibbles_upstream.RBP.enrichment_timepointwise_topten <- purrr::map(.x = 
 future_map(.x = list_of_tibbles_upstream.RBP.enrichment_timepointwise_topten, .f = ~ggplot(.x[["family_enrichment"]], aes(x = reorder(TermID, -genes), y = genes)) +
   geom_col(aes(fill = log10(padj))) +
   scale_fill_distiller(name = expression(log["10"](P["b-hoch"])), type = "seq", palette = "Purples", direction = -1,   aesthetics = "fill", na.value = "yellow") +
-  facet_wrap(~timepoint %>% as.factor %>% fct_relevel(., vector_OBseries_timepoints), scales = "free") +
+  facet_wrap(~timepoint %>% as.factor %>% fct_relevel(., vector_OBseries_timepoints_edited), scales = "free") +
   ggtitle(paste("Top 10 significantly over-represented upstream RBPs for the ", cutoff_string, .x[["highest_or_lowest_PSI"]], " exons in each OB timepoint")) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 35)) +
   xlab("Upstream RBP") +
@@ -3506,9 +3512,9 @@ logCPM_OBseries_anysig_DEGs <- dplyr::right_join(ENSG_to_genesymbol_DEGs, logCPM
 
 # reorder the columns to make them chronological
 
-logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs[, c("ensembl_gene_id", "external_gene_name", "logCPM_BM_MSC_to_OB_ud_avg", "logCPM_BM_MSC_to_OB_6h_avg", "logCPM_BM_MSC_to_OB_12h_avg", "logCPM_BM_MSC_to_OB_24h_avg", "logCPM_BM_MSC_to_OB_3d_avg", "logCPM_BM_MSC_to_OB_6d_avg", "logCPM_BM_MSC_to_OB_9d_avg", "logCPM_BM_MSC_to_OB_12d_avg")]
+logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs[, c("ensembl_gene_id", "external_gene_name", "logCPM_BM_MSC_to_OB_MSC_avg", "logCPM_BM_MSC_to_OB_6h_avg", "logCPM_BM_MSC_to_OB_12h_avg", "logCPM_BM_MSC_to_OB_24h_avg", "logCPM_BM_MSC_to_OB_3d_avg", "logCPM_BM_MSC_to_OB_6d_avg", "logCPM_BM_MSC_to_OB_9d_avg", "logCPM_BM_MSC_to_OB_12d_avg")]
 
-colnames(logCPM_OBseries_anysig_DEGs) <- c("ensembl_gene_id", "external_gene_name", "ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+colnames(logCPM_OBseries_anysig_DEGs) <- c("ensembl_gene_id", "external_gene_name", "MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
 # subset CPM table by biological role
 
@@ -3568,7 +3574,7 @@ list_of_tibbles_combinedexpr_logCPM_PSI_scaled <- purrr::map(.x = list_of_tibble
   
   tibble_combinedexpr <- .x
   
-  tibble_combinedexpr[, c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")] <- tibble_combinedexpr[, c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")] %>% genescale(m = ., axis = 1, method = "Z")
+  tibble_combinedexpr[, c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")] <- tibble_combinedexpr[, c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")] %>% genescale(m = ., axis = 1, method = "Z")
   
   return(tibble_combinedexpr)
   
@@ -3587,7 +3593,7 @@ list_of_wide_tibbles_combinedexpr_som_sweep_clusters <- purrr::map(.x = list_of_
   tibble_combinedexpr_logCPM_PSI_scaled <- .x
   
   # calculate the cluster membership for each iteration of the SOM
-  purrr::map2(.x = xdim_range_combinedexpr, .y = ydim_range_combinedexpr, .f = ~som(tibble_combinedexpr_logCPM_PSI_scaled[, c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")] %>% as.matrix, grid = somgrid(xdim = .x, ydim = .y, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE, dist.fcts = "sumofsquares") %>% .[["unit.classif"]] %>% tibble::enframe(., name = NULL)) %>% 
+  purrr::map2(.x = xdim_range_combinedexpr, .y = ydim_range_combinedexpr, .f = ~som(tibble_combinedexpr_logCPM_PSI_scaled[, c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")] %>% as.matrix, grid = somgrid(xdim = .x, ydim = .y, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE, dist.fcts = "sumofsquares") %>% .[["unit.classif"]] %>% tibble::enframe(., name = NULL)) %>% 
     purrr::reduce(bind_cols)
   
 })
@@ -3874,7 +3880,7 @@ the goal of this is to get extract timepoint PSI/expr tables according to each c
 # reshaping into long table
 list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map(.x = list_of_tibbles_combinedexpr_logCPM_PSI_scaled_clustered, .f = function(.x) {
   
-  id.colnames <- setdiff(colnames(.x), c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d"))
+  id.colnames <- setdiff(colnames(.x), c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"))
   
   long_tibble <- reshape2::melt(.x, id.vars = id.colnames, variable.name = "timepoint", value.name = "scaled_PSI.expr_value") %>% as_tibble
   
@@ -3892,7 +3898,7 @@ purrr::pmap(.l = list(list_of_long_tibbles_combinedexpr_logCPM_PSI_scaled_cluste
   ggtitle(paste("OBseries consensus SOM of ", nrow(..3), " exons, 
                 ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " 
                 (any ", pvalue_or_FDR, pvalue_cutoff, " dPSI greaterthan ", dpsi_cutoff, "), sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
-  scale_x_discrete(limits = vector_OBseries_timepoints, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   xlab("Time-point") +
   ylab("Normalised PSI or expr. Level") +
   # guides(colour = FALSE) +
@@ -4271,51 +4277,51 @@ wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.
 # also clean up the splicemode column
 tibble_exons_per_category_all <- long_tibble_of_psisigma_DEXSeq_results_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2", perl = TRUE)} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% 
   # , any_NMD
-  group_by(splicemode, introduces_PTC_for_all_matched_transcripts, alters_frame_for_all_matched_transcripts, first_exon_reference, last_exon_reference) %>% summarise(no_exons_all = n())
+  group_by(splicemode, NMD_flagged_recon, introduces_PTC_for_all_matched_transcripts, alters_frame_for_all_matched_transcripts, first_exon_reference, last_exon_reference) %>% summarise(no_exons_all = n())
 
 all_exons_count <- tibble_exons_per_category_all$no_exons_all %>% sum(na.rm = TRUE)
-# number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$NMD_flagged_ref == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
+number_NMD_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$NMD_flagged_recon == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 # number_poison_exon_candidate_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$poison_exon_candidate_ref == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 number_introduces_PTC_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$introduces_PTC_for_all_matched_transcripts == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 number_alters_frame_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$alters_frame_for_all_matched_transcripts == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 number_first_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$first_exon_reference == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 number_last_exon_all_exons <- tibble_exons_per_category_all[tibble_exons_per_category_all$last_exon_reference == TRUE, ] %>% .$no_exons_all %>% sum(na.rm = TRUE)
 
-# message("There are ", number_NMD_all_exons*100/all_exons_count, "% NMD exons overall.")
+message("There are ", number_NMD_all_exons*100/all_exons_count, "% NMD exons overall from reconstructed transcriptome")
 # message("There are ", number_poison_exon_candidate_all_exons*100/all_exons_count, "% poison exon candidates overall.")
 message("There are ", number_introduces_PTC_all_exons*100/all_exons_count, "% PTC introducing exons overall.")
 message("There are ", number_alters_frame_all_exons*100/all_exons_count, "% frame-altering exons overall.")
 message("There are ", number_first_exon_all_exons*100/all_exons_count, "% first exons overall.")
 message("There are ", number_last_exon_all_exons*100/all_exons_count, "% last exons overall.")
 
-tibble_exons_per_category_constitutive <- tibble_constitutive_LIV_info_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, introduces_PTC_for_all_matched_transcripts, alters_frame_for_all_matched_transcripts, first_exon_reference, last_exon_reference) %>% summarise(no_exons_constitutive = n())
+tibble_exons_per_category_constitutive <- tibble_constitutive_LIV_info_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_flagged_recon, introduces_PTC_for_all_matched_transcripts, alters_frame_for_all_matched_transcripts, first_exon_reference, last_exon_reference) %>% summarise(no_exons_constitutive = n())
 
 constitutive_exons_count <- tibble_exons_per_category_constitutive$no_exons_constitutive %>% sum(na.rm = TRUE)
-# number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$any_NMD == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
+number_NMD_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$NMD_flagged_recon == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 # number_poison_exon_candidate_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$poison_exon_candidate_ref == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 number_introduces_PTC_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$introduces_PTC_for_all_matched_transcripts == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 number_alters_frame_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$alters_frame_for_all_matched_transcripts == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 number_first_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$first_exon_reference == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 number_last_exon_constitutive_exons <- tibble_exons_per_category_constitutive[tibble_exons_per_category_constitutive$last_exon_reference == TRUE, ] %>% .$no_exons_constitutive %>% sum(na.rm = TRUE)
 
-# message("There are ", number_NMD_constitutive_exons*100/constitutive_exons_count, "% NMD exons constitutive.")
+message("There are ", number_NMD_constitutive_exons*100/constitutive_exons_count, "% NMD exons constitutive from reconstructed transcriptome.")
 # message("There are ", number_poison_exon_candidate_constitutive_exons*100/constitutive_exons_count, "% poison exon candidates constitutive.")
 message("There are ", number_introduces_PTC_constitutive_exons*100/constitutive_exons_count, "% PTC introducing exons constitutive.")
 message("There are ", number_alters_frame_constitutive_exons*100/constitutive_exons_count, "% frame-altering exons constitutive.")
 message("There are ", number_first_exon_constitutive_exons*100/constitutive_exons_count, "% first exons constitutive.")
 message("There are ", number_last_exon_constitutive_exons*100/constitutive_exons_count, "% last exons constitutive.")
 
-tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, introduces_PTC_for_all_matched_transcripts, alters_frame_for_all_matched_transcripts, first_exon_reference, last_exon_reference) %>% summarise(no_exons_differential = n())
+tibble_exons_per_category_differential <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% group_by(splicemode, NMD_flagged_recon, introduces_PTC_for_all_matched_transcripts, alters_frame_for_all_matched_transcripts, first_exon_reference, last_exon_reference) %>% summarise(no_exons_differential = n())
 
 differential_exons_count <- tibble_exons_per_category_differential$no_exons_differential %>% sum(na.rm = TRUE)
-# number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_wide_tibble_of_psisigma_results_allcomparisons_differentialcategory_differential$any_NMD == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
+number_NMD_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$NMD_flagged_recon == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 # number_poison_exon_candidate_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$poison_exon_candidate_ref == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 number_introduces_PTC_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$introduces_PTC_for_all_matched_transcripts == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 number_alters_frame_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$alters_frame_for_all_matched_transcripts == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 number_first_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$first_exon_reference == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 number_last_exon_differential_exons <- tibble_exons_per_category_differential[tibble_exons_per_category_differential$last_exon_reference == TRUE, ] %>% .$no_exons_differential %>% sum(na.rm = TRUE)
 
-# message("There are ", number_NMD_differential_exons*100/differential_exons_count, "% NMD exons differential.")
+message("There are ", number_NMD_differential_exons*100/differential_exons_count, "% NMD exons differential from reconstructed transcriptome.")
 # message("There are ", number_poison_exon_candidate_differential_exons*100/differential_exons_count, "% poison exon candidates differential.")
 message("There are ", number_introduces_PTC_differential_exons*100/differential_exons_count, "% PTC introducing exons differential.")
 message("There are ", number_alters_frame_differential_exons*100/differential_exons_count, "% frame-altering exons differential.")
@@ -4326,11 +4332,14 @@ message("There are ", number_last_exon_differential_exons*100/differential_exons
 tibble_exons_per_category_summary <- list(tibble_exons_per_category_all, tibble_exons_per_category_constitutive, tibble_exons_per_category_differential) %>% purrr::reduce(dplyr::full_join)
 
 # complete each factor combination of splicemode~TRUE/FALSE~TRUE/FALSE~... to make implicit missing rows explicit
-tibble_complete_grid <- tidyr::expand_grid("splicemode" = tibble_exons_per_category_summary$splicemode %>% unique, 
-                   "introduces_PTC_for_all_matched_transcripts" = tibble_exons_per_category_summary$introduces_PTC_for_all_matched_transcripts %>% unique, 
-                   "alters_frame_for_all_matched_transcripts" = tibble_exons_per_category_summary$alters_frame_for_all_matched_transcripts %>% unique, 
-                   "first_exon_reference" = tibble_exons_per_category_summary$first_exon_reference %>% unique, 
-                   "last_exon_reference" = tibble_exons_per_category_summary$last_exon_reference %>% unique)
+tibble_complete_grid <- tidyr::expand_grid(
+  "splicemode" = tibble_exons_per_category_summary$splicemode %>% unique,
+  "NMD_flagged_recon" = tibble_exons_per_category_summary$NMD_flagged_recon %>% unique,
+  "introduces_PTC_for_all_matched_transcripts" = tibble_exons_per_category_summary$introduces_PTC_for_all_matched_transcripts %>% unique, 
+  "alters_frame_for_all_matched_transcripts" = tibble_exons_per_category_summary$alters_frame_for_all_matched_transcripts %>% unique, 
+  "first_exon_reference" = tibble_exons_per_category_summary$first_exon_reference %>% unique, 
+  "last_exon_reference" = tibble_exons_per_category_summary$last_exon_reference %>% unique
+)
 
 # dplyr::left_join onto the complete grid. this will reveal all the missing as NA.
 tibble_exons_per_category_summary_completed <- dplyr::left_join(tibble_complete_grid, tibble_exons_per_category_summary)
@@ -4339,7 +4348,7 @@ tibble_exons_per_category_summary_completed <- dplyr::left_join(tibble_complete_
 tibble_exons_per_category_summary_completed[is.na(tibble_exons_per_category_summary_completed)] <- 0
 
 # melt the sample
-long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary_completed, id.vars = c("splicemode", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "first_exon_reference", "last_exon_reference"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
+long_tibble_exons_per_category_summary <- reshape2::melt(tibble_exons_per_category_summary_completed, id.vars = c("splicemode", "NMD_flagged_recon", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "first_exon_reference", "last_exon_reference"), variable.name = "sample", value.name = "number_of_exons_per_category") %>% as_tibble %>% 
   # add the overall counts for each splicemode
   dplyr::group_by(splicemode, sample) %>% dplyr::mutate("number_of_exons_per_splicemode" = sum(number_of_exons_per_category %>% na.omit))
 
@@ -4363,8 +4372,8 @@ ggplot() +
                 ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
   xlab("Splicemode") +
   scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage first/last exon per splicemode"), breaks = seq(0, 100, 20))) +
-  scale_shape_manual(name = "Category", limits = c("first_exon_reference", "last_exon_reference", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts"), labels = c("First exon", "Last exon", "Poison exon", "Alters frame"), values = c(15, 19, 8, 11)) +
-  scale_colour_brewer(name = "Category", type = "seq", limits = c("first_exon_reference", "last_exon_reference", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts"), labels = c("First exon", "Last exon", "Poison exon", "Alters frame"), palette = "Set2") +
+  scale_shape_manual(name = "Category", limits = c("first_exon_reference", "last_exon_reference", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "NMD_flagged_recon"), labels = c("First exon", "Last exon", "Poison exon", "Alters frame", "NMD\n(predicted)"), values = c(15, 19, 8, 11, 6)) +
+  scale_colour_brewer(name = "Category", type = "seq", limits = c("first_exon_reference", "last_exon_reference", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "NMD_flagged_recon"), labels = c("First exon", "Last exon", "Poison exon", "Alters frame", "NMD\n(predicted)"), palette = "Set2") +
   # scale_shape_manual(name = "Category", limits = c("any_NMD", "first_exon_reference", "last_exon_reference"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
@@ -4374,92 +4383,142 @@ ggplot() +
 
 # upset plot
 message("all exons")
-df <- long_tibble_of_psisigma_DEXSeq_results_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- long_tibble_of_psisigma_DEXSeq_results_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% .[, c("event_region_coords", "diff_exon_coords", "splicemode", "NMD_flagged_recon", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = event_region_coords + diff_exon_coords + splicemode + NMD_flagged_recon + introduces_PTC_for_all_matched_transcripts + alters_frame_for_all_matched_transcripts + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
-upset_combs <- data.frame(df %>% dplyr::select(., -diff_exon_coords), row.names = df$diff_exon_coords) %>% make_comb_mat(mode = "distinct")
+upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "intersect")
 
 print(set_size(upset_combs))
 
-pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_allexons.pdf", sep = ""), height = 4, width = 10)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_allexons.pdf", sep = ""), height = 4, width = 20)
 
-ComplexHeatmap::UpSet(upset_combs, 
-                      comb_order = order(-comb_size(upset_combs)), 
-                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
-                                                                     "first_exon_reference" = "Exon ontology",
-                                                                     "last_exon_reference" = "Exon ontology",
-                                                                     "A3SS" = "Splicemode",
-                                                                     "A5SS" = "Splicemode",
-                                                                     "IR" = "Splicemode",
-                                                                     "MES" = "Splicemode",
-                                                                     "MXS" = "Splicemode",
-                                                                     "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
-                                                      col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
-                                                      ))
+ro <- row_order(ht)
+sz <- set_size(upset_combs)
+
+ht <- draw(ComplexHeatmap::UpSet(upset_combs, 
+                                 comb_order = order(-comb_size(upset_combs)), 
+                                 left_annotation = rowAnnotation("Set Type" = c("NMD_flagged_recon" = "Exon ontology",
+                                                                                "introduces_PTC_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "alters_frame_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "first_exon_reference" = "Exon ontology",
+                                                                                "last_exon_reference" = "Exon ontology",
+                                                                                "A3SS" = "Splicemode",
+                                                                                "A5SS" = "Splicemode",
+                                                                                "IR" = "Splicemode",
+                                                                                "MES" = "Splicemode",
+                                                                                "MXS" = "Splicemode",
+                                                                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                                 col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
+                                 ),
+                                 row_labels =  c("NMD (recon)", "Poison exon", "Alters frame", "First exon", "Last exon", "A3SS", "A5SS", "IR", "MES", "MXS", "SES")
+) +
+  rowAnnotation(labels = anno_text(sz, which = "row", just = c("left", "centre"), gp = gpar(fontsize = 9)), 
+                width = max(grobWidth(textGrob(sz))))
+)
+
+co <- column_order(ht)
+cs <- comb_size(upset_combs)
+
+decorate_annotation("Intersection\nsize", {
+  grid.text(cs[co], x = seq_along(cs), y = unit(cs[co], "native") + unit(2, "pt"), 
+            default.units = "native", just = c("left", "centre"), gp = gpar(fontsize = 9), rot = 90)
+  
+} )
 
 dev.off()
 
 message("all constitutive")
-df <- tibble_constitutive_LIV_info_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "any_NMD", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + any_NMD + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- tibble_constitutive_LIV_info_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% .[, c("event_region_coords", "diff_exon_coords", "splicemode", "NMD_flagged_recon", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = event_region_coords + diff_exon_coords + splicemode + NMD_flagged_recon + introduces_PTC_for_all_matched_transcripts + alters_frame_for_all_matched_transcripts + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 
 df[is.na(df)] = FALSE
 
-upset_combs <- data.frame(df %>% dplyr::select(., -diff_exon_coords), row.names = df$diff_exon_coords) %>% make_comb_mat(mode = "distinct")
+upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "intersect")
 
 print(set_size(upset_combs))
 
-pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 10)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 20)
 
-ComplexHeatmap::UpSet(upset_combs, 
-                      comb_order = order(-comb_size(upset_combs)), 
-                      left_annotation = rowAnnotation("Set Type" = c("any_NMD" = "Exon ontology",
-                                                                     "first_exon_reference" = "Exon ontology",
-                                                                     "last_exon_reference" = "Exon ontology",
-                                                                     "A3SS" = "Splicemode",
-                                                                     "A5SS" = "Splicemode",
-                                                                     "IR" = "Splicemode",
-                                                                     "MES" = "Splicemode",
-                                                                     "MXS" = "Splicemode",
-                                                                     "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
-                                                      col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
-                                                      ))
+ro <- row_order(ht)
+sz <- set_size(upset_combs)
+
+ht <- draw(ComplexHeatmap::UpSet(upset_combs, 
+                                 comb_order = order(-comb_size(upset_combs)), 
+                                 left_annotation = rowAnnotation("Set Type" = c("NMD_flagged_recon" = "Exon ontology",
+                                                                                "introduces_PTC_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "alters_frame_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "first_exon_reference" = "Exon ontology",
+                                                                                "last_exon_reference" = "Exon ontology",
+                                                                                "A3SS" = "Splicemode",
+                                                                                "A5SS" = "Splicemode",
+                                                                                "IR" = "Splicemode",
+                                                                                "MES" = "Splicemode",
+                                                                                "MXS" = "Splicemode",
+                                                                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                                 col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
+                                 ),
+                                 row_labels =  c("NMD (recon)", "Poison exon", "Alters frame", "First exon", "Last exon", "A3SS", "A5SS", "IR", "MES", "MXS", "SES")
+) +
+  rowAnnotation(labels = anno_text(sz, which = "row", just = c("left", "centre"), gp = gpar(fontsize = 9)), 
+                width = max(grobWidth(textGrob(sz))))
+)
+
+co <- column_order(ht)
+cs <- comb_size(upset_combs)
+
+decorate_annotation("Intersection\nsize", {
+  grid.text(cs[co], x = seq_along(cs), y = unit(cs[co], "native") + unit(2, "pt"), 
+            default.units = "native", just = c("left", "centre"), gp = gpar(fontsize = 9), rot = 90)
+  
+} )
 
 dev.off()
 
 message("all differential")
-df <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., diff_exon_coords, .keep_all = TRUE) %>% .[, c("diff_exon_coords", "splicemode", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = diff_exon_coords + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
+df <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first.last.reference %>% modify_at(., .at = "splicemode", .f = function(x) {gsub(x = x, pattern = "^(TSS\\|)*([^_|\\|]+)(.*)*", replacement = "\\2")} ) %>% dplyr::distinct(., event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% .[, c("event_region_coords", "diff_exon_coords", "splicemode", "NMD_flagged_recon", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "first_exon_reference", "last_exon_reference")] %>% add_column("dummy" = TRUE) %>% reshape2::dcast(formula = event_region_coords + diff_exon_coords + splicemode + NMD_flagged_recon + introduces_PTC_for_all_matched_transcripts + alters_frame_for_all_matched_transcripts + first_exon_reference + last_exon_reference ~ splicemode, value.var = "dummy") %>% as_tibble 
 # , "any_NMD"
  # + any_NMD
 
 df[is.na(df)] = FALSE
 
-upset_combs <- data.frame(df %>% dplyr::select(., -diff_exon_coords), row.names = df$diff_exon_coords) %>% make_comb_mat(mode = "distinct")
+upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "intersect")
 
 print(set_size(upset_combs))
 
-pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 3, width = 7)
+pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 4, width = 20)
 
-  ht <- ComplexHeatmap::UpSet(upset_combs, 
-                              comb_order = order(-comb_size(upset_combs)), 
-                              left_annotation = rowAnnotation("Set Type" = c(
-                                # "any_NMD" = "Exon ontology",
-                                "first_exon_reference" = "Reference location",
-                                "last_exon_reference" = "Reference location",
-                                "A3SS" = "Splicemode",
-                                "A5SS" = "Splicemode",
-                                "IR" = "Splicemode",
-                                "MES" = "Splicemode",
-                                "MXS" = "Splicemode",
-                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
-                                col = list("Set Type" = c("Reference location" = "tomato1", "Splicemode" = "red4"))
-                              )) %>% draw
-  od <- column_order(ht)
-  cs <- comb_size(upset_combs)
-  decorate_annotation("Intersection\nsize", {
-    grid.text(cs[od], x = seq_along(cs), y = unit(cs[od], "native") + unit(2, "pt"), 
-              default.units = "native", just = c("left"), gp = gpar(fontsize = 10), rot = 90)
-  })
+ro <- row_order(ht)
+sz <- set_size(upset_combs)
+
+ht <- draw(ComplexHeatmap::UpSet(upset_combs, 
+                                 comb_order = order(-comb_size(upset_combs)), 
+                                 left_annotation = rowAnnotation("Set Type" = c("NMD_flagged_recon" = "Exon ontology",
+                                                                                "introduces_PTC_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "alters_frame_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "first_exon_reference" = "Exon ontology",
+                                                                                "last_exon_reference" = "Exon ontology",
+                                                                                "A3SS" = "Splicemode",
+                                                                                "A5SS" = "Splicemode",
+                                                                                "IR" = "Splicemode",
+                                                                                "MES" = "Splicemode",
+                                                                                "MXS" = "Splicemode",
+                                                                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                                 col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
+                                 ),
+                                 row_labels =  c("NMD (recon)", "Poison exon", "Alters frame", "First exon", "Last exon", "A3SS", "A5SS", "IR", "MES", "MXS", "SES")
+) +
+  rowAnnotation(labels = anno_text(sz, which = "row", just = c("left", "centre"), gp = gpar(fontsize = 9)), 
+                width = max(grobWidth(textGrob(sz))))
+)
+
+co <- column_order(ht)
+cs <- comb_size(upset_combs)
+
+decorate_annotation("Intersection\nsize", {
+  grid.text(cs[co], x = seq_along(cs), y = unit(cs[co], "native") + unit(2, "pt"), 
+            default.units = "native", just = c("left", "centre"), gp = gpar(fontsize = 9), rot = 90)
+  
+} )
 
 dev.off()
 
@@ -4527,10 +4586,10 @@ names(list_of_tibble_raw_counts_PSI_for_PCA_by_comparison) <- list_of_tibble_raw
 # rename tibbles to be timepoint-specific
 list_of_tibble_raw_counts_PSI_for_PCA_by_comparison <- purrr::map2(.x = list_of_tibble_raw_counts_PSI_for_PCA_by_comparison,
                                                                    .y = names(list_of_tibble_raw_counts_PSI_for_PCA_by_comparison),
-                                                                   .f = ~.x %>% dplyr::select(-comparison) %>% setNames(c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", paste(.y, c("|r1", "|r2", "|r3"), sep = ""), paste("ud", c("|r1", "|r2", "|r3"), sep = ""))) %>% na.omit %>% dplyr::distinct())
+                                                                   .f = ~.x %>% dplyr::select(-comparison) %>% setNames(c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", paste(.y, c("|r1", "|r2", "|r3"), sep = ""), paste("MSC", c("|r1", "|r2", "|r3"), sep = ""))) %>% na.omit %>% dplyr::distinct())
 
 # reduce into a left join
-wide_tibble_raw_counts_PSI_for_PCA <- list_of_tibble_raw_counts_PSI_for_PCA_by_comparison %>% purrr::reduce(.f = inner_join , by = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", paste("ud", c("|r1", "|r2", "|r3"), sep = ""))) %>% dplyr::distinct()
+wide_tibble_raw_counts_PSI_for_PCA <- list_of_tibble_raw_counts_PSI_for_PCA_by_comparison %>% purrr::reduce(.f = inner_join , by = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", paste("MSC", c("|r1", "|r2", "|r3"), sep = ""))) %>% dplyr::distinct()
 
 ```
 
@@ -4539,10 +4598,6 @@ wide_tibble_raw_counts_PSI_for_PCA <- list_of_tibble_raw_counts_PSI_for_PCA_by_c
 colnames should be timepoint|replicate.
 
 ```{r}
-
-# edit timepoint names
-colnames(wide_tibble_raw_counts_PSI_for_PCA) <- gsub(x = colnames(wide_tibble_raw_counts_PSI_for_PCA), pattern = "24h", replacement = "1d")
-colnames(wide_tibble_raw_counts_PSI_for_PCA) <- gsub(x = colnames(wide_tibble_raw_counts_PSI_for_PCA), pattern = "ud", replacement = "MSC")
 
 plot_PCA_for_timepoint_and_replicate(wide_tibble_raw_counts_PSI_for_PCA %>% dplyr::select(-database_ID, -event_region_coords, -diff_exon_coords, -splicemode), 
                                      timepoint_order = vector_OBseries_timepoints_edited, 
@@ -4655,7 +4710,7 @@ ggplot(PCA_loadings) +
   ggtitle(paste("PC2 vs. PC1 loadings based on absolute PSI (RUVs)", sep = "")) +
   xlab(paste("PC1 (", PCA_variance[1, "variance_explained"] %>% signif(3), "%)", sep = "")) +
   ylab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-  scale_color_manual(breaks = vector_OBseries_timepoints, limits = vector_OBseries_timepoints, labels = vector_OBseries_timepoints, values = brewer.pal(8, "Spectral")) +
+  scale_color_manual(breaks = vector_OBseries_timepoints_edited, limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited, values = brewer.pal(8, "Spectral")) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
   ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC2_vs_PC1_based_on_absolute_PSI_RUVs.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +
@@ -4667,7 +4722,7 @@ ggplot(PCA_loadings) +
   ggtitle(paste("PC3 vs. PC2 loadings based on absolute PSI (RUVs)", sep = "")) +
   xlab(paste("PC2 (", PCA_variance[2, "variance_explained"] %>% signif(3), "%)", sep = "")) +
   ylab(paste("PC3 (", PCA_variance[3, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-  scale_color_manual(breaks = vector_OBseries_timepoints, limits = vector_OBseries_timepoints, labels = vector_OBseries_timepoints, values = brewer.pal(8, "Spectral")) +
+  scale_color_manual(breaks = vector_OBseries_timepoints_edited, limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited, values = brewer.pal(8, "Spectral")) +
   theme_bw() +
   theme(text = element_text(family = "Helvetica")) +
   ggsave(filename = paste(qualitycheck_results_dir, "PCA_plot_PC3_vs_PC2_based_on_absolute_PSI_RUVs.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 15, units = "cm") +

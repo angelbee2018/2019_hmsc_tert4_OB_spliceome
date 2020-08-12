@@ -499,7 +499,7 @@ summary_table_onesplicemode_split <- cbind(summary_table_onesplicemode_split, is
 
 # append the list of isoform IDs
 
-summary_table_onesplicemode_split <- cbind(summary_table_onesplicemode_split, isoform_ID = paste(name_of_splicemode, summary_table_onesplicemode_split$AS_event_ID, summary_table_onesplicemode_split$isoform_number, sep = "_"))
+summary_table_onesplicemode_split <- cbind(summary_table_onesplicemode_split, sub_LSV_ID = paste(name_of_splicemode, summary_table_onesplicemode_split$AS_event_ID, summary_table_onesplicemode_split$isoform_number, sep = "_"))
 
 # remove non-integer values
 
@@ -528,7 +528,7 @@ return(summary_table_onesplicemode_split)
 
 ```{r}
 
-# function to convert the isoform_ID from JUM and splicemode of isoforms of interest into chr, strand, start and end co-ordinates that ensembldb can read.
+# function to convert the sub_LSV_ID from JUM and splicemode of isoforms of interest into chr, strand, start and end co-ordinates that ensembldb can read.
 # input tibble structure: MUST CONTAIN: gene "Gene", JUM isoform ID "AS_event_ID" and "splicemode"
 
 JUM_ASeventID_and_splicemode_to_chr_strand_start_end <- function(tibble_of_isoforms_to_be_consequence_assessed) {
@@ -580,10 +580,10 @@ JUM_ASeventID_and_splicemode_to_chr_strand_start_end <- function(tibble_of_isofo
   # for MXE, we consider the entire differential area.
   if (tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "MXE_events",] %>% nrow != 0) {
     
-    MXE_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "MXE_events", c("Gene", "isoform_ID")]
-  MXE_subset <- dplyr::inner_join(MXE_events_summary_table_split, MXE_subset, by = c("Gene", "isoform_ID")) %>% .[, c( "Gene", "AS_event_ID", "isoform_ID", "upstream_exon_end_coor", "MXE_exon_coordinates", "downstream_exon_start_coor")]
+    MXE_subset <- tibble_of_isoforms_to_be_consequence_assessed[tibble_of_isoforms_to_be_consequence_assessed$splicemode == "MXE_events", c("Gene", "sub_LSV_ID")]
+  MXE_subset <- dplyr::inner_join(MXE_events_summary_table_split, MXE_subset, by = c("Gene", "sub_LSV_ID")) %>% .[, c( "Gene", "AS_event_ID", "sub_LSV_ID", "upstream_exon_end_coor", "MXE_exon_coordinates", "downstream_exon_start_coor")]
   MXE_subset <- cbind(MXE_subset, chr = gsub(x = MXE_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\1")) %>% cbind(., strand = gsub(x = MXE_subset$AS_event_ID, pattern = "(.*)_(\\-|\\+|\\*)_(.*)", replacement = "\\2")) %>% cbind(., start = gsub(x = MXE_subset$MXE_exon_coordinates, pattern = "(.*)-(.*)", replacement = "\\1")) %>% cbind(., end = gsub(x = MXE_subset$MXE_exon_coordinates, pattern = "(.*)-(.*)", replacement = "\\2"))
-  MXE_subset <- MXE_subset[, c("Gene", "isoform_ID", "chr", "strand", "start", "end")] %>% as_tibble
+  MXE_subset <- MXE_subset[, c("Gene", "sub_LSV_ID", "chr", "strand", "start", "end")] %>% as_tibble
   names(MXE_subset) <- c("Gene", "AS_event_ID", "chr", "strand", "start", "end")
   MXE_subset[, "splicemode"] <- "MXE_events"
     
@@ -1239,7 +1239,7 @@ list_of_detailed_tables_2 <- future_map(.x = list_of_detailed_tables, .f = ~rbin
 
 # rename the colnames to be not comparison-specific - we will add a comparison column later on
 
-list_of_detailed_tables_3 <- purrr::map2(.x = list_of_detailed_tables_2, .y = list_of_timepoint_comparisons_final, .f = ~setNames(., c("Gene", "AS_event_ID", "AS_structure_ID", "sub_junction_ID", "sub-junction_dispersion_estimate", "LRT_statistic-full_vs_reduced", "LRT_p_value-full_vs_reduced", "BH_adjusted_p-values", "logCPM_1", "logCPM_2", "fitting_parameter_log2fold_change_2_from_1", "sub_junction_chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand", "raw_count.1", "raw_count.2", "raw_count.3", "raw_count.4", "raw_count.5", "raw_count.6", "percentage_usage.1", "percentage_usage.2", "percentage_usage.3", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "deltaPSI", "splicemode")) %>% add_column(., "comparison" = .y)) 
+list_of_detailed_tables_3 <- purrr::map2(.x = list_of_detailed_tables_2, .y = list_of_timepoint_comparisons_final, .f = ~setNames(., c("Gene", "AS_event_ID", "AS_structure_ID", "sub_junction_ID", "sub-junction_dispersion_estimate", "LRT_statistic-full_vs_reduced", "LRT_p_value-full_vs_reduced", "BH_adjusted_p-values", "logCPM_1", "logCPM_2", "fitting_parameter_log2fold_change_2_from_1", "chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand", "raw_count.1", "raw_count.2", "raw_count.3", "raw_count.4", "raw_count.5", "raw_count.6", "percentage_usage.1", "percentage_usage.2", "percentage_usage.3", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "deltaPSI", "splicemode")) %>% add_column(., "comparison" = .y)) 
 
 wide_tibble_of_all_detailed_tables_with_na <- list_of_detailed_tables_3 %>% rbindlist %>% as_tibble
 
@@ -1263,7 +1263,7 @@ wide_tibble_AS.event.ID_mapping_to_composite_coords <- wide_tibble_of_all_detail
   dplyr::group_by(AS_event_ID, splicemode, comparison) %>% 
   dplyr::mutate("isoform_number" = 1:n()) %>% 
   dplyr::ungroup() %>%
-  dplyr::select(AS_event_ID, sub_junction_chr, sub_junction_start_coor, sub_junction_end_coor, splicemode, isoform_number) %>%
+  dplyr::select(AS_event_ID, chr, sub_junction_start_coor, sub_junction_end_coor, splicemode, isoform_number) %>%
   unique
 
 ```
@@ -1476,6 +1476,8 @@ list_JUM_simplified_tibbles_processed_wide <- future_map2(
 
 wide_tibble_all_splicemodes_split_with_na <- list_JUM_simplified_tibbles_processed_wide %>% purrr::map(.f = ~.x %>% rbindlist(use.names = TRUE, fill = TRUE)) %>% purrr::reduce(dplyr::full_join) %>% as_tibble %>% type_convert
 
+colnames(wide_tibble_all_splicemodes_split_with_na) <- gsub(x = colnames(wide_tibble_all_splicemodes_split_with_na), pattern = "24h", replacement = "1d")
+
 # join the composite coords onto the tibble
 wide_tibble_all_splicemodes_split_with_na <- dplyr::left_join(wide_tibble_all_splicemodes_split_with_na, long_tibble_AS.event.ID_to_composite_coords_mapping %>% dplyr::select(-comparison) %>% dplyr::distinct(), by = c("AS_event_ID", "splicemode", "sub_LSV_ID"))
 
@@ -1552,6 +1554,8 @@ list_JUM_simplified_tibbles_processed_long <- future_map2(
 }, .progress = TRUE, .options = future_options(globals = c("dplyr::select", "as_tibble", "dplyr::filter", "add_column", "split_delimited_column_in_table", "type_convert")) )
 
 long_tibble_all_splicemodes_split_with_na <- list_JUM_simplified_tibbles_processed_long %>% flatten %>% rbindlist %>% as_tibble %>% type_convert
+
+colnames(long_tibble_all_splicemodes_split_with_na) <- gsub(x = colnames(long_tibble_all_splicemodes_split_with_na), pattern = "24h", replacement = "1d")
 
 # join the composite coords onto the tibble
 long_tibble_all_splicemodes_split_with_na <- dplyr::left_join(long_tibble_all_splicemodes_split_with_na, long_tibble_AS.event.ID_to_composite_coords_mapping, by = c("AS_event_ID", "splicemode", "comparison", "sub_LSV_ID"))
@@ -1995,17 +1999,14 @@ PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na %
 
 colnames(PSI_levels_timeseries_OB_wide_with_na) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
 
-# remove extra na
-OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
-
-PSI_levels_timeseries_OB_wide_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, OBseries_timepoints[2:length(OBseries_timepoints)]], 1, function(X) {all(is.na(X))}) %>% which(. == TRUE)
+PSI_levels_timeseries_OB_wide_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, vector_OBseries_timepoints_edited[2:length(vector_OBseries_timepoints_edited)]], 1, function(X) {all(is.na(X))}) %>% which(. == TRUE)
 
 PSI_levels_timeseries_OB_wide_with_na <- cbind(PSI_levels_timeseries_OB_wide_with_na, MSC = 0)
 
 PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_na.rows, ]
 
 # reorder cols to match chronological order
-PSI_levels_timeseries_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(-OBseries_timepoints), PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(OBseries_timepoints))
+PSI_levels_timeseries_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(-vector_OBseries_timepoints_edited), PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(vector_OBseries_timepoints_edited))
 
 print(paste("There are", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "unique junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
 
@@ -2013,10 +2014,10 @@ write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(R_processing
 # export associated gene set
 write.table(x = PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_", length( PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit), "_differential_genes_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
-# remove ALL na to produce the timeseries-ready table
-PSI_levels_timeseries_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, OBseries_timepoints], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
+# remove na
+PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide_with_na[PSI_levels_timeseries_OB_wide_with_na[, vector_OBseries_timepoints_edited] %>% add_column("id" = rownames(.)) %>% na.omit %>% .$id, ]
 
-PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_with_na_na.rows, ]
+PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide[PSI_levels_timeseries_OB_wide[, vector_OBseries_timepoints_edited] %>% dplyr::mutate_at(.vars = vector_OBseries_timepoints_edited, .funs = function(x) {na_if(x, NaN)}) %>% add_column("id" = rownames(.)) %>% na.omit %>% .$id, ]
 
 row.names(PSI_levels_timeseries_OB_wide) <- NULL
 
@@ -2035,10 +2036,10 @@ write.table(x = PSI_levels_timeseries_OB_wide, file = paste(R_processing_results
 tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0, 
-                                             intersect(which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] <= 0.01), 
-                                                       which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] >= 0.15)) %>% length,
-                                             intersect(which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
-                                                       which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
+                                             intersect(which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|1d|12h"))] <= 0.01), 
+                                                       which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|1d|12h"))] >= 0.15)) %>% length,
+                                             intersect(which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|1d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
+                                                       which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|1d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
                                              intersect(which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
                                                        which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit >= 0.15)} ))) %>% length,
                                              intersect(which(wide_tibble_all_splicemodes_split_with_na_with_ref_annot[, which(str_detect(colnames(wide_tibble_all_splicemodes_split_with_na_with_ref_annot), "qvalue"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit <= 0.01)} )), 
@@ -2064,8 +2065,8 @@ wide_tibble_all_splicemodes_differential_only <- dplyr::semi_join(wide_tibble_al
 tibble_cumulative_diff_changes <- tibble("timepoint" = vector_OBseries_timepoints_edited, 
                                          "cumulative_diff_changes" = 
                                            c(0,
-                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h|12h"))] %>% unlist %>% abs >= 0.15) %>% length,
-                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|24h"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|1d|12h"))] %>% unlist %>% abs >= 0.15) %>% length,
+                                             which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d|1d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
                                              which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d|3d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
                                              which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d|6d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
                                              which(wide_tibble_all_splicemodes_differential_only[, which(str_detect(colnames(wide_tibble_all_splicemodes_differential_only), "deltaPSI"))] %>% .[, -which(str_detect(colnames(.), "12d|9d"))] %>% apply(X = ., MARGIN = 1, FUN = function(X) {any(X %>% as.numeric %>% na.omit %>% abs >= 0.15)} )) %>% length,
@@ -2116,17 +2117,14 @@ PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_cons
 
 colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na) <- gsub(x = colnames(PSI_levels_timeseries_constitutive_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
 
-# remove extra na
-OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
-
-PSI_levels_timeseries_constitutive_OB_wide_na.rows <- apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, OBseries_timepoints[2:length(OBseries_timepoints)]], 1, function(X) {all(is.na(X))}) %>% which(. == TRUE)
+PSI_levels_timeseries_constitutive_OB_wide_na.rows <- apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_OBseries_timepoints_edited[2:length(vector_OBseries_timepoints_edited)]], 1, function(X) {all(is.na(X))}) %>% which(. == TRUE)
 
 PSI_levels_timeseries_constitutive_OB_wide_with_na <- cbind(PSI_levels_timeseries_constitutive_OB_wide_with_na, MSC = 0)
 
 PSI_levels_timeseries_constitutive_OB_wide_with_na <- PSI_levels_timeseries_constitutive_OB_wide_with_na[-PSI_levels_timeseries_constitutive_OB_wide_na.rows, ]
 
 # reorder cols to match chronological order
-PSI_levels_timeseries_constitutive_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::select(-OBseries_timepoints), PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::select(OBseries_timepoints))
+PSI_levels_timeseries_constitutive_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::select(-vector_OBseries_timepoints_edited), PSI_levels_timeseries_constitutive_OB_wide_with_na %>% dplyr::select(vector_OBseries_timepoints_edited))
 
 print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide_with_na$AS_event_ID %>% unique), "unique CONSTITUTIVE junction structures with", p_or_q_value, "<", qpvalue_cutoff, " and dPSI cutoff of", dPSI_cutoff, "for OB series with missing values"))
 
@@ -2134,7 +2132,7 @@ write.table(x = PSI_levels_timeseries_constitutive_OB_wide_with_na, file = paste
 
 # remove ALL na to produce the timeseries-ready table
 
-PSI_levels_timeseries_constitutive_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, OBseries_timepoints], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
+PSI_levels_timeseries_constitutive_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_OBseries_timepoints_edited], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
 
 PSI_levels_timeseries_constitutive_OB_wide <- PSI_levels_timeseries_constitutive_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_with_na_na.rows, ]
 
@@ -2154,7 +2152,9 @@ write.table(x = PSI_levels_timeseries_constitutive_OB_wide, file = paste(R_proce
 
 PSI_levels_timeseries_OB_wide_scaled <- PSI_levels_timeseries_OB_wide %>% as_tibble
 
-PSI_levels_timeseries_OB_wide_scaled[, OBseries_timepoints]  <- PSI_levels_timeseries_OB_wide_scaled[, OBseries_timepoints] %>% genescale(m = ., axis = 1, method = "Z") %>% as_tibble
+PSI_levels_timeseries_OB_wide_scaled[, vector_OBseries_timepoints_edited] <- PSI_levels_timeseries_OB_wide_scaled[, vector_OBseries_timepoints_edited] %>% genescale(m = ., axis = 1, method = "Z") %>% as_tibble
+# remove na
+PSI_levels_timeseries_OB_wide_scaled <- PSI_levels_timeseries_OB_wide_scaled[PSI_levels_timeseries_OB_wide_scaled[, vector_OBseries_timepoints_edited] %>% add_column("id" = rownames(.)) %>% na.omit %>% .$id, ]
 
 # write table
 write.table(x = PSI_levels_timeseries_OB_wide_scaled, file = paste(R_processing_results_dir, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_scaled$AS_event_ID %>% unique), "_differential_VSRs_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_timeseries_scaled.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
@@ -2174,9 +2174,9 @@ number_of_som_clusters <- OB_xdim * OB_ydim
 
 set.seed(som_seed_number)
 
-somdata_5_by_5_OBseries <- som(som_5_by_5_OBseries_table, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
+somdata_5_by_5_OBseries <- som(PSI_levels_timeseries_OB_wide_scaled[, vector_OBseries_timepoints_edited] %>% as.matrix, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
 
-wide_table_of_final_SOM_summary_5_by_5_OBseries <- cbind(PSI_levels_timeseries_OB_wide[, c("Gene", "AS_event_ID", "splicemode", "isoform_ID", "sub_junction_chr", "sub_junction_start_coor", "sub_junction_end_coor")], som_5_by_5_OBseries_table, cluster = somdata_5_by_5_OBseries[["unit.classif"]])
+wide_table_of_final_SOM_summary_5_by_5_OBseries <- cbind(PSI_levels_timeseries_OB_wide_scaled[, c("Gene", "AS_event_ID", "splicemode", "sub_LSV_ID", "chr", "sub_junction_start_coor", "sub_junction_end_coor", vector_OBseries_timepoints_edited)], cluster = somdata_5_by_5_OBseries[["unit.classif"]])
 
 ```
 
@@ -2196,7 +2196,7 @@ Steps:
 
 # reshaping into long table
 
-long_table_of_final_SOM_summary_5_by_5_OBseries <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries, id.vars = c("Gene", "AS_event_ID", "splicemode", "isoform_ID", "sub_junction_chr", "sub_junction_start_coor", "sub_junction_end_coor", "cluster"), variable.name = "timepoint", value.name = "scaled_PSI_value")
+long_table_of_final_SOM_summary_5_by_5_OBseries <- reshape2::melt(wide_table_of_final_SOM_summary_5_by_5_OBseries, id.vars = c("Gene", "AS_event_ID", "splicemode", "sub_LSV_ID", "chr", "sub_junction_start_coor", "sub_junction_end_coor", "cluster"), variable.name = "timepoint", value.name = "scaled_PSI_value")
 
 # calculating the facet coordinates for 5x5 plot in ggplot
 
@@ -2221,13 +2221,13 @@ all the genes
 # OB series
 
 ggplot() +
-  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_PSI_value, group = isoform_ID), alpha = 0.33) +
+  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_PSI_value, group = sub_LSV_ID), alpha = 0.33) +
   geom_line(data = long_tibble_of_final_SOM_summary_5_by_5_OBseries_average.line, aes(x = timepoint, y = avg_PSI_value, group = cluster), colour = "white", size = 1) +
   scale_colour_manual(values = c("black")) +
   facet_grid(quotient_facet.y ~ remainder_facet.x) +
   ggtitle(paste(OB_xdim, "x", OB_ydim, "SOM of", nrow(wide_table_of_final_SOM_summary_5_by_5_OBseries), "isoforms' PSI values during OB diff (any", p_or_q_value, 
                " < ", qpvalue_cutoff, "any deltaPSI >", dPSI_cutoff, ")")) +
-  scale_x_discrete(limits = c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited, labels = vector_OBseries_timepoints_edited) +
   xlab("Time-point") +
   ylab("Scaled PSI Level") +
   # guides(colour = FALSE) +
@@ -2281,7 +2281,9 @@ This gene background shall contain all ensembl protein coding, long noncoding an
 
 ## Create catDB instance (takes a while but needs to be done only once)
 # note: you had to save the GO annotation file to disk in the previous steps above
-catdb <- makeCATdb(myfile = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+# catdb <- makeCATdb(myfile = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+
+load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 
 ```
 
@@ -2358,16 +2360,11 @@ at the end of this, we will get list_of_OB/OBseries_gene_tables_by_SOM_cluster w
 
 ##  separating the wide SOMs table into a list by cluster
 
-list_of_OBseries_gene_tables_by_SOM_cluster <- list()
+list_of_OBseries_gene_tables_by_SOM_cluster <- wide_table_of_final_SOM_summary_5_by_5_OBseries %>% dplyr::group_split(cluster) 
 
-for (clusternumber in 1:number_of_som_clusters)
-  
-{
-  
-  list_of_OBseries_gene_tables_by_SOM_cluster[[clusternumber]] <- wide_table_of_final_SOM_summary_5_by_5_OBseries %>% dplyr::filter(cluster == clusternumber) %>% dplyr::select(Gene) %>% unique %>% lapply(as.character)
-  
-}
+names(list_of_OBseries_gene_tables_by_SOM_cluster) <- list_of_OBseries_gene_tables_by_SOM_cluster %>% purrr::map(~.x$cluster %>% unique) %>% unlist
 
+list_of_OBseries_gene_tables_by_SOM_cluster_flattened <- list_of_OBseries_gene_tables_by_SOM_cluster %>% purrr::map(.f = ~.x$Gene %>% paste %>% as.character)
 
 ```
 
@@ -2388,10 +2385,6 @@ for (clusternumber in 1:number_of_som_clusters)
 The result: One 5 x 5 GGPLOT of each GOTERM node(3) for OB and OBseries(2) = 6 plots altogether
 
 ```{r}
-
-list_of_OBseries_gene_tables_by_SOM_cluster_flattened <- list_of_OBseries_gene_tables_by_SOM_cluster %>% flatten
-
-names(list_of_OBseries_gene_tables_by_SOM_cluster_flattened) <- 1:number_of_som_clusters
 
 # let's try to do all enrichment at once using purrr
 
@@ -2460,7 +2453,7 @@ Plan:
 
 # OB series ###
 
-list_of_scaled_PSI_OBseries <- purrr::map(.x = vector_OBseries_timepoints, .f = ~PSI_levels_timeseries_OB_wide_scaled[, c("Gene", "AS_event_ID", "splicemode", "sub_LSV_ID", "sub_junction_start_coor", "sub_junction_end_coor", "NMD_flagged_ref", "NMD_recon", "any_NMD", "first_or_last_exon_reference", "first_or_last_exon_recon", "any_first_exon", "any_last_exon", .x)])
+list_of_scaled_PSI_OBseries <- purrr::map(.x = vector_OBseries_timepoints_edited, .f = ~PSI_levels_timeseries_OB_wide_scaled[, c("Gene", "AS_event_ID", "splicemode", "sub_LSV_ID", "sub_junction_start_coor", "sub_junction_end_coor", "NMD_biotype_reference", "NMD_flagged_ref", "NMD_flagged_recon", "any_NMD", "poison_exon_candidate_ref", "poison_exon_candidate_recon", "contains_PTC_ref", "contains_PTC_recon", "first_or_last_exon_reference", "first_or_last_exon_recon", "any_first_exon", "any_last_exon", .x)]) %>% set_names(vector_OBseries_timepoints_edited)
 
 ```
 
@@ -2508,7 +2501,7 @@ purrr::map2(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .y
 
 # MF highestPSI
 
-list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x %>% unlist) %>% GOHyperGAll_benjamini_correction)
 list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
 list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_MF_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
 # un-nest by binding rows
@@ -2517,7 +2510,7 @@ wide_table_of_timepointwise_highestPSI_results_MF_OBseries <- type_convert(wide_
 
 # BP highestPSI
 
-list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x %>% unlist) %>% GOHyperGAll_benjamini_correction)
 list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
 list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_BP_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
 # un-nest by binding rows
@@ -2526,7 +2519,7 @@ wide_table_of_timepointwise_highestPSI_results_BP_OBseries <- type_convert(wide_
 
 # CC highestPSI
 
-list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x %>% unlist) %>% GOHyperGAll_benjamini_correction)
 list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
 list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .y = as.list(names(list_of_highest_PSI_per_timepoint_GOresult_CC_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
 # un-nest by binding rows
@@ -2535,7 +2528,7 @@ wide_table_of_timepointwise_highestPSI_results_CC_OBseries <- type_convert(wide_
 
 # MF lowestPSI
 
-list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "MF", Nannot = 2, sample = .x %>% unlist) %>% GOHyperGAll_benjamini_correction)
 list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map(.x = list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
 list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten, .y = as.list(names(list_of_lowest_PSI_per_timepoint_GOresult_MF_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
 # un-nest by binding rows
@@ -2544,7 +2537,7 @@ wide_table_of_timepointwise_lowestPSI_results_MF_OBseries <- type_convert(wide_t
 
 # BP lowestPSI
 
-list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "BP", Nannot = 2, sample = .x %>% unlist) %>% GOHyperGAll_benjamini_correction)
 list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map(.x = list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
 list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten, .y = as.list(names(list_of_lowest_PSI_per_timepoint_GOresult_BP_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
 # un-nest by binding rows
@@ -2553,7 +2546,7 @@ wide_table_of_timepointwise_lowestPSI_results_BP_OBseries <- type_convert(wide_t
 
 # CC lowestPSI
 
-list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x) %>% GOHyperGAll_benjamini_correction)
+list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~GOHyperGAll(catdb = catdb, gocat = "CC", Nannot = 2, sample = .x %>% unlist) %>% GOHyperGAll_benjamini_correction)
 list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map(.x = list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
 list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten, .y = as.list(names(list_of_lowest_PSI_per_timepoint_GOresult_CC_OBseries_topten)), .f = ~cbind(.x, timepoint = .y)) 
 # un-nest by binding rows
@@ -2828,7 +2821,7 @@ hypergeometric test, filtering for top 10 overrepresented families
 
 # OB ###
 
-list_of_highest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+list_of_highest_PSI_per_timepoint_familyenrichment_OBseries <- future_map(.x = list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~bc3net::enrichment(genes = .x %>% unlist, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x %>% unlist) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert, .progress = TRUE, .options = future_options(globals = c("bc3net::enrichment", "reference_geneset", "list_of_pfam_gene_family_categories", "bc3net_benjamini_correction", "filtering_genehits_from_background_catalogue", "type_convert")))
 
 list_of_highest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_highest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_highest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
 
@@ -2848,7 +2841,7 @@ hypergeometric test, filtering for top 10 overrepresented families
 
 # OB ###
 
-list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries <- purrr::map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert)
+list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries <- future_map(.x = list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered, .f = ~bc3net::enrichment(genes = .x %>% unlist, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x %>% unlist) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert, .progress = TRUE, .options = future_options(globals = c("bc3net::enrichment", "reference_geneset", "list_of_pfam_gene_family_categories", "bc3net_benjamini_correction", "filtering_genehits_from_background_catalogue", "type_convert")))
 
 list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries_topten <- purrr::map2(.x = list_of_lowest_PSI_per_timepoint_familyenrichment_OBseries, .y = as.list(names(list_of_lowest_PSI_isoforms_per_timepoint_OBseries_filtered)), .f = ~.x[order(.x$padj, decreasing = FALSE), ] %>% head(n = 10) %>% cbind(., timepoint = .y))
 
@@ -2911,7 +2904,7 @@ write.table(x = wide_table_of_timepointwise_lowestPSI_families_OBseries, file = 
 
 # OB ###
 
-list_of_familyenrichment_by_SOM_cluster_OBseries <- purrr::map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~enrichment(genes = .x, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble)
+list_of_familyenrichment_by_SOM_cluster_OBseries <- future_map(.x = list_of_OBseries_gene_tables_by_SOM_cluster_flattened, .f = ~bc3net::enrichment(genes = .x %>% unlist, reference = reference_geneset, genesets = list_of_pfam_gene_family_categories, adj = "BH", verbose = FALSE) %>% bc3net_benjamini_correction %>% cbind(., genes_contained = filtering_genehits_from_background_catalogue(list_of_pfam_gene_family_categories[.$TermID %>% as.character], .x %>% unlist) %>% lapply(toString) %>% paste(sep = ", ") %>% unlist) %>% type_convert %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("bc3net::enrichment", "reference_geneset", "list_of_pfam_gene_family_categories", "bc3net_benjamini_correction", "filtering_genehits_from_background_catalogue", "type_convert", "as_tibble")))
 
 names(list_of_familyenrichment_by_SOM_cluster_OBseries) <- 1:number_of_som_clusters
 
@@ -3896,7 +3889,7 @@ JUM_diff_dir <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1
 
 ```{r}
 
-for (OBtimepoint in OBseries_timepoints) {
+for (OBtimepoint in vector_OBseries_timepoints_edited) {
   
   ggplot(list_of_highest_PSI_isoforms_per_timepoint_OBseries[[OBtimepoint]] %>% as.data.frame %>% mutate_if(is.factor, as.character) %>% type_convert, aes(x = .x)) + 
   geom_density() +
@@ -4365,7 +4358,7 @@ list_of_detailed_tables_2 <- purrr::map(.x = list_of_detailed_tables, .f = ~rbin
 
 # rename the colnames to be not comparison-specific - we will add a comparison column later on
 
-list_of_detailed_tables_3 <- purrr::map2(.x = list_of_detailed_tables_2, .y = list_of_timepoint_comparisons_final, .f = ~setNames(., c("Gene", "AS_event_ID", "AS_structure_ID", "sub_junction_ID", "sub-junction_dispersion_estimate", "LRT_statistic-full_vs_reduced", "LRT_p_value-full_vs_reduced", "BH_adjusted_p-values", "logCPM_1", "logCPM_2", "fitting_parameter_log2fold_change_2_from_1", "sub_junction_chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand", "raw_count.1", "raw_count.2", "raw_count.3", "raw_count.4", "raw_count.5", "raw_count.6", "percentage_usage.1", "percentage_usage.2", "percentage_usage.3", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "deltaPSI", "splicemode")) %>% add_column(., "comparison" = .y)) 
+list_of_detailed_tables_3 <- purrr::map2(.x = list_of_detailed_tables_2, .y = list_of_timepoint_comparisons_final, .f = ~setNames(., c("Gene", "AS_event_ID", "AS_structure_ID", "sub_junction_ID", "sub-junction_dispersion_estimate", "LRT_statistic-full_vs_reduced", "LRT_p_value-full_vs_reduced", "BH_adjusted_p-values", "logCPM_1", "logCPM_2", "fitting_parameter_log2fold_change_2_from_1", "chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand", "raw_count.1", "raw_count.2", "raw_count.3", "raw_count.4", "raw_count.5", "raw_count.6", "percentage_usage.1", "percentage_usage.2", "percentage_usage.3", "percentage_usage.4", "percentage_usage.5", "percentage_usage.6", "deltaPSI", "splicemode")) %>% add_column(., "comparison" = .y)) 
 
 wide_tibble_of_all_detailed_tables <- list_of_detailed_tables_3 %>% rbindlist %>% as_tibble
 
@@ -4460,13 +4453,13 @@ wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table <- dplyr::left_join(PSI_leve
 tibble_OBseries_absolute_PSI_levels_timeseries <- wide_tibble_of_absolute.ud.PSI_matched_to_PSI_table
 
 # add back the absolute PSI at ud timepoint
-tibble_OBseries_absolute_PSI_levels_timeseries[, OBseries_timepoints] <- tibble_OBseries_absolute_PSI_levels_timeseries[, OBseries_timepoints] + tibble_OBseries_absolute_PSI_levels_timeseries$avg.psi_ud_final
+tibble_OBseries_absolute_PSI_levels_timeseries[, vector_OBseries_timepoints_edited] <- tibble_OBseries_absolute_PSI_levels_timeseries[, vector_OBseries_timepoints_edited] + tibble_OBseries_absolute_PSI_levels_timeseries$avg.psi_ud_final
 
 # remove the absolute PSI column
 tibble_OBseries_absolute_PSI_levels_timeseries <- tibble_OBseries_absolute_PSI_levels_timeseries %>% dplyr::select(., -"avg.psi_ud_final")
 
 # reorder the columns to be in chronological order
-tibble_OBseries_absolute_PSI_levels_timeseries <- tibble_OBseries_absolute_PSI_levels_timeseries[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", OBseries_timepoints)] %>% dplyr::mutate_if(is.factor, as.character)
+tibble_OBseries_absolute_PSI_levels_timeseries <- tibble_OBseries_absolute_PSI_levels_timeseries[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", vector_OBseries_timepoints_edited)] %>% dplyr::mutate_if(is.factor, as.character)
 
 ```
 
@@ -4487,7 +4480,7 @@ list_of_tibbles_OBseries_absolute_PSI_levels_timeseries <- purrr::map(.x = list_
 ```{r}
 
 # calculate ranks
-list_of_tibbles_OBseries_absolute_PSI_levels_ranks.per.timepoint <- purrr::map_if(.x = list_of_tibbles_OBseries_absolute_PSI_levels_timeseries, .p = ~nrow(.x) > 1, .f = ~apply(X = .x[, OBseries_timepoints], MARGIN = 2, FUN = function(X){rank(X %>% as.numeric)}))
+list_of_tibbles_OBseries_absolute_PSI_levels_ranks.per.timepoint <- purrr::map_if(.x = list_of_tibbles_OBseries_absolute_PSI_levels_timeseries, .p = ~nrow(.x) > 1, .f = ~apply(X = .x[, vector_OBseries_timepoints_edited], MARGIN = 2, FUN = function(X){rank(X %>% as.numeric)}))
 
 remove_consecutive_duplicates_from_data.frame <- function(df) {
   
@@ -4526,7 +4519,7 @@ list_of_logical_junction_switched_or_not <- purrr::map_if(.x = list_of_tibbles_O
 ```{r}
 
 list_of_logical_junction_switched_or_not <- purrr::map_if(.x = list_of_logical_junction_switched_or_not, .p = ~is.logical(.x) == FALSE, 
-                                          .f = ~any(.x[, OBseries_timepoints] > 0.5) & any(.x[, OBseries_timepoints] < 0.5))
+                                          .f = ~any(.x[, vector_OBseries_timepoints_edited] > 0.5) & any(.x[, vector_OBseries_timepoints_edited] < 0.5))
 
 ```
 
@@ -4553,7 +4546,7 @@ we can use this info to determine if values are missing at random or left-censor
 
 # get row indices of the final junction switching table while have at least one NA
 
-row.indices_junc.switch.table_any.na <- tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched[, OBseries_timepoints] %>% apply(MARGIN = 1, FUN = function(X) {
+row.indices_junc.switch.table_any.na <- tibble_OBseries_absolute_PSI_levels_timeseries_junction.switched[, vector_OBseries_timepoints_edited] %>% apply(MARGIN = 1, FUN = function(X) {
   
   return(any(is.na(X)) == TRUE)
   
@@ -4866,7 +4859,7 @@ wide_table_of_all_combined_count_files_OBseries <- wide_table_of_all_combined_co
 
 # Cluster the samples
 
-# kmres <- kmeans(ssd[, 2:ncol(ssd)], centers = OBseries_timepoints %>% length, nstart = 200)
+# kmres <- kmeans(ssd[, 2:ncol(ssd)], centers = vector_OBseries_timepoints_edited %>% length, nstart = 200)
 
 # vclust <- kmres$cluster
 
@@ -5090,9 +5083,9 @@ logCPM_OBseries_anysig_DEGs <- dplyr::right_join(ENSG_to_genesymbol_DEGs, logCPM
 
 # reorder the columns to make them chronological
 
-logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs[, c("ensembl_gene_id", "external_gene_name", "logCPM_BM_MSC_to_OB_ud_avg", "logCPM_BM_MSC_to_OB_6h_avg", "logCPM_BM_MSC_to_OB_12h_avg", "logCPM_BM_MSC_to_OB_24h_avg", "logCPM_BM_MSC_to_OB_3d_avg", "logCPM_BM_MSC_to_OB_6d_avg", "logCPM_BM_MSC_to_OB_9d_avg", "logCPM_BM_MSC_to_OB_12d_avg")]
+logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs[, c("ensembl_gene_id", "external_gene_name", "logCPM_BM_MSC_to_OB_ud_avg", "logCPM_BM_MSC_to_OB_6h_avg", "logCPM_BM_MSC_to_OB_12h_avg", "logCPM_BM_MSC_to_OB_1d_avg", "logCPM_BM_MSC_to_OB_3d_avg", "logCPM_BM_MSC_to_OB_6d_avg", "logCPM_BM_MSC_to_OB_9d_avg", "logCPM_BM_MSC_to_OB_12d_avg")]
 
-colnames(logCPM_OBseries_anysig_DEGs) <- c("ensembl_gene_id", "external_gene_name", "MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
+colnames(logCPM_OBseries_anysig_DEGs) <- c("ensembl_gene_id", "external_gene_name", vector_OBseries_timepoints_edited)
 
 # subset CPM table by biological role
 
@@ -5100,25 +5093,25 @@ colnames(logCPM_OBseries_anysig_DEGs) <- c("ensembl_gene_id", "external_gene_nam
 column_RBP_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("protein_coding", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = c("ensembl_gene_id", "name_1006"), mart = ensembl_mart) %>% as_tibble %>% .[.$name_1006 == "RNA binding" | .$name_1006 == "spliceosomal complex", "ensembl_gene_id"]
 
 logCPM_OBseries_RBP <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_RBP_genes_OBseries, by = "ensembl_gene_id") %>%
-  add_column(., AS_event_ID = paste("RBP", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", isoform_ID = paste("RNASeq", "RBP", .$ensembl_gene_id, sep = "_"), .after = 2)
+  add_column(., AS_event_ID = paste("RBP", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", sub_LSV_ID = paste("RNASeq", "RBP", .$ensembl_gene_id, sep = "_"), .after = 2)
 
   # lncRNA
 column_lncRNA_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("lncRNA", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = "ensembl_gene_id", mart = ensembl_mart) %>% as_tibble
 
 logCPM_OBseries_lncRNA <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_lncRNA_genes_OBseries, by = "ensembl_gene_id") %>%
-  add_column(., AS_event_ID = paste("lncRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", isoform_ID = paste("RNASeq", "lncRNA", .$ensembl_gene_id, sep = "_"), .after = 2)
+  add_column(., AS_event_ID = paste("lncRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", sub_LSV_ID = paste("RNASeq", "lncRNA", .$ensembl_gene_id, sep = "_"), .after = 2)
 
   # snRNA
 column_snRNA_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("snRNA", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = "ensembl_gene_id", mart = ensembl_mart) %>% as_tibble %>% mutate_if(is.logical, as.character)
 
 logCPM_OBseries_snRNA <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_snRNA_genes_OBseries, by = "ensembl_gene_id") %>%
-  add_column(., AS_event_ID = paste("snRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", isoform_ID = paste("RNASeq", "snRNA", .$ensembl_gene_id, sep = "_"), .after = 2)
+  add_column(., AS_event_ID = paste("snRNA", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", sub_LSV_ID = paste("RNASeq", "snRNA", .$ensembl_gene_id, sep = "_"), .after = 2)
 
   # all TF complex 
 column_TFcomplex_genes_OBseries <- getBM(filters = c("biotype", "ensembl_gene_id"), values = list("protein_coding", logCPM_OBseries_anysig_DEGs$ensembl_gene_id), attributes = c("ensembl_gene_id", "name_1006"), mart = ensembl_mart) %>% as_tibble %>% .[.$name_1006 == "transcription factor complex", "ensembl_gene_id"]
 
 logCPM_OBseries_TFcomplex <- dplyr::semi_join(logCPM_OBseries_anysig_DEGs, column_TFcomplex_genes_OBseries, by = "ensembl_gene_id") %>%
-  add_column(., AS_event_ID = paste("TF complex", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", isoform_ID = paste("RNASeq", "TF_complex", .$ensembl_gene_id, sep = "_"), .after = 2)
+  add_column(., AS_event_ID = paste("TF complex", .$ensembl_gene_id, sep = "_"), splicemode = "RNASeq", sub_LSV_ID = paste("RNASeq", "TF_complex", .$ensembl_gene_id, sep = "_"), .after = 2)
 
 # combine all the individual logCPM tables into one subsetted expression dataset
 logCPM_OBseries_subset <- dplyr::bind_rows(logCPM_OBseries_RBP, logCPM_OBseries_lncRNA, logCPM_OBseries_snRNA, logCPM_OBseries_TFcomplex)
@@ -5167,7 +5160,7 @@ wide_table_combinedexpr_som_sweep_clusters <- purrr::map2(.x = xdim_range_combin
 
 wide_table_combinedexpr_som_sweep_clusters <- wide_table_combinedexpr_som_sweep_clusters %>% as.data.frame
 
-rownames(wide_table_combinedexpr_som_sweep_clusters) <- paste(tibble_combinedexpr_logCPM_PSI_scaled$Gene, "_", tibble_combinedexpr_logCPM_PSI_scaled$isoform_ID, sep = "")
+rownames(wide_table_combinedexpr_som_sweep_clusters) <- paste(tibble_combinedexpr_logCPM_PSI_scaled$Gene, "_", tibble_combinedexpr_logCPM_PSI_scaled$sub_LSV_ID, sep = "")
 
 
 list_matchtest_combinedexpr_som_sweep_byisoform <- purrr::map(wide_table_combinedexpr_som_sweep_clusters %>% array_tree, ~unlist(.x)) %>% purrr::map(.f = ~apply(X = wide_table_combinedexpr_som_sweep_clusters, MARGIN = 1, FUN = function(X){.x == X}))
@@ -5293,7 +5286,7 @@ write.table(x = list_genes_or_isoforms_from_combinedexpr_itemwise_intersection_3
 
 ########### GO TO CYTOSCAPE HERE ###################
 
-tibble_combinedexpr_logCPM_PSI_scaled_2 <- bind_cols(tibble_combinedexpr_logCPM_PSI_scaled, gene_isoform_ID = paste(tibble_combinedexpr_logCPM_PSI_scaled$Gene, "_", tibble_combinedexpr_logCPM_PSI_scaled$isoform_ID, sep = ""))
+tibble_combinedexpr_logCPM_PSI_scaled_2 <- bind_cols(tibble_combinedexpr_logCPM_PSI_scaled, gene_isoform_ID = paste(tibble_combinedexpr_logCPM_PSI_scaled$Gene, "_", tibble_combinedexpr_logCPM_PSI_scaled$sub_LSV_ID, sep = ""))
 
 cytoscape_result <- read_delim(paste(R_processing_results_dir, "consensus_combinedexpr_intersection1_min25_penalty2_haircut0.1_multi_match_overlap0.8_seedeverynode.tab", sep = ""), delim = "\t", col_names = c("cluster", "gene_isoform_ID"))
 
@@ -5308,7 +5301,7 @@ list_combinedexpr_logCPM_PSI_scaled_clustered <- purrr::map(.x = list_cytoscape_
 wide_table_combinedexpr_logCPM_PSI_scaled_clustered <- list_combinedexpr_logCPM_PSI_scaled_clustered %>% purrr::reduce(dplyr::bind_rows)
 
 # reorder columns
-wide_table_combinedexpr_logCPM_PSI_scaled_clustered <- wide_table_combinedexpr_logCPM_PSI_scaled_clustered[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "isoform_ID", "gene_isoform_ID", "MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d", "cluster")]
+wide_table_combinedexpr_logCPM_PSI_scaled_clustered <- wide_table_combinedexpr_logCPM_PSI_scaled_clustered[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", "sub_LSV_ID", "gene_isoform_ID", "MSC", "6h", "12h", 1d, "3d", "6d", "9d", "12d", "cluster")]
 
 ```
 
@@ -5326,7 +5319,7 @@ wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster <- factor(wide_table
 
 # reshaping into long table
 
-long_table_combinedexpr_logCPM_PSI_scaled_clustered <- reshape2::melt(wide_table_combinedexpr_logCPM_PSI_scaled_clustered, id.vars = c("Gene", "AS_event_ID", "splicemode", "isoform_ID", "gene_isoform_ID", "cluster", "isoform_number"), variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
+long_table_combinedexpr_logCPM_PSI_scaled_clustered <- reshape2::melt(wide_table_combinedexpr_logCPM_PSI_scaled_clustered, id.vars = c("Gene", "AS_event_ID", "splicemode", "sub_LSV_ID", "gene_isoform_ID", "cluster", "isoform_number"), variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
 
 # ggplot of consensus som PSI profiles
 
@@ -5336,7 +5329,7 @@ ggplot(long_table_combinedexpr_logCPM_PSI_scaled_clustered, aes(x = timepoint, y
   facet_wrap(~cluster) +
   ggtitle(paste("Time series profiles of ", nrow(PSI_levels_timeseries_OB_wide), " isoforms, ", nrow(logCPM_OBseries_RBP), " RBPs, ", nrow(logCPM_OBseries_lncRNA), " lncRNAs, ", nrow(logCPM_OBseries_snRNA), " snRNAs, ", nrow(logCPM_OBseries_TFcomplex), " TFcomplexes", " (any ", p_or_q_value, qpvalue_cutoff, " dPSI greaterthan ", dPSI_cutoff, "), 
                 sweep from ", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), " to ", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), sep = "")) +
-  scale_x_discrete(limits = c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  scale_x_discrete(limits = vector_OBseries_timepoints_edited), labels = vector_OBseries_timepoints_edited) +
   xlab("Time-point") +
   ylab("Scaled PSI or logCPM Level") +
   # guides(colour = FALSE) +

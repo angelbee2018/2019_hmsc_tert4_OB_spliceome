@@ -31,7 +31,7 @@ u
 
 library(tidyverse)
 library(gtools)
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 library(data.table)
 
@@ -66,14 +66,14 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/media/Ubuntu/sharedfolder/"
+# shared_dir <- "Z:/"
 
-psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
-# psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
+# psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
+psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
 
-R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
-# R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
+# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
+R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
 
 if(! dir.exists(R_processing_results_dir) ) {
   dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -81,8 +81,8 @@ if(! dir.exists(R_processing_results_dir) ) {
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
-vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
-# vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+# vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
@@ -2155,8 +2155,10 @@ write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info
 wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons <- dplyr::semi_join(long_tibble_of_psisigma_DEXSeq_results, wide_tibble_of_psisigma_results_allcomparisons_differential, by = c("diff_exon_coords"))
 ## write
 write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-# write coords for poison exon finder
-# write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons[, c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode")] %>% dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords"), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_allcomparisons_differential_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na_poison_exon_finder.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# write coords for three-frame translation
+write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% 
+              dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords", "gene_name" = "matched_gene_names") %>% 
+              add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_allcomparisons_differential_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na_poison_exon_finder_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # also write table of differential information for 12d vs. MSC
 tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_MSC" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff)
@@ -2358,8 +2360,10 @@ message("There are ", number.of.exons_constitutive, " constitutive exons using t
 
 # write table of all constitutive LIVs info
 write.table(x = tibble_constitutive_LIV_info, file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LIV", number.of.LIVs_constitutive, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-# write coords for poison exon finder
-# write.table(x = tibble_constitutive_LIV_info[, c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode")] %>% dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords"), file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LIV", number.of.LIVs_constitutive, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "poison_exon_finder.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# write coords for three-frame translation
+write.table(x = tibble_constitutive_LIV_info[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% 
+              dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords", "gene_name" = "matched_gene_names") %>% 
+              add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LIV", number.of.LIVs_constitutive, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_poison_exon_finder_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 

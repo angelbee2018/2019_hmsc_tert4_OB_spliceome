@@ -15,7 +15,7 @@ library(tidyverse)
 library(gtools)
 library(extrafont)
 # font_import(paths = "~/.local/share/fonts/")
-loadfonts(device = "pdf")
+# loadfonts(device = "pdf")
 windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
@@ -46,17 +46,17 @@ library(ggdendro)
 library(data.table)
 library(Rfast)
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/media/Ubuntu/sharedfolder/"
+# shared_dir <- "Z:/"
 
-# sampleandaccessionlists_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/"
-sampleandaccessionlists_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/"
+sampleandaccessionlists_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/"
+# sampleandaccessionlists_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/"
 
-# JUM_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/"
-JUM_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/"
+JUM_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/"
+# JUM_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/"
 
-R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/"
-# R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/"
+# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/"
+R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/"
 
 if(! dir.exists(R_processing_results_dir) ) {
      dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -68,8 +68,8 @@ if(! dir.exists(R_processing_results_dir) ) {
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
 
-UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
-# UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+# UNION_junc_coor_path <- "Y:/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+UNION_junc_coor_path <- "/media/sbi/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 vector_OBseries_timepoints <- c("MSC", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
@@ -2014,6 +2014,42 @@ write.table(x = PSI_levels_timeseries_OB_wide_with_na, file = paste(R_processing
 # export associated gene set
 write.table(x = PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_", length( PSI_levels_timeseries_OB_wide_with_na$Gene %>% unique %>% na.omit), "_differential_genes_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
+# export the constituent junctions for three-frame translation
+# strsplit into a chr start end strand tibble
+list_constituent_junctions <- PSI_levels_timeseries_OB_wide_with_na[, c("Gene", "splicemode", "chr", "start", "end", "strand")] %>% 
+  array_tree %>%
+  # strsplit the chr, strand, start and end, and leave the rest alone.
+  purrr::map(.f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- tibble_JUM_diff_table[, c("Gene", "splicemode", "chr", "start", "end", "strand")] %>% 
+      # array_tree %>%
+      # .[[1]]
+    ###########
+    
+    # strsplit the chr, start, end, strand elements.
+    tibble_split_chr_start_end_strand <- a1[c("chr", "start", "end", "strand")] %>% 
+      purrr::map(~strsplit(.x, split = ";") %>% unlist)
+    
+    # combine the gene and splicemode elements, tibblise and return
+    purrr::splice(a1[c("Gene", "splicemode")],
+                  tibble_split_chr_start_end_strand) %>%
+      as_tibble %>% 
+      return
+    
+  })
+
+# rbind and tibblise
+tibble_constituent_junctions <- list_constituent_junctions %>% rbindlist(use.names = TRUE) %>% as_tibble
+
+tibble_junction_table <- tibble_constituent_junctions %>% 
+  dplyr::rename("gene_name" = "Gene") %>%
+  add_column("organism" = "Homo sapiens",
+             "custom_identifier" = NA) %>% unique
+
+## write table
+write.table(x = tibble_junction_table, file = paste(R_processing_results_dir, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na$AS_event_ID %>% unique), "_differential_VSRs_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_with_na_constituent_junctions.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
 # remove na
 PSI_levels_timeseries_OB_wide <- PSI_levels_timeseries_OB_wide_with_na[PSI_levels_timeseries_OB_wide_with_na[, vector_OBseries_timepoints_edited] %>% add_column("id" = rownames(.)) %>% na.omit %>% .$id, ]
 
@@ -2130,11 +2166,46 @@ print(paste("There are", length(PSI_levels_timeseries_constitutive_OB_wide_with_
 
 write.table(x = PSI_levels_timeseries_constitutive_OB_wide_with_na, file = paste(R_processing_results_dir, "wide_table_of_", PSI_levels_timeseries_constitutive_OB_wide_with_na$AS_event_ID %>% unique %>% length, "_constitutive_VSRs_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
+# export the constituent junctions for three-frame translation
+# strsplit into a chr start end strand tibble
+list_constituent_junctions <- PSI_levels_timeseries_constitutive_OB_wide_with_na[, c("Gene", "splicemode", "chr", "start", "end", "strand")] %>% 
+  array_tree %>%
+  # strsplit the chr, strand, start and end, and leave the rest alone.
+  purrr::map(.f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- tibble_JUM_diff_table[, c("Gene", "splicemode", "chr", "start", "end", "strand")] %>% 
+      # array_tree %>%
+      # .[[1]]
+    ###########
+    
+    # strsplit the chr, start, end, strand elements.
+    tibble_split_chr_start_end_strand <- a1[c("chr", "start", "end", "strand")] %>% 
+      purrr::map(~strsplit(.x, split = ";") %>% unlist)
+    
+    # combine the gene and splicemode elements, tibblise and return
+    purrr::splice(a1[c("Gene", "splicemode")],
+                  tibble_split_chr_start_end_strand) %>%
+      as_tibble %>% 
+      return
+    
+  })
+
+# rbind and tibblise
+tibble_constituent_junctions <- list_constituent_junctions %>% rbindlist(use.names = TRUE) %>% as_tibble
+
+tibble_junction_table <- tibble_constituent_junctions %>% 
+  dplyr::rename("gene_name" = "Gene") %>%
+  add_column("organism" = "Homo sapiens",
+             "custom_identifier" = NA) %>% unique
+
+## write table
+write.table(x = tibble_junction_table, file = paste(R_processing_results_dir, "wide_table_of_", PSI_levels_timeseries_constitutive_OB_wide_with_na$AS_event_ID %>% unique %>% length, "_constitutive_VSRs_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_with_na_constituent_junctions.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
 # remove ALL na to produce the timeseries-ready table
+PSI_levels_timeseries_constitutive_OB_wide_with_na_no.na.rows <- PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_OBseries_timepoints_edited] %>% as_tibble(rownames = "id") %>% na.omit %>% .$id
 
-PSI_levels_timeseries_constitutive_OB_wide_with_na_na.rows <- apply(PSI_levels_timeseries_constitutive_OB_wide_with_na[, vector_OBseries_timepoints_edited], 1, function(X) {any(is.na(X))}) %>% which(. == TRUE)
-
-PSI_levels_timeseries_constitutive_OB_wide <- PSI_levels_timeseries_constitutive_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_with_na_na.rows, ]
+PSI_levels_timeseries_constitutive_OB_wide <- PSI_levels_timeseries_constitutive_OB_wide_with_na[PSI_levels_timeseries_constitutive_OB_wide_with_na_no.na.rows, ]
 
 row.names(PSI_levels_timeseries_constitutive_OB_wide) <- NULL
 

@@ -181,6 +181,14 @@ cat("chrmode:", chrmode, "\n")
 cat("nonchrname:", nonchrname, "\n")
 cat("save_workspace_when_done:", save_workspace_when_done, "\n")
 
+if(!dir.exists(output_dir) ) {
+  dir.create(output_dir, recursive = TRUE)}
+
+# Open a file to send messages to
+message_divert_path <- file(paste(output_dir, "/", output_name, "_messages.txt", sep = ""), open = "wt")
+# Divert messages to that file
+sink(message_divert_path, type = "message")
+
 # manage parrallellisation rrlllRll
 
 if (ncores != 0) {

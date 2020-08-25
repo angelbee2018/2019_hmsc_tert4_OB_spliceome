@@ -66,23 +66,23 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-shared_dir <- "/media/Ubuntu/sharedfolder/"
-# shared_dir <- "Z:/"
+# shared_dir <- "/media/Ubuntu/sharedfolder/"
+shared_dir <- "Z:/"
 
-# psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
-psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
+psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
+# psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
 
-# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
-R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
+R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
+# R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
 
 if(! dir.exists(R_processing_results_dir) ) {
   dir.create(R_processing_results_dir, recursive = TRUE)}
 
-vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
+vector_OBseries_timepoints_raw <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
-# vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
-vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+# vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
@@ -2082,7 +2082,7 @@ tibble_poison_exon_finder_results <- read.delim(paste(R_processing_results_dir, 
 tibble_poison_exon_finder_results_processed0 <- tibble_poison_exon_finder_results %>%
   dplyr::mutate("introduces_PTC" = grepl(x = PTC_exists_in_alternative_exon, pattern = "TRUE")) %>%
   dplyr::filter(introduces_PTC == TRUE | has_frameshift == TRUE) %>% 
-  dplyr::select(-three_frame_translation_result, -vector_transcript_segment_forward_genome_relative_coords, -list_forward_nucleotides)
+  dplyr::select(-list_three_frame_translation, -vector_transcript_segment_forward_genome_relative_coords, -list_forward_nucleotides)
 
 # create a summary of each exon's PTC and frameshift behaviour, accounting for all matched ref. transcripts.
 tibble_poison_exon_finder_results_processed1 <- tibble_poison_exon_finder_results_processed0 %>%
@@ -4367,15 +4367,18 @@ max_number_of_exons_per_splicemode <- max(long_tibble_exons_per_category_summary
 max_percentage_exons_per_category <- max(long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ] %>% .$percentage_exons_per_category %>% na.omit)
 max_number_of_exons_per_splicemode_for_plot <- max_number_of_exons_per_splicemode + 3000
 
+# write the table
+write.table(long_tibble_exons_per_category_summary_2, file = paste(R_processing_results_dir, "frequency_distribution_of_exons_per_category_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, ".txt", sep = ""), row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
+
 # ggplot
 ggplot() + 
   geom_col(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")] %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(y = number_of_exons_per_splicemode, x = splicemode)) +
   facet_wrap(~sample, scales = "free", labeller = labeller(sample = c(no_exons_all = "All exons", no_exons_constitutive = "Constitutive", no_exons_differential = "Differential"))) +
   geom_text(data = long_tibble_exons_per_category_summary_2[, c("splicemode", "sample", "number_of_exons_per_splicemode")]  %>% dplyr::distinct(splicemode, sample, .keep_all = TRUE), aes(label = number_of_exons_per_splicemode, y = number_of_exons_per_splicemode, x = splicemode), angle = 90, position = position_nudge(x = 0, y = 2000)) +
-  geom_point(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode_for_plot / max_percentage_exons_per_category , shape = NMD_first_last_exon, colour = NMD_first_last_exon), width = 0.1, height = 0) + ggtitle(paste("Frequency distribution of exons per category 
+  geom_point(data = long_tibble_exons_per_category_summary_2[long_tibble_exons_per_category_summary_2$NMD_first_last_exon_value == TRUE, ], aes(x = splicemode, y = percentage_exons_per_category * max_number_of_exons_per_splicemode_for_plot / 100 , shape = NMD_first_last_exon, colour = NMD_first_last_exon), width = 0.1, height = 0) + ggtitle(paste("Frequency distribution of exons per category 
                 ", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, sep = "")) +
   xlab("Splicemode") +
-  scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * max_percentage_exons_per_category/max_number_of_exons_per_splicemode, (name = "Percentage first/last exon per splicemode"), breaks = seq(0, 100, 20))) +
+  scale_y_continuous(name = "Number of exons", limits = c(0, max_number_of_exons_per_splicemode_for_plot), sec.axis = sec_axis(trans = ~. * 100/max_number_of_exons_per_splicemode_for_plot, (name = "Percentage category per splicemode"), breaks = seq(0, 100, 20))) +
   scale_shape_manual(name = "Category", limits = c("first_exon_reference", "last_exon_reference", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "NMD_flagged_recon"), labels = c("First exon", "Last exon", "Poison exon", "Alters frame", "NMD\n(predicted)"), values = c(15, 19, 8, 11, 6)) +
   scale_colour_brewer(name = "Category", type = "seq", limits = c("first_exon_reference", "last_exon_reference", "introduces_PTC_for_all_matched_transcripts", "alters_frame_for_all_matched_transcripts", "NMD_flagged_recon"), labels = c("First exon", "Last exon", "Poison exon", "Alters frame", "NMD\n(predicted)"), palette = "Set2") +
   # scale_shape_manual(name = "Category", limits = c("any_NMD", "first_exon_reference", "last_exon_reference"), labels = c("NMD candidate", "First exon", "Last exon"), values = c(1, 4, 19)) +
@@ -4396,6 +4399,24 @@ upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_ex
 print(set_size(upset_combs))
 
 pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_allexons.pdf", sep = ""), height = 4, width = 20)
+
+ht <- ComplexHeatmap::UpSet(upset_combs, 
+                                 comb_order = order(-comb_size(upset_combs)), 
+                                 left_annotation = rowAnnotation("Set Type" = c("NMD_flagged_recon" = "Exon ontology",
+                                                                                "introduces_PTC_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "alters_frame_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "first_exon_reference" = "Exon ontology",
+                                                                                "last_exon_reference" = "Exon ontology",
+                                                                                "A3SS" = "Splicemode",
+                                                                                "A5SS" = "Splicemode",
+                                                                                "IR" = "Splicemode",
+                                                                                "MES" = "Splicemode",
+                                                                                "MXS" = "Splicemode",
+                                                                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                                 col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
+                                 ),
+                                 row_labels =  c("NMD (recon)", "Poison exon", "Alters frame", "First exon", "Last exon", "A3SS", "A5SS", "IR", "MES", "MXS", "SES")
+)
 
 ro <- row_order(ht)
 sz <- set_size(upset_combs)
@@ -4442,6 +4463,24 @@ upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_ex
 print(set_size(upset_combs))
 
 pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_constitutive.pdf", sep = ""), height = 4, width = 20)
+
+ht <- ComplexHeatmap::UpSet(upset_combs, 
+                                 comb_order = order(-comb_size(upset_combs)), 
+                                 left_annotation = rowAnnotation("Set Type" = c("NMD_flagged_recon" = "Exon ontology",
+                                                                                "introduces_PTC_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "alters_frame_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "first_exon_reference" = "Exon ontology",
+                                                                                "last_exon_reference" = "Exon ontology",
+                                                                                "A3SS" = "Splicemode",
+                                                                                "A5SS" = "Splicemode",
+                                                                                "IR" = "Splicemode",
+                                                                                "MES" = "Splicemode",
+                                                                                "MXS" = "Splicemode",
+                                                                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                                 col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
+                                 ),
+                                 row_labels =  c("NMD (recon)", "Poison exon", "Alters frame", "First exon", "Last exon", "A3SS", "A5SS", "IR", "MES", "MXS", "SES")
+)
 
 ro <- row_order(ht)
 sz <- set_size(upset_combs)
@@ -4490,6 +4529,24 @@ upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_ex
 print(set_size(upset_combs))
 
 pdf(file = paste(R_processing_results_dir, "upset_plot_of_intersections_exons_per_NMD.first.last.exon_per_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 4, width = 20)
+
+ht <- ComplexHeatmap::UpSet(upset_combs, 
+                                 comb_order = order(-comb_size(upset_combs)), 
+                                 left_annotation = rowAnnotation("Set Type" = c("NMD_flagged_recon" = "Exon ontology",
+                                                                                "introduces_PTC_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "alters_frame_for_all_matched_transcripts" = "Exon ontology",
+                                                                                "first_exon_reference" = "Exon ontology",
+                                                                                "last_exon_reference" = "Exon ontology",
+                                                                                "A3SS" = "Splicemode",
+                                                                                "A5SS" = "Splicemode",
+                                                                                "IR" = "Splicemode",
+                                                                                "MES" = "Splicemode",
+                                                                                "MXS" = "Splicemode",
+                                                                                "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                                                 col = list("Set Type" = c("Exon ontology" = "tomato1", "Splicemode" = "red4"))
+                                 ),
+                                 row_labels =  c("NMD (recon)", "Poison exon", "Alters frame", "First exon", "Last exon", "A3SS", "A5SS", "IR", "MES", "MXS", "SES")
+)
 
 ro <- row_order(ht)
 sz <- set_size(upset_combs)

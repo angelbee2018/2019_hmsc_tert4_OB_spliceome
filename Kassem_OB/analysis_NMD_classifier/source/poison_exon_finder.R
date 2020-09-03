@@ -1396,8 +1396,9 @@ if (output_fasta == TRUE) {
                                                         
                                                         final_identifier <- if (a1$custom_identifier %>% is.na != TRUE) {a1$custom_identifier
                                                         } else {
-                                                          paste(a1$chr, ":", a1$VSR_start %>% type.convert, "-", a1$VSR_end %>% type.convert, 
-                                                                ";", 
+                                                          paste(source_tag, "_VSR_", 
+                                                                a1$chr, ":", a1$VSR_start %>% type.convert, "-", a1$VSR_end %>% type.convert, 
+                                                                "_exon_", 
                                                                 a1$chr, ":", a1$alternative_exon_start %>% type.convert, "-", a1$alternative_exon_end%>% type.convert, 
                                                                 if ((a1$strand == "+" | a1$strand == "-") & a1$strand %>% is.na != TRUE) {
                                                                   paste(":", a1$strand, sep = "")
@@ -1424,7 +1425,7 @@ if (output_fasta == TRUE) {
                                                         
                                                         # finalise by adding in the input data
                                                         final_tibble <- purrr::splice(
-                                                          a1[c("chr", "VSR_start", "VSR_end", "alternative_exon_start", "alternative_exon_end", "strand", "splicemode")] %>% as_tibble,
+                                                          a1[c("chr", "VSR_start", "VSR_end", "alternative_exon_start", "alternative_exon_end", "strand", "splicemode", "gene_name")] %>% as_tibble,
                                                           tibble_3FT_alternative_exon_only_with_fasta_header) %>% flatten %>% as_tibble
                                                         
                                                         return(final_tibble)
@@ -1435,8 +1436,9 @@ if (output_fasta == TRUE) {
     save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
   }
   
+  cat("cleanup\n")
   # rbind and tibblise
-  tibble_summarised_3FT_result_exon_only <- list_summarised_3FT_result_exon_only %>% rbindlist(use.names = TRUE) %>% as_tibble %>% type_convert
+  tibble_summarised_3FT_result_exon_only <- list_summarised_3FT_result_exon_only %>% rbindlist(use.names = TRUE) %>% as_tibble %>% dplyr::mutate_at(.vars = "translation_frame", .funs = function(x) {gsub(x = x, pattern = "translation_frame_", replacement = "")} )
   
   # filter for virtual peptides less than 7 AA
   tibble_summarised_3FT_result_exon_only <- tibble_summarised_3FT_result_exon_only[tibble_summarised_3FT_result_exon_only$virtual_peptide_sequence %>% purrr::map(~.x %>% nchar >= 7) %>% unlist %>% which, ]

@@ -56,7 +56,9 @@ list_input_arg_info = list(
   "11" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
                   help = "Optional. Specifies which chromosomes to do: select what chromosomes you want translated. possible inputs: numbers 0-2. 0 (default): nuclear chromosomes only i,e, 1:22, X & Y. 1: nuclear + mitochondrial i.e. 1:22, X & Y, M. 2: everything including haplotype/fusion chromosomes etc... this is possible provided the chromosome names.", metavar = "integer"),
   "12" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
-                    help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you are doing haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The script won't try to search for a second file. In ensembl, this file is called \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character")
+                    help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you are doing haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The script won't try to search for a second file. In ensembl, this file is called \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character"),
+  "13" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
+                     help = "Turn this on if you want to save the R workspace in the same name as the --output_name. YES: saves at the end. DEBUG: saves at each critical step. NO: doesn't save.", metavar = "character")
 )
 
 input_arg_info <- OptionParser(option_list = list_input_arg_info, description = script_description)
@@ -84,6 +86,7 @@ output_dir <- input_args$output_dir
 ncores <- input_args$ncores
 chrmode <- input_args$chrmode
 nonchrname <- input_args$nonchrname
+save_workspace_when_done <- input_args$save_workspace_when_done
 
 # DEBUG ########
 # tibble_JUM_diff_table <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7855_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
@@ -130,6 +133,8 @@ nonchrname <- input_args$nonchrname
 # ncores <- 4
 # chrmode <- 1
 # nonchrname <- NULL
+# save_workspace_when_done <- "YES"
+
 ##################################
 
 cat("junction_table_path:", junction_table_path, "\n")
@@ -144,6 +149,7 @@ cat("output_dir:", output_dir, "\n")
 cat("ncores:", ncores, "\n")
 cat("chrmode:", chrmode, "\n")
 cat("nonchrname:", nonchrname, "\n")
+cat("save_workspace_when_done:", save_workspace_when_done, "\n")
 
 if(!dir.exists(output_dir) ) {
   dir.create(output_dir, recursive = TRUE)}
@@ -429,11 +435,11 @@ list_junction_table_by_chr <- tibble_junction_table %>% dplyr::group_split(chr)
 
 # filter chr for only user specified chr
 names(list_junction_table_by_chr) <- list_junction_table_by_chr %>% purrr::map(~.$chr %>% unique) %>% unlist
-list_junction_table_by_chr <- list_junction_table_by_chr[chr_to_run]
 
 # subset the recon GTF and junction table by chromosomes in common so that we can map2 over them
 vector_chr_in_commmon <- intersect(names(list_recon_gtf_subset_by_chr), names(list_junction_table_by_chr))
 
+list_junction_table_by_chr <- list_junction_table_by_chr[vector_chr_in_commmon]
 list_recon_gtf_subset_by_chr <- list_recon_gtf_subset_by_chr[vector_chr_in_commmon]
 list_junction_table_by_chr <- list_junction_table_by_chr[vector_chr_in_commmon]
 
@@ -532,7 +538,7 @@ list_junction_3FT_result <- future_pmap(
       
       final_identifier <- if (b1$custom_identifier %>% is.na != TRUE) {b1$custom_identifier
       } else {
-          paste(b1$chr, ":", b1$start %>% type.convert, "-", b1$end%>% type.convert, 
+          paste(source_tag, "_junction_", b1$chr, ":", b1$start %>% type.convert, "-", b1$end%>% type.convert, 
                 if ((b1$strand == "+" | b1$strand == "-") & b1$strand %>% is.na != TRUE) {
                   paste(":", b1$strand, sep = "")
                 } else {
@@ -670,7 +676,7 @@ list_junction_3FT_result <- future_pmap(
     }, .progress = TRUE) # L2
     
     # flatten and distribute the fasta header into all of its child 3FT results
-    list_3FT_result_unnest_temp <- list_3FT_result_temp %>% purrr::discard(.p = ~.x %>% length == 0) %>% purrr::discard(.p = ~.x$`3FT_info` %>% length == 0) %>% purrr::map(.x = list_3FT_result_temp, .f = ~purrr::cross2(.x[c("chr", "start", "end", "strand", "fasta_header", "final_identifier")] %>% list, .x$`3FT_info`)) %>% flatten %>% purrr::map(.f = ~.x %>% flatten)
+    list_3FT_result_unnest_temp <- list_3FT_result_temp %>% purrr::discard(.p = ~.x %>% length == 0) %>% purrr::discard(.p = ~.x$`3FT_info` %>% length == 0) %>% purrr::map(.x = list_3FT_result_temp, .f = ~purrr::cross2(.x[c("chr", "start", "end", "strand", "gene_name", "fasta_header", "final_identifier")] %>% list, .x$`3FT_info`)) %>% flatten %>% purrr::map(.f = ~.x %>% flatten)
     
     # rearrange info into a tibble. one translation frame per row. %>% flatten
     # first, tibblise the translation frame elements of the list, then as_tibble the rest.
@@ -755,6 +761,10 @@ cat(paste("track name=\"Alternative junctions\" description=\"", output_name, "\
 junc_bed_table <- tibble_three_frame_translate_result_no_substring[, c("chr", "start", "end", "final_identifier", "strand")] %>% setNames(c("chr", "start", "end", "name", "strand")) %>% add_column(., "score" = 1000, .after = "name") %>% type_convert
 
 write.table(junc_bed_table, file = paste(output_dir, "/", output_name, "_junctions.bed", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+
+if (save_workspace_when_done == "YES" | save_workspace_when_done == "DEBUG") {
+  save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
+}
 
 # finish counting
 tictoc::toc()

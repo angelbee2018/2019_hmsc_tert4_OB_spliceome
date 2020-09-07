@@ -66,14 +66,14 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/mnt/Tertiary/sharedfolder/"
+# shared_dir <- "Z:/"
 
-psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
-# psisigma_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
+# psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
+psisigma_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
 
-R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
-# R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
+# R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
+R_processing_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
 
 if(! dir.exists(R_processing_results_dir) ) {
   dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -81,15 +81,15 @@ if(! dir.exists(R_processing_results_dir) ) {
 vector_OBseries_timepoints_raw <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
-vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
-# vector_of_comparisons_final <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+# vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+vector_of_comparisons_final <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
 
-# tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
 
 ```
 
@@ -2158,7 +2158,7 @@ write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info
 # write coords for three-frame translation
 write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info_exons[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% 
               dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords", "gene_name" = "matched_gene_names") %>% 
-              add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_allcomparisons_differential_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na_poison_exon_finder_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+              add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_allcomparisons_differential_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # also write table of differential information for 12d vs. MSC
 tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_MSC" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff)
@@ -2363,7 +2363,7 @@ write.table(x = tibble_constitutive_LIV_info, file = paste(R_processing_results_
 # write coords for three-frame translation
 write.table(x = tibble_constitutive_LIV_info[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% 
               dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords", "gene_name" = "matched_gene_names") %>% 
-              add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LIV", number.of.LIVs_constitutive, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_poison_exon_finder_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+              add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LIV", number.of.LIVs_constitutive, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -4811,10 +4811,10 @@ list_of_attributes_to_retrieve <- list("interpro" = c("ensembl_peptide_id", "int
 ```{r eval=FALSE, include=FALSE}
 
 # query biomart
-list_of_tibbles_biomart_domain_annotation <- future_map(.x = list_of_attributes_to_retrieve, .f = ~getBM(attributes = .x, mart = ensembl_mart, curl = RCurl::getCurlMultiHandle()) %>% as_tibble %>% na.omit, .progress = TRUE, .options = future_options(globals = c("getBM", "ensembl_mart")))
+# list_of_tibbles_biomart_domain_annotation <- future_map(.x = list_of_attributes_to_retrieve, .f = ~getBM(attributes = .x, mart = ensembl_mart, curl = RCurl::getCurlMultiHandle()) %>% as_tibble %>% na.omit, .progress = TRUE, .options = future_options(globals = c("getBM", "ensembl_mart")))
 
 # write tables
-future_map2(.x = list_of_tibbles_biomart_domain_annotation, .y = names(list_of_tibbles_biomart_domain_annotation), .f = ~write.table(.x, file = paste(shared_dir, "table_biomart_ENSP_to_", .y, "_38.98.txt", sep = ""), row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t"), .progress = TRUE, .options = future_options(globals = FALSE))
+# future_map2(.x = list_of_tibbles_biomart_domain_annotation, .y = names(list_of_tibbles_biomart_domain_annotation), .f = ~write.table(.x, file = paste(shared_dir, "table_biomart_ENSP_to_", .y, "_38.98.txt", sep = ""), row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t"), .progress = TRUE, .options = future_options(globals = FALSE))
 
 ```
 
@@ -4857,7 +4857,7 @@ tibble_ENSP_to_uniprotkb <- biomaRt::getBM(attributes = c("ensembl_peptide_id", 
 
 library(rtracklayer)
 
-tibble_ref_gtf_original <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+tibble_ref_gtf_original <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
 # tibble_ref_gtf_original <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
 
 tibble_ref_gtf_original <- tibble_ref_gtf_original %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
@@ -4868,12 +4868,12 @@ tibble_ref_gtf_original <- tibble_ref_gtf_original %>% mutate_if(is.factor, as.c
 
 # import dbPTM info
 # Z:/dbPTM_download/extract/allPTM_human.txt
-tibble_dbPTM_allhuman_annotations <- read.delim("/media/Ubuntu/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 # dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
 # import PhosphoSitePlus info
 # Z:/phosphositeplus_phosphosites_human.tab
-tibble_phosphositeplus_allhuman_phosphosites <- read.delim("/media/Ubuntu/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+tibble_phosphositeplus_allhuman_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 # tibble_phosphositeplus_allhuman_phosphosites <- read.delim("Z:/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
 # change the residue position column
@@ -4885,7 +4885,8 @@ row.indices_phosphosite.is.na <- which(is.na(tibble_phosphositeplus_allhuman_pho
 tibble_phosphositeplus_allhuman_phosphosites <- tibble_phosphositeplus_allhuman_phosphosites[-row.indices_phosphosite.is.na, ]
 
 # RBIND THE PTM TABLES
-tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibble_phosphositeplus_allhuman_phosphosites)
+# tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibble_phosphositeplus_allhuman_phosphosites)
+tibble_PTM_combined <- tibble_dbPTM_allhuman_annotations
 
 ```
 
@@ -4910,291 +4911,352 @@ We just consider differential regions to be any differential exon.
 
 query_name <- "all_differential"
 
-# set up list of exon coords for looping
-## split into IR and non-IR
-list_exons_for_query_non.IR <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(!str_detect(string = splicemode, pattern = "IR")) %>% (function(input_table) {
-  
-  output_list <- input_table[, c("diff_exon_coords", "chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% 
-    as_tibble %>% 
-    unique %>%
-    array_tree
-  
-  return(output_list)
-  
-} )
+plan(list(tweak(multiprocess, workers = 30),
+          tweak(multiprocess, workers = 2))
+)
 
-list_exons_for_query_IR <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(str_detect(string = splicemode, pattern = "IR")) %>% (function(input_table) {
-  
-  output_list <- input_table[, c("diff_exon_coords", "chr", "diff_exon_start", "diff_exon_end", "matched_strand")] %>% 
-    as_tibble %>% 
-    unique %>%
-    array_tree
-  
-  return(output_list)
-  
-} )
+intron_retention_string <- "IR"
 
-# match exons to reference annotation
-## easy for non-IR
-list_ref_entries_matched_to_exons_non.IR <- list_exons_for_query_non.IR %>% future_map(
-  .f = ~purrr::splice(.x,
-                      
-                      # DEBUG ###
-                      # .x <- list_constituent_junctions_for_query[[100]]
-                      ###########
-                      
-                      "ref_matched_exons" = list(
-                        extract_overlapping.exons(.x, tibble_ref_gtf_original, stranded = TRUE)
-                      )
-  ) %>% 
-    # extract vector of matched transcripts from the above
-    purrr::splice(
-      "vector_matched_transcript_ids" = .$ref_matched_exons %>% .$transcript_id %>% unique %>% na.omit
-    ), 
-  .progress = TRUE, 
-  .options = future_options(globals = c("tibble_ref_gtf_original", "extract_overlapping.exons"))) 
+# identifier table
+tibble_alternative_exons_identifier <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::select(event_region_coords, diff_exon_coords, splicemode, matched_gene_names) %>% setNames(c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")) %>% unique
+# chr start end strand table
+vector_event_region_chr <- gsub(x = tibble_alternative_exons_identifier$event_region_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\1")
+vector_event_region_start <- purrr::map2(.x = gsub(x = tibble_alternative_exons_identifier$event_region_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                                .y = gsub(x = tibble_alternative_exons_identifier$event_region_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                                .f = ~min(.x, .y)) %>% unlist
+vector_event_region_end <- purrr::map2(.x = gsub(x = tibble_alternative_exons_identifier$event_region_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                              .y = gsub(x = tibble_alternative_exons_identifier$event_region_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                              .f = ~max(.x, .y)) %>% unlist
 
-# %>% purrr::discard(.x = ., .p = ~nrow(.x$ref_matched_exons) == 0)
+vector_diff_exon_start <- purrr::map2(.x = gsub(x = tibble_alternative_exons_identifier$diff_exon_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                                             .y = gsub(x = tibble_alternative_exons_identifier$diff_exon_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                                             .f = ~min(.x, .y)) %>% unlist
+vector_diff_exon_end <- purrr::map2(.x = gsub(x = tibble_alternative_exons_identifier$diff_exon_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                                           .y = gsub(x = tibble_alternative_exons_identifier$diff_exon_coords, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                                           .f = ~max(.x, .y)) %>% unlist
 
-## hard for IR
-### junction-flanking exon matches for IR events
-list_ref_entries_matched_to_IR_junctions <- future_imap(.x = list_exons_for_query_IR, .f = ~list(
-  "reference_gtf_match" = extract_junction.flanking.exons(.x, tibble_ref_gtf_original, .y), 
-  "diff_exon_coords" = .x$diff_exon_coords,
-  "chr" = .x$chr,
-  "diff_exon_start" = .x$diff_exon_start,
-  "diff_exon_end" = .x$diff_exon_end,
-  "matched_strand" = .x$matched_strand), 
-  .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf_original", "extract_junction.flanking.exons")))
+tibble_alternative_exons_chr_start_end_strand <- tibble(
+  "event_region_coords" = tibble_alternative_exons_identifier$event_region_coords,
+  "diff_exon_coords" = tibble_alternative_exons_identifier$diff_exon_coords,
+  "splicemode" = tibble_alternative_exons_identifier$splicemode,
+  "matched_gene_names" = tibble_alternative_exons_identifier$matched_gene_names,
+  "chr" = vector_event_region_chr,
+  "strand" = "*",
+  "event_region_start" = vector_event_region_start,
+  "event_region_end" = vector_event_region_end,
+  "diff_exon_start" = vector_diff_exon_start,
+  "diff_exon_end" = vector_diff_exon_end)
 
-### use the IR-junction-matched flanking exons to find the IR exon.
-list_ref_entries_matched_to_exons_non.IR <- future_imap(.x = list_ref_entries_matched_to_IR_junctions, .f = function(.x, .y) {
-  
-  # message("now processing entry number: ", .y)
-  
-  # DEBUG ###
-  # .x <- list_ref_matching_exon_entries_all_array.tree_IR[[216]]
-  # tibble_ref_gtf <- tibble_ref_gtf
-  # tibble_recon_gtf <- tibble_recon_gtf
-  ###########
-  # 
-  # tibble_ref_gtf <<- tibble_ref_gtf
-  # tibble_recon_gtf <<- tibble_recon_gtf
-  
-  chr <- .x$chr %>% paste %>% trimws
-  start <- .x$diff_exon_start %>% paste %>% trimws %>% type.convert
-  end <- .x$diff_exon_end %>% paste %>% trimws %>% type.convert
-  strand <- .x$matched_strand %>% paste %>% trimws
-  vec_ref_transcripts_matched_to_junction <- .x$matched_ref_transcript_names %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(name = NULL, value = "transcript_id")
-  
-  # check reference annotation - but only if the junction was matched to reference in the first place.
-  tibble_all_confirmed_IR_entries_ref <- "uninit"
-  
-  if (all(is.na(vec_ref_transcripts_matched_to_junction)) != TRUE) {
+# subset the recon GTF and exon table by chromosomes in common so that we can map2 over them
+## split exon table by chromosome
+list_alternative_exons_by_chr <- tibble_alternative_exons_chr_start_end_strand %>% 
+  dplyr::group_split(chr) %>%
+  set_names(nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist)
+## split GTF table by chromosome
+list_ref_gtf_subset_by_chr <- tibble_ref_gtf_original %>% 
+  dplyr::group_split(seqnames) %>%
+  set_names(nm = purrr::map(.x = ., .f = ~.x$seqnames %>% unique) %>% unlist)
+## get and filter for only chromosomes in common
+vector_chr_in_commmon <- intersect(names(list_ref_gtf_subset_by_chr), names(list_alternative_exons_by_chr))
+
+list_alternative_exons_by_chr <- list_alternative_exons_by_chr[vector_chr_in_commmon]
+list_ref_gtf_subset_by_chr <- list_ref_gtf_subset_by_chr[vector_chr_in_commmon]
+
+cat("match VSRs to reference transcriptome\n")
+list_ref_entries_matched_to_exons <- future_map2(
+  .x = list_alternative_exons_by_chr,
+  .y = list_ref_gtf_subset_by_chr,
+  .f = function(a1, a2) {
     
-    # match IR region to reference
-    tibble_ref_gtf_subset_IR_overlap <- tibble_ref_gtf[tibble_ref_gtf$seqnames == chr %>% trimws, ] %>% .[.$strand == strand %>% trimws, ] %>% .[.$start <= ((start %>% as.numeric) - 2) & .$end >= ((end %>% as.numeric) + 2), ] %>% .[.$type == "exon", ]
-  
-    # get all the entries which matched to the junction
-    tibble_ref_gtf_subset_junction_matching_entries <- dplyr::semi_join(tibble_ref_gtf[tibble_ref_gtf$type == "exon", ], vec_ref_transcripts_matched_to_junction, by = "transcript_id")
+    # DEBUG ###
+    # a1 <- list_alternative_exons_by_chr[[1]]
+    # a2 <- list_ref_gtf_subset_by_chr[[1]]
+    ##########
     
-    # extract all the start coords of the junction-matched entries
-    vector_junction_matched_start_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "start"]
-    # find which IR matched entry has any same start coord
-    tibble_ref_gtf_subset_IR_overlap_start.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_start_coords)
+    # message(a1$chr %>% unique)
     
-    # extract all the end coords of the junction-matched entries
-    vector_junction_matched_end_coords <- tibble_ref_gtf_subset_junction_matching_entries[, "end"]
-    # find which IR matched entry has any same end coord
-    tibble_ref_gtf_subset_IR_overlap_end.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_end_coords)
+    list_per_chromosome <- future_imap(
+      .x = a1 %>% array_tree,
+      .f = function(b1, b2) {
+        
+        # DEBUG ###
+        # b1 <- a1 %>% array_tree %>% .[[18]]
+        ###########
+        
+        # message(b2)
+        
+        # detect exon extension/skipping
+        ## get vector of VSR and exon coords
+        vector_VSR_exon_coords <- b1[c("event_region_start", "event_region_end", "diff_exon_start", "diff_exon_end")] %>% unlist %>% type.convert
+        ## if no. of unique VSR + alt. exon coords = 4, then it's exon skipping. If 3, then partial exon extension.
+        # IR EVENTS
+        if (grepl(x = b1$splicemode, pattern = intron_retention_string) == TRUE) {
+          
+          # VSR MATCHING
+          # match transcripts to the IR region
+          list_matched_GTF_exon_entries <- extract_overlapping.exons(query_chr = b1$chr, query_start = b1$event_region_start %>% type.convert, query_end = b1$event_region_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+          # get parent transcript entries
+          list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
+          
+          # INEXACT MATCHING IF VSR MATCHING FAILS
+          if (list_matched_GTF_exon_entries %>% length == 0) {
+            list_GTF_entries_matched_to_IR_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$diff_exon_start %>% type.convert, query_end = b1$diff_exon_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon")
+            # extract overlapping, same strand, (and maybe) same gene_name/gene_id transcripts.
+            tibble_IR_junction_parent_transcript_entries <- a2[which(a2$transcript_id %in% names(list_GTF_entries_matched_to_IR_junction) &
+                                                               a2$type == "transcript"), ]
+            # get overlapping/samestrand/same gene_id transcript entries
+            ## determine if it's called "gene_name" or "gene_id"
+            tibble_gene_name <- a2 %>% head %>% dplyr::select(contains("gene_id"), contains("gene_name"))
+            gene_name_or_gene_id <- colnames(tibble_gene_name[, 1])
+            
+            if (a2 %>% dplyr::select(contains("gene_id"), contains("gene_name")) %>% ncol != 0) {
+              tibble_transcript_entries_overlapping_IR_junction_transcripts <- 
+                a2[which(a2$type == "transcript" &
+                     a2$start <= (tibble_IR_junction_parent_transcript_entries$end %>% max) &
+                     a2$end >= (tibble_IR_junction_parent_transcript_entries$start %>% min) & 
+                     a2$strand %in% (tibble_IR_junction_parent_transcript_entries$strand %>% unique) &
+                     (a2[, gene_name_or_gene_id] %>% unlist) %in% (tibble_IR_junction_parent_transcript_entries[, gene_name_or_gene_id] %>% unlist)), ]
+            } else if (a2 %>% dplyr::select(contains("gene_id"), contains("gene_name")) %>% ncol == 0) {
+              tibble_transcript_entries_overlapping_IR_junction_transcripts <- 
+                a2[which(a2$type == "transcript" &
+                     a2$start <= (tibble_IR_junction_parent_transcript_entries$end %>% max) &
+                     a2$end >= (tibble_IR_junction_parent_transcript_entries$start %>% min) & 
+                     a2$strand %in% (tibble_IR_junction_parent_transcript_entries$strand %>% unique)), ]
+            }
+            
+            # retrieve the full entries of overlapping transcripts
+            tibble_all_candidate_overlapping_full_entries <- a2[which(a2$transcript_id %in% tibble_transcript_entries_overlapping_IR_junction_transcripts$transcript_id), ]
+            
+            # extract only transcripts with encapsulating exons. These are the final exon matches.
+            list_matched_GTF_exon_entries <- 
+              tibble_all_candidate_overlapping_full_entries[tibble_all_candidate_overlapping_full_entries$type == "exon" &
+                                                         tibble_all_candidate_overlapping_full_entries$start <= b1$diff_exon_start %>% type.convert &
+                                                         tibble_all_candidate_overlapping_full_entries$end >= b1$diff_exon_end %>% type.convert, ] %>% 
+              dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+            # get parent transcript entries
+            list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~tibble_all_candidate_overlapping_full_entries[which(tibble_all_candidate_overlapping_full_entries$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
+          }
+          
+          ### EXON SKIPPING
+        } else if (vector_VSR_exon_coords %>% unique %>% length == 4) {
+          
+          # exact exon match
+          list_matched_GTF_exon_entries <- extract_overlapping.exons(query_chr = b1$chr, query_start = b1$diff_exon_start %>% type.convert, query_end = b1$diff_exon_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+          # get parent transcript entries
+          list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
+          
+          ### PARTIAL EXON EXTENSIONS
+        } else if (vector_VSR_exon_coords %>% unique %>% length == 3) {
+          
+          # ENHANCED EXON EXTENSION MATCHING
+          # Strategy: 
+          # 1. Determine the common VSR and exon coord.
+          # 2. Calculate the genomic coord of the DR + 1 nucleotide.
+          # This is done using the equation: genome_coord_first_nucleotide_extending_into_common_region = common + (common_coord-VSR_only_coord)/(abs(common_coord-VSR_only_coord))
+          # 3. Find the CONSTITUTIVE (native, non-extended) exon by requiring no overlap with the DR but has either the start or end coord = the DR + 1 nucleotide.
+          # 4. The exonic matches are any exon which overlaps the region of the constitutive span AND contains the WHOLE DR on the same strand.
+          common_coord <- intersect(c(b1$event_region_start %>% type.convert, b1$event_region_end %>% type.convert), 
+                                    c(b1$diff_exon_start %>% type.convert, b1$diff_exon_end %>% type.convert))
+          event_region_only_coord <- setdiff(c(b1$event_region_start %>% type.convert, b1$event_region_end %>% type.convert), common_coord)
+          exon_only_coord <- setdiff(c(b1$diff_exon_start %>% type.convert, b1$diff_exon_end %>% type.convert), common_coord)
+          genome_coord_first_nucleotide_extending_into_common_region = common_coord + ((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
+          
+          tibble_GTF_exons_with_DR_plus_one_nucleotide <- 
+            a2[(which(a2$type == "exon" &
+                        (a2$start == genome_coord_first_nucleotide_extending_into_common_region |
+                           a2$end == genome_coord_first_nucleotide_extending_into_common_region))), ]
+          # require no overlap with DR
+          tibble_constitutive_exons <- 
+            tibble_GTF_exons_with_DR_plus_one_nucleotide[!(tibble_GTF_exons_with_DR_plus_one_nucleotide$start <= max(common_coord, exon_only_coord) &
+                                                             tibble_GTF_exons_with_DR_plus_one_nucleotide$end >= min(common_coord, exon_only_coord)), ]
+          
+          # find exons overlapping with the constitutive and containing the whole DR regions.
+          list_matched_GTF_exon_entries <- 
+            a2[which(a2$type == "exon" &
+                       a2$strand %in% (tibble_constitutive_exons$strand %>% unique) &
+                       # constitutive region overlap
+                       a2$start <= max(tibble_constitutive_exons$start %>% max, tibble_constitutive_exons$end %>% max) &
+                       a2$end >= min(tibble_constitutive_exons$start %>% min, tibble_constitutive_exons$end %>% min) &
+                       # DR encapsulation
+                       a2$start <= min(common_coord, exon_only_coord) &
+                       a2$end >= max(common_coord, exon_only_coord)), ] %>%
+            dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+          
+          # get parent transcript entries
+          list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
+          
+        } # END CONDITIONS ###
+        
+        # rbind and tibblise the list_matched_GTF_exon_entries
+        ref_matched_exons <- list_matched_GTF_exon_entries %>% rbindlist(use.names = TRUE, fill = TRUE) %>% as_tibble
+        
+        # extract the matched transcript_ids
+        vector_matched_transcript_ids <- ref_matched_exons$transcript_id %>% unique
+        
+        # GET STRAND ###
+        list_matched_strand <- list_parent_GTF_transcript_entries %>% purrr::map(~.x$strand %>% unique)
+        
+        return(purrr::splice(
+          b1,
+          "ref_matched_exons" = ref_matched_exons %>% list,
+          "vector_matched_transcript_ids" = vector_matched_transcript_ids %>% list,
+          "list_parent_GTF_transcript_entries" = list_parent_GTF_transcript_entries %>% list,
+          "matched_strand" = list_matched_strand %>% unlist %>% unique
+        ))
+        
+      }, .progress = TRUE)
     
-    # extract all the gene names of the junction-matched entries
-    vector_junction_matched_gene_names <- tibble_ref_gtf_subset_junction_matching_entries[, "gene_name"]
-    # find which IR matched entry has any same end coord
-    tibble_ref_gtf_subset_IR_overlap_gene.name.matched <- dplyr::semi_join(tibble_ref_gtf_subset_IR_overlap, vector_junction_matched_gene_names)
+    # keep elements that didn't have any matches to GTF
+    list_per_chromosome_unmatched <- list_per_chromosome %>% purrr::keep(.p = ~.x$ref_matched_exons %>% nrow == 0)
+    # prune elements that didn't have any matches to GTF
+    list_per_chromosome_pruned <- list_per_chromosome %>% purrr::discard(.p = ~.x$ref_matched_exons %>% nrow == 0)
     
-    tibble_union_start.and.end.matched <- list(tibble_ref_gtf_subset_IR_overlap_start.matched, 
-                                            tibble_ref_gtf_subset_IR_overlap_end.matched,
-                                            tibble_ref_gtf_subset_IR_overlap_gene.name.matched) %>% purrr::reduce(dplyr::union)
+    return(list("unmatched_list" = list_per_chromosome_unmatched,
+                "pruned_list" = list_per_chromosome_pruned))
     
-    if (nrow(tibble_union_start.and.end.matched) == 0) {
-      
-      tibble_all_confirmed_IR_entries_ref <- "uninit"
-      
-    } else if (nrow(tibble_union_start.and.end.matched) > 0) {
-      
-      tibble_all_confirmed_IR_entries_ref <- tibble_union_start.and.end.matched
-      
-    }
-    
-  }
-  
-}, .progress = TRUE, .options = future_options(globals = c("as_tibble", "tibble_ref_gtf")))
+  }, .progress = TRUE)
+
+# write the entries that didn't have any matches to the reference GTF.
+tibble_ref_entries_matched_to_exons_unmatched <- list_ref_entries_matched_to_exons %>% purrr::map(~.x$unmatched_list) %>% flatten %>% purrr::map(~.x[c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names", "chr", "strand", "event_region_start", "event_region_end", "diff_exon_start", "diff_exon_end")] %>% as_tibble) %>% rbindlist %>% as_tibble
+# write
+write.table(x = tibble_ref_entries_matched_to_exons_unmatched, file = paste(R_processing_results_dir, "table_exon_ontology_unmatched_exons_", query_name, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+# extract the pruned entries and flatten
+list_ref_entries_matched_to_exons_pruned <- list_ref_entries_matched_to_exons %>% purrr::map(~.x$pruned_list) %>% flatten
+
+plan(multiprocess)
+options(mc.cores = 6)
 
 # add the matched CDS from the exon number and transcript ids of matched exons
-list_ref_entries_matched_to_exons.and.CDS <- list_ref_entries_matched_to_exons %>% future_map(
+list_ref_entries_matched_to_exons.and.CDS <- list_ref_entries_matched_to_exons_pruned %>% future_map(
   .f = ~purrr::splice(.x,
                       "ref_matched_CDS" = dplyr::semi_join(tibble_ref_gtf_original[tibble_ref_gtf_original$type == "CDS", ], .x$ref_matched_exons %>% .[, c("transcript_id", "exon_number")], by = c("transcript_id", "exon_number"))
   ), 
   .progress = TRUE, 
   .options = future_options(globals = c("tibble_ref_gtf_original")))
 
+
 # GENERATE GENOME-RELATIVE COORDS FOR EVERY DIFFERENTIAL POSITION.
 # also generate genome-relative coords for every CDS position of transcripts with a matched exon. this is necessary because we need to deal with gaps.
-list_genome_relative_exonic.and.CDS_coords <- future_imap(.x = list_ref_entries_matched_to_exons.and.CDS, .f = function(.x, .y) {
+list_genome_relative_exonic.and.CDS_coords <- future_imap(.x = list_ref_entries_matched_to_exons.and.CDS, .f = function(a1, a2) {
   
   # DEBUG ###
-  # .x <- list_ref_entries_matched_to_exons.and.CDS[[2]]
+  # a1 <- list_ref_entries_matched_to_exons.and.CDS[[9]]
   ###########
   
-  cat("\nprocessing entry number: ", .y)
+  # cat("\nprocessing entry number: ", a2)
   
-  ref_gtf_table <<- tibble_ref_gtf_original
-  input_list <- .x
-  
-  output_list <- purrr::splice(
-  
-    input_list,
+    # retrieve the genomic coords of the differential exonic region (just start:end)
+    vector_genomic_coords_of_all_differential_exon_positions <- (a1$diff_exon_start %>% type.convert):(a1$diff_exon_end %>% type.convert)
     
-    # take the maximum range (which is at most 4nt bigger than the actual exon) because of the matching tolerance of +/-2 nt
-    "vector_genomic_coords_of_all_differential_exon_positions" = if (nrow(input_list$ref_matched_exons) !=0) {(input_list$ref_matched_exons$start %>% min):(input_list$ref_matched_exons$end %>% max)} else {return(NA)},
-    "vector_genomic_coords_of_all_differential_CDS_positions" = if (nrow(input_list$ref_matched_CDS) !=0) {(input_list$ref_matched_CDS$start %>% min):(input_list$ref_matched_CDS$end %>% max)} else {return(NA)}
+    # find the overlapping features from the parent transcripts (from the matched exons)
+    ## get parent transcript entries
+    tibble_parent_transcript_entries <- dplyr::semi_join(tibble_ref_gtf_original, a1$ref_matched_exons, by = "transcript_id")
+    ## find overlapping features
+    tibble_overlapping_parent_transcript_features <- tibble_parent_transcript_entries[which(tibble_parent_transcript_entries$start <= a1$diff_exon_end %>% type.convert & tibble_parent_transcript_entries$end >= a1$diff_exon_start %>% type.convert), ]
     
-    )
+    # retrieve the genomic coords of the differential CDS region
+    ## we have to intersect each (genome-relative) CDS region with the genomic coords of differential exon positions
+    ## list-ify the matched CDS entries by transcript_id
+    list_matched_CDS_by_transcript_id <- a1$ref_matched_CDS %>% 
+      dplyr::group_split(transcript_id) %>% 
+      set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+    ## list out all the positions for each CDS entry and intersect with the differential exon's positions
+    list_all_genome_relative_matched_CDS_positions <- purrr::map(
+      .x = list_matched_CDS_by_transcript_id,
+      .f = ~purrr::map2(.x = .x$start, .y = .x$end, .f = ~.x:.y) %>% unlist)
+    ## intersect for differential CDS positions
+    list_differential_CDS_positions <- purrr::map(.x = list_all_genome_relative_matched_CDS_positions, .f = ~intersect(.x, vector_genomic_coords_of_all_differential_exon_positions))
   
-  return(output_list)
+  return(splice(
+    a1,
+    "vector_genomic_coords_of_all_differential_exon_positions" = vector_genomic_coords_of_all_differential_exon_positions %>% list,
+    "tibble_overlapping_parent_transcript_features" = tibble_overlapping_parent_transcript_features %>% list,
+    "list_differential_CDS_positions" = list_differential_CDS_positions %>% list
+  ))
     
     }, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf_original", "as_tibble", "tibble::enframe")) ) %>%
     
     # drop exons that don't have any differential regions.
-    purrr::discard(.x = list_genome_relative_exonic.and.CDS_coords[1], .p = ~(length(.x$vector_genomic_coords_of_all_differential_exon_positions) == 0) & (length(.x$vector_genomic_coords_of_all_differential_CDS_positions) == 0))
+    purrr::discard(.x = ., .p = ~(nrow(.x$ref_matched_exons) == 0))
 
-# take only the differential exonic positions
-# first pluck positions by chromosome
-# to get differential positions, we reason that when we sort coordinates, the tally frequencies will show up as "islands" with a certain local maximum. For every island, simply remove the locally most frequent coordinate, and the resulting vector of genome-relative positions will only be differential, ready for filtering.
-## get chromosomes
-vector_of_chromosomes_to_pluck <- list_genome_relative_differential_coords %>% purrr::map(~.x$chr) %>% unlist %>% unique
-
-## pluck exonic positions by chromosome and unlist
-list_plucked_differential_exonic_positions_by_chromosome <- purrr::map(.x = vector_of_chromosomes_to_pluck, .f = function(a1) {
-  
-  # DEBUG ###
-  # a1 <- 5
-  ###########
-  
-  cat("\nnow processing chr:", a1, "\n")
-  
-  # pluck all the exonic positions
-  vector_all_exonic_positions <- purrr::keep(.x = list_genome_relative_differential_coords, .p = ~.x$chr == a1) %>%
-    purrr::map(~.x$vector_genomic_coords_of_all_differential_exon_positions) %>%
-    unlist %>%
-    mixedsort
-  
-  # tibblise and tally each of the positions
-  # determine the boundaries between tallies of 1 and 2+ by adding a difference-to-the-next-row column and difference-from-previous
-  tibble_all_exonic_positions_tally <- vector_all_exonic_positions %>% 
-    tibble::enframe(name = NULL, value = "exonic_position") %>%
-    dplyr::group_by(exonic_position) %>%
-    dplyr::summarise("tally" = n()) %>%
-    tibble::add_column("tally_difference_to_next" = c((.$tally %>% .[-1]), NA) - .$tally,
-                       "tally_difference_from_previous" = .$tally - c(NA, (.$tally %>% .[-length(.)])))
-  
-  # these are the start row indices of the islands
-  row.indices_island_starts <- which(tibble_all_exonic_positions_tally$tally == 1 & tibble_all_exonic_positions_tally$tally_difference_to_next > 0) + 1
-  # these are the end row indices of the islands
-  row.indices_island_ends <- which(tibble_all_exonic_positions_tally$tally == 1 & tibble_all_exonic_positions_tally$tally_difference_from_previous < 0) - 1
-  
-  # deal with the case if the middle of an island is either at the very start or end.
-  # in those cases, we'll have to add in the start as the first row or the end as the last row.
-  if (tibble_all_exonic_positions_tally[1, ] %>% .$tally > 1) {
-    
-    row.indices_island_starts <- c(1, row.indices_island_starts)
-    
-  } 
-  
-  if (tibble_all_exonic_positions_tally[nrow(tibble_all_exonic_positions_tally), ] %>% .$tally > 1) {
-    
-    row.indices_island_ends <- c(row.indices_island_ends, nrow(tibble_all_exonic_positions_tally))
-    
-  }
-  
-  # BEHAVIOUR: for tally == 1, we automatically keep it.
-  ## next, we looop thru each island, take the max tally, remove all positions which have the max tally and keep the rest. 
-  ## mix together and finished :)
-  
-  ### loop thru each island. remove positions with max local tally.
-  vector_island_positions_to_keep <- purrr::map2(.x = row.indices_island_starts,
-                                                 .y = row.indices_island_ends,
-                                                 .f = function(a1, a2) {
-                                                   
-                                                   max_tally <- tibble_all_exonic_positions_tally[a1:a2, "tally"] %>% unlist %>% max
-                                                   
-                                                   vector_island_positions_which_are_not_max_tally <- tibble_all_exonic_positions_tally[a1:a2, ] %>% .[.$tally != max_tally, "exonic_position"] %>% unlist
-                                                   
-                                                   return(vector_island_positions_which_are_not_max_tally)
-                                                   
-                                                 } ) %>% unlist
-  
-  ### these are the tally 1 positions
-  vector_tally_1_positions <- tibble_all_exonic_positions_tally[tibble_all_exonic_positions_tally$tally == 1, "exonic_position"] %>% unlist
-  
-  # return all the differential positions
-  c(vector_tally_1_positions, vector_island_positions_to_keep) %>% as.vector %>% sort %>% return
-  
-} ) %>% set_names(vector_of_chromosomes_to_pluck)
-
-# then filter each genome-relative exonic coordinate to give true differential coordinates.
-list_genome_relative_differential_coords <- purrr::map(.x = list_genome_relative_exonic_coords,
-                                                       .f = function(a1) {
-                                                         
-                                                         list_a1_modified <- purrr::modify_at(.x = a1, 
-                                                                                              .at = "vector_genomic_coords_of_all_differential_exon_positions", 
-                                                                                              .f = ~intersect(.x, list_plucked_differential_exonic_positions_by_chromosome[[a1$chr]]))
-                                                         
-                                                       } )
-
-# MATCH DIFFERENTIAL GENOME-RELATIVE COORDS TO EACH CDS REGION CORRESPONDING TO PROTEIN ID
-# THEN EXTRACT THE PROTEIN-RELATIVE COORDS
-list_transcript_and_protein_relative_differential_coords <- future_imap(.x = list_genome_relative_differential_coords, .f = function(.x, .y) {
+# CALCULATE THE PROTEIN-RELATIVE COORDS FROM GENOME-RELATIVE DIFFERENTIAL CDS POSITIONS
+list_protein_relative_differential_coords <- future_imap(.x = list_genome_relative_exonic.and.CDS_coords, .f = function(a1, a2) {
   
   # message("now processing junction number: ", .y)
   
   # DEBUG ###
-  # .x <- list_genome_relative_differential_coords[[2]]
+  # a1 <- list_genome_relative_exonic.and.CDS_coords[[5]]
   ###########
   
-  input_list <- .x
-  
-  output_list <- purrr::splice(
+  # get current strand - this is necessary for getting CDS-relative coords.
+  current_strand <- a1$ref_matched_exons$strand %>% unique
     
-    input_list,
+  # retrieve all the genome-relative positions of the parent CDS
+  # NOTE: CDS might not always be available. we account for this.
+  if (a1$ref_matched_CDS %>% nrow != 0) {
     
-    "CDS_relative_differential_coords" = list(purrr::map(.x = input_list$genomic_coords_of_all_CDS_positions_per_protein_id, 
-                                              .f = ~which(.x %in% input_list$vector_genomic_coords_of_all_differential_exon_positions) %>% sort(decreasing = FALSE)
-                                              ) %>% 
-                                   purrr::discard(.p = ~length(.x) == 0)
-                                 ), 
+    list_vector_genome_relative_coords_parent_CDS <- purrr::map(
+    .x = a1$ref_matched_CDS$transcript_id,
+    .f = function(b1) {
+      
+      # DEBUG ###
+      # b1 <- a1$ref_matched_CDS$transcript_id %>% .[[1]]
+      ###########
+      
+      tibble_ref_gtf_matching_transcript_id <- tibble_ref_gtf_original[tibble_ref_gtf_original$transcript_id == b1 & tibble_ref_gtf_original$type == "CDS", ]
+      # create genome-relative positions
+      vector_genome_relative_positions <- purrr::map2(.x = tibble_ref_gtf_matching_transcript_id$start,
+                                                      .y = tibble_ref_gtf_matching_transcript_id$end,
+                                                      .f = ~.x:.y) %>% unlist %>% unique %>% sort(decreasing = FALSE)
+      return(vector_genome_relative_positions)
+    } ) %>% set_names(a1$ref_matched_CDS$transcript_id)
     
-    "vector_genomic_coords_of_all_differential_CDS_positions" = list(purrr::map(.x = input_list$genomic_coords_of_all_CDS_positions_per_protein_id, 
-                                                                                .f = ~intersect(.x, input_list$vector_genomic_coords_of_all_differential_exon_positions) %>% sort(decreasing = FALSE)
-                                                                                
-    ) %>% purrr::discard(.p = ~length(.x) == 0) )
+    # get protein_id for later on
+    vector_protein_ids <- a1$ref_matched_CDS$transcript_id %>% purrr::map(.f = ~a1$ref_matched_CDS %>% dplyr::filter(transcript_id == .x) %>% .$protein_id) %>% unlist
     
-    ) %>%
+    # rename the list_differential_CDS_positions to be the same order as the list_vector_CDS_relative_coords
+    a1$list_differential_CDS_positions <- a1$list_differential_CDS_positions[list_vector_genome_relative_coords_parent_CDS %>% names]
     
+    # calculate CDS-relative diff CDS coords
+    list_vector_CDS_relative_coords <- purrr::map2(.x = a1$list_differential_CDS_positions,
+                                                   .y = list_vector_genome_relative_coords_parent_CDS,
+                                                   .f = function(b1, b2) {
+                                                     
+                                                     if (current_strand == "+") {
+                                                      which(b2 %in% b1) %>% return 
+                                                     } else if (current_strand == "-") {
+                                                      which((b2 %>% rev) %in% b1) %>% return 
+                                                     }
+                                                     
+                                                   } ) %>% 
+      # set protein_id as names
+      set_names(vector_protein_ids)
+    
+    # name list_differential_CDS_positions to have protein ids as well
+    names(a1$list_differential_CDS_positions) <- vector_protein_ids
+    
+    # finally get the protein-relative coords.
     # protein-relative coords are simply the ceiling of a third of the transcript-relative coords
-    purrr::splice(
-      
-      "protein_relative_differential_coords" = list(.$CDS_relative_differential_coords %>% 
-                                         purrr::map(~ceiling(.x / 3) %>% unlist %>% unique))
-      
-    )
+    protein_relative_differential_coords <- purrr::map(.x = list_vector_CDS_relative_coords,
+                                                       .f = ~ceiling(.x / 3) %>% unlist %>% unique)
     
-    }, .progress = TRUE, .options = future_options(globals = FALSE))
+  } else {
+    
+    protein_relative_differential_coords <- NULL
+    
+  }
+  
+  return(splice(
+    a1,
+    "protein_relative_differential_coords" = protein_relative_differential_coords %>% list
+  ))
+  
+  }, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf_original")))
 
 # MATCH THE DIFFERENTIAL TRANSCRIPT-RELATIVE COORDS TO THE ENSEMBL GTF
 # MATCH THE DIFFERENTIAL PROTEIN-RELATIVE COORDS TO THE FETCHED BIOMART LIST AS WELL AS THE PTMS
-list_matched_annotation <- future_map(.x = list_transcript_and_protein_relative_differential_coords, .f = function(.x) {
+list_matched_annotation <- future_map(.x = list_protein_relative_differential_coords, .f = function(a1) {
   
   # WARNING!! FIX THIS WHEN NAMING THE FUNCTION!
   # list_of_tibbles_biomart_domain_annotation <<- list_of_tibbles_biomart_domain_annotation
@@ -5205,59 +5267,31 @@ list_matched_annotation <- future_map(.x = list_transcript_and_protein_relative_
   ############################################
   
   # DEBUG ###
-  # .x <- list_transcript_and_protein_relative_differential_coords[[1]]
+  # a1 <- list_protein_relative_differential_coords[[1]]
   ###########
   
-  input_list <- .x
-  
-  output_list <- purrr::splice(
-    
-    input_list,
-    
-    "transcript_features" = purrr::map(.x = input_list$vector_matched_transcript_ids, .f = function(.x) {
+  list_biomart_annotations <- purrr::map2(
+    .x = a1$protein_relative_differential_coords, 
+    .y = names(a1$protein_relative_differential_coords), .f = function(b1, b2) {
       
       # DEBUG ###
-      # .x <- input_list$vector_matched_transcript_ids %>% .[[1]]
+      # b1 <- a1$protein_relative_differential_coords %>% .[[1]]
+      # b2 <- names(a1$protein_relative_differential_coords) %>% .[1]
       ###########
       
-      # subset the reference GTF by transcript_id
-      tibble_ref_gtf_subset_by_transcript_id <- tibble_ref_gtf_original[tibble_ref_gtf_original$transcript_id == .x, ] %>% .[-which(is.na(.$seqnames)), ]
+      CDS.relative.coords <- b1
+      protein.id <- b2
       
-      # test for which differential positions lie between a feature
-      row.indices_of_overlaps_with_differential_positions <- which(purrr::map2(.x = tibble_ref_gtf_subset_by_transcript_id$start, 
-                           .y = tibble_ref_gtf_subset_by_transcript_id$end, 
-                           .f = ~any(.x < input_list$vector_genomic_coords_of_all_differential_exon_positions &
-                                       .y > input_list$vector_genomic_coords_of_all_differential_exon_positions)) %>% unlist)
-      
-      # extract matched GTF entries
-      matched_GTF_entries <- tibble_ref_gtf_subset_by_transcript_id[row.indices_of_overlaps_with_differential_positions, ]
-      
-      return(matched_GTF_entries)
-      
-    } ) %>% 
-      # rbind and spit out unique transcript feature types.
-      rbindlist %>% .[, c("type", "transcript_biotype")] %>% unlist %>% unique,
-    
-    "biomart_annotations" = list(purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
-      
-      # DEBUG ###
-      # .x <- input_list$CDS_relative_differential_coords %>% .[[1]]
-      # .y <- names(input_list$CDS_relative_differential_coords) %>% .[1]
-      ###########
-      
-      CDS.relative.coords <- .x
-      protein.id <- .y
-      
-      # find domains which overlapped with the differential positions.
+      # find domains which overlapped with the differential positions at the protein-relative level
       list_matched_biomart_annotations <- purrr::map2(.x = list_of_tibbles_biomart_domain_annotation, 
                                                       .y = names(list_of_tibbles_biomart_domain_annotation),
-                                                      .f = function(.x, .y) {
+                                                      .f = function(c1, c2) {
                                                         
                                                         # DEBUG ###
-                                                        # .x <- list_of_tibbles_biomart_domain_annotation[[2]]
+                                                        # c1 <- list_of_tibbles_biomart_domain_annotation[[1]]
                                                         ###########
                                                         
-                                                        tibble_domain_subset <- .x[.x$ensembl_peptide_id == protein.id, ]
+                                                        tibble_domain_subset <- c1[c1$ensembl_peptide_id == protein.id, ]
                                                         
                                                         if (nrow(tibble_domain_subset) != 0) {
                                                           
@@ -5272,52 +5306,60 @@ list_matched_annotation <- future_map(.x = list_transcript_and_protein_relative_
                                                           # extract matched GTF entries
                                                           tibble_matched_domain_entries <- tibble_domain_subset[row.indices_of_overlaps_with_differential_positions, ]
                                                           
-                                                          } else if (nrow(tibble_domain_subset) == 0) {
-                                                            
-                                                            tibble_matched_domain_entries <- tibble_domain_subset
-                                                            
-                                                            }
+                                                        } else if (nrow(tibble_domain_subset) == 0) {
+                                                          
+                                                          tibble_matched_domain_entries <- tibble_domain_subset
+                                                          
+                                                        }
+                                                        
+                                                        # calculate the degree of overlap
+                                                        tibble_matched_domain_entries <- tibble_matched_domain_entries %>% dplyr::mutate("percentage_overlap" = purrr::map2(.x = tibble_matched_domain_entries$start, .y = tibble_matched_domain_entries$end, .f = function(a1, a2) {(intersect(a1:a2, CDS.relative.coords) %>% length)/((a1:a2) %>% length)} ) %>% unlist)
                                                         
                                                         # rename the columns back to being domain-type specific
-                                                        
-                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "start", replacement = paste(.y, "_", "start", sep = ""))
-                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "end", replacement = paste(.y, "_", "end", sep = ""))
+                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "start", replacement = paste(c2, "_", "start", sep = ""))
+                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "end", replacement = paste(c2, "_", "end", sep = ""))
+                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "percentage_overlap", replacement = paste(c2, "_", "percentage_overlap", sep = ""))
                                                         
                                                         return(tibble_matched_domain_entries)
                                                         
-                                                        } )
+                                                      } )
       
       # reduce into tibble by full join
       tibble_matched_biomart_annotations <- list_matched_biomart_annotations %>% purrr::reduce(dplyr::full_join)
       
       return(tibble_matched_biomart_annotations)
       
-      } ) %>% rbindlist %>% as_tibble ),
-    
-    "PTMs" =  list(
+    } )
+  
+  list_PTM_annotations <- purrr::map2(
+    .x = a1$protein_relative_differential_coords, 
+    .y = names(a1$protein_relative_differential_coords), .f = function(b1, b2) {
       
-      purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
-        
       # DEBUG ###
       # .x <- input_list$CDS_relative_differential_coords %>% .[[6]]
       # .y <- names(input_list$CDS_relative_differential_coords) %>% .[6]
       ###########
-        
-      tibble_uniprotkb_entries_from_ENSP <- tibble_ENSP_to_uniprotkb[tibble_ENSP_to_uniprotkb$ensembl_peptide_id == .y, ]
+      
+      tibble_uniprotkb_entries_from_ENSP <- tibble_ENSP_to_uniprotkb[tibble_ENSP_to_uniprotkb$ensembl_peptide_id == b2, ]
       
       tibble_combined_PTM_matching_entries <- tibble_uniprotkb_entries_from_ENSP %>% dplyr::left_join(., tibble_PTM_combined, by = "uniprotkb_entry") %>%
         
-        .[.$modified_residue_position %in% .x, ]
+        .[.$modified_residue_position %in% b1, ]
       
       return(tibble_combined_PTM_matching_entries)
-        
-      } ) %>% rbindlist %>% as_tibble
       
-    )
-    
-  )
-    
+    } )
+  
+  return(purrr::splice(
+    a1,
+    "biomart_annotations" = list_biomart_annotations %>% rbindlist(fill = TRUE) %>% as_tibble %>% list,
+    "PTMs" = list_PTM_annotations %>% rbindlist(fill = TRUE) %>% as_tibble %>% list
+  ))
+  
 }, .progress = TRUE, .options = future_options(globals = c("rbindlist", "list_of_tibbles_biomart_domain_annotation", "tibble_ENSP_to_uniprotkb", "tibble_PTM_combined", "tibble_ref_gtf_original", "as_tibble")))
+
+# save the raw list
+save(list_matched_annotation, file = paste(R_processing_results_dir, "list_matched_annotation.Rlist", sep = ""))
 
 # TIDY AND WRAP UP ALL THE ANNOTATIONS.
 # prepare for export
@@ -5326,52 +5368,55 @@ list_tidied_annotation <- list_matched_annotation %>%
                # concatenate all bare vectors 
                modify_at(.x, .at = "vector_genomic_coords_of_all_differential_exon_positions", .f = ~.x %>% paste(collapse = ",")) %>%
                modify_at(.x, .at = "vector_matched_transcript_ids", .f = ~.x %>% paste(collapse = ",")) %>%
-               modify_at(.x, .at = "transcript_features", .f = ~.x %>% paste(collapse = ",")), .progress = TRUE, .options = future_options(globals = c("rbindlist", "as_tibble")))
+               modify_at(.x, .at = c("list_differential_CDS_positions", "protein_relative_differential_coords"), .f = ~purrr::map(.x = .x, .f = ~.x %>% paste(collapse = ","))) %>%
+               # extract just the type and transcript_biotype from the overlapping parent transcript features
+               modify_at(.x, .at = "tibble_overlapping_parent_transcript_features", .f = ~.x[, c("type", "transcript_biotype")] %>% unlist %>% unique %>% sort %>% paste(collapse = ",")), .progress = TRUE, .options = future_options(globals = c("rbindlist", "as_tibble")))
 
 # extract the transcript features and tibblise 
-tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff_exon_coords", "matched_strand", "splicemode", "vector_matched_transcript_ids", "transcript_features")] %>% as_tibble) %>%
+tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode", "vector_matched_transcript_ids", "tibble_overlapping_parent_transcript_features")] %>% as_tibble) %>%
   rbindlist %>% 
   as_tibble %>%
-  setNames(c("diff_exon_coords", "matched_strand", "splicemode", "transcript_ids_with_annotation", "transcript_features")) %>% 
+  setNames(c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode", "vector_matched_transcript_ids", "tibble_overlapping_parent_transcript_features")) %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_strand", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("diff_exon_coords", "matched_strand"))
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("event_region_coords", "diff_exon_coords", "splicemode"))
 # write table
 write.table(x = tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the biomart results and tibblise 
-tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff_exon_coords", "matched_strand", "splicemode", "biomart_annotations")] ) %>%
+tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode", "biomart_annotations")] ) %>%
   purrr::discard(.p = ~.x$biomart_annotations %>% nrow == 0) %>%
   purrr::map(~purrr::modify_at(.x = .x, .at = "biomart_annotations", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble) %>%
-  rbindlist %>% 
+  rbindlist(fill = TRUE) %>% 
+  type_convert %>%
   as_tibble %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_strand", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("diff_exon_coords", "matched_strand"))
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("event_region_coords", "diff_exon_coords", "splicemode"))
 # write table
 write.table(x = tibble_final_biomart_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_biomart_domains_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the PTM results and tibblise 
-tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("diff_exon_coords", "matched_strand", "splicemode", "PTMs")] ) %>%
+tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode", "PTMs")] ) %>%
   purrr::discard(.p = ~.x$PTMs %>% nrow == 0) %>%
   purrr::map(~purrr::modify_at(.x = .x, .at = "PTMs", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble) %>%
   rbindlist %>% 
   as_tibble %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_strand", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("diff_exon_coords", "matched_strand"))
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("event_region_coords", "diff_exon_coords", "splicemode"))
 # write table
 write.table(x = tibble_final_PTM_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_PTMs_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 # extract the other supporting information and tibblise
 tibble_final_annotation_supp <- list_tidied_annotation %>% 
-  purrr::map(~.x[c("diff_exon_coords", "matched_strand", "splicemode", "vector_genomic_coords_of_all_differential_exon_positions", "vector_genomic_coords_of_all_differential_CDS_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")]) %>%
+  purrr::map(~.x[c("event_region_coords", "diff_exon_coords", "matched_strand", "splicemode", "vector_genomic_coords_of_all_differential_exon_positions", "list_differential_CDS_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")]) %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length != 0, .f = ~.x %>% (function(x) {
     purrr::splice(x, 
-                  "tibble" = x[c("protein_relative_differential_coords", "vector_genomic_coords_of_all_differential_CDS_positions")] %>% purrr::map_depth(.depth = 2, .f = ~paste(.x, collapse = ",")) %>% purrr::map2(.x = ., .y = names(.), .f = ~.x %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", .y))) %>% purrr::reduce(dplyr::full_join)) %>% return}) ) %>%
+                  "tibble" = x[c("protein_relative_differential_coords", "list_differential_CDS_positions")] %>% purrr::map_depth(.depth = 2, .f = ~paste(.x, collapse = ",")) %>% purrr::map2(.x = ., .y = names(.), .f = ~.x %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", .y))) %>% purrr::reduce(dplyr::full_join, by = "ensembl_peptide_id")) %>% return}) ) %>%
   purrr::map_if(.p = ~.x$protein_relative_differential_coords %>% length == 0, .f = ~purrr::modify_at(.x = .x, .at = "protein_relative_differential_coords", .f = function(.x) {return("NA")} ) %>% splice("ensembl_peptide_id" = "NA")) %>%
-  purrr::map(.f = ~.x[-which(names(.x) %in% c("protein_relative_differential_coords", "vector_genomic_coords_of_all_differential_CDS_positions"))]) %>%
+  purrr::map(.f = ~.x[-which(names(.x) %in% c("protein_relative_differential_coords", "list_differential_CDS_positions"))]) %>%
   purrr::map(~.x %>% flatten %>% as_tibble) %>%
   purrr::discard(.p = ~.x %>% nrow == 0) %>% rbindlist(use.names = TRUE, fill = TRUE) %>% as_tibble %>% 
   ## add in gene symbols
-  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("diff_exon_coords", "matched_strand", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("diff_exon_coords", "matched_strand"))
+  dplyr::right_join(tibble_ref_matching_exon_entries_all[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% na.omit %>% unique, ., by = c("event_region_coords", "diff_exon_coords", "splicemode"))
 # write table
 write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_dir, "table_exon_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
   
@@ -5384,13 +5429,13 @@ write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_
 # transcript-level ###
 message("total number of unique differential exons with any sort of transcript-level annotation: ", tibble_final_transcript_feature_annotation$diff_exon_coords %>% length)
 
-message("percent of differential regions matched to protein coding transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "protein_coding") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
-message("percent of differential regions matched to an lncRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "lncRNA") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
-message("percent of differential regions matched to a miRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "miRNA") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+message("percent of differential regions matched to protein coding transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "protein_coding") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+message("percent of differential regions matched to an lncRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "lncRNA") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+message("percent of differential regions matched to a miRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "miRNA") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 
-message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
-message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
-message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 
 # PROTEIN-LEVEL ###
 # vector_unique_interpro_ids <- intersect(tibble_final_biomart_annotation$interpro %>% na.omit %>% unique, tibble_non_family_interpro_entries$Accession)
@@ -5432,8 +5477,8 @@ ggplot(tibble_interpro_id_tally_per_diff.exon %>% dplyr::arrange(desc(tally)) %>
   ylab("Number of hits") +
   # coord_cartesian(ylim = c(0, 50)) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8), axis.text.y = element_text(size = 20), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) + ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 10, units = "cm") +
-  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 10, units = "cm") 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8), axis.text.y = element_text(size = 20), axis.title.y = element_text(margin = margin(r = 90)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) + ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 80, height = 10, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 80, height = 10, units = "cm") 
 
 write.table(x = tibble_interpro_id_tally_per_diff.exon %>% dplyr::arrange(desc(tally)), file = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_exons_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -5453,7 +5498,7 @@ message("total number of unique exons overlapping a tmhmm domain: ", length(whic
 
 ```{r}
 
-tibble_PTM_tally <- tibble_final_PTM_annotation %>% dplyr::distinct(diff_exon_coords, splicemode, PTM_type) %>% na.omit %>% dplyr::group_by(PTM_type) %>% dplyr::summarise("tally" = n())
+tibble_PTM_tally <- tibble_final_PTM_annotation %>% dplyr::distinct(diff_exon_coords, splicemode, modified_residue_position, PTM_type) %>% na.omit %>% dplyr::group_by(PTM_type) %>% dplyr::summarise("tally" = n())
 
 # plot
 ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
@@ -5466,7 +5511,7 @@ ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
   ylim(c(0, max(tibble_PTM_tally$tally) + 5)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 4, height = 8, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 4, height = 8, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
 
 ```

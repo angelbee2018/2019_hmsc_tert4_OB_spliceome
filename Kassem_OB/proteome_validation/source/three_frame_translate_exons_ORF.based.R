@@ -53,7 +53,7 @@ list_input_arg_info = list(
                     help = "Compulsory. output file directory. where do you want to save the annotated exon table? IMPORTANT: MUST BE A FULL DIRECTORY AND NOT A FILE PATH. e.g. correct: ~/outputdir/ correct: ~/outputdir incorrect: /outputdir/annotated_exons.txt", metavar = "character"),
   "7" = make_option(c("-O", "--output_name"), type = "character", default = NULL, 
                     help = "Compulsory. output file name, to be saved in the output directory a.k.a. what do you want to save the annotated exon table as? IMPORTANT: MUST BE A STRING WITHOUT THE EXTENSION AND NOT A DIRECTORY. THE .txt EXTENSION WILL AUTOMATICALLY BE ADDED FOR THE OUTPUT FILE. e.g. correct: annotated_sample incorrect: annotated_exons.txt incorrect: annotated_sample/", metavar = "character"),
-  "8" = make_option(c("-C", "--ncores"), type = "integer", default = 0, 
+  "8" = make_option(c("-C", "--ncores"), type = "character", default = 0, 
                     help = "Optional. Number of cores to use. possible inputs: numbers 1 to any integer. By default, uses all cores (ncores = 0). If a single number is specified, it will just tell future to loop thru chromosomes in parallel using the specified core count. If numberxnumber for example 7x4 then 28 cores will be used. 7 for chromosomes and 4 for inside each chromosome.", metavar = "character"), 
   "9" = make_option(c("-S", "--use_start_codon"), type = "character", default = "YES", 
                     help = "Optional but you should really choose the right option. This option tells the program whether or not there are start codons provided for each transcript (where available). It's useful if you want to re-annotate e.g. the reference Ensembl GTF for the presence of PTCs, so that the program will not consider all 3 translation frames but only consider the frame containing the annotated start codon. If for any reason a transcript doesn't have an associated start codon, the program will revert to considering all 3 frames. By default, start codons are used where applicable, and 3-frame translation is used whenever a start codon annotation is not available (YES). NO: always 3-frame translation. ALWAYS: discard transcripts without start codon annotation.", metavar = "character"),
@@ -80,23 +80,26 @@ if ((list(input_args$reconstructed_transcript_gtf_path, input_args$reference_gen
 
 # DEBUG #######
 
-# psisigma_result_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_exons1810_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt"
+# exon_table_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_table_of_all_constitutive_LIV7532_dpsi15_DEXSeq_padj0.01_3FT.txt"
 # intron_retention_string <- "IR"
 # source_tag <- "debug_psisigma_differential"
 # reference_genome_fasta_dir <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
 # output_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/debug/"
 # output_name <- "long_tibble_of_psisigma_results_allcomparisons_differential_poison_exon_finder.txt"
 # reconstructed_transcript_gtf_path <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
-# reconstructed_transcript_gtf_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
+# # reconstructed_transcript_gtf_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
 # reference_genome_fasta_dir <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
-# output_name <- "debug_psisigma_differential"
-# ncores <- "16x8"
+# output_name <- "debug_psisigma_constitutive"
+# ncores <- "30x2"
 # use_start_codon <- "YES"
 # chrmode <- 1
 # psisigma_result_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/long_tibble_of_psisigma_DEXSeq_results.txt"
 # save_workspace_when_done <- "YES"
 
 # edit our psi-sigma exon tables ###
+
+# psisigma_result_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_exons1810_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt"
+
 # create an identifier and a chr start end table for debugging
 # tibble_psisigma_exon_tables <- read.delim(file = psisigma_result_path, stringsAsFactors = FALSE, sep = "\t", header = TRUE, row.names = NULL) %>% as_tibble
 # identifier table
@@ -563,6 +566,11 @@ cat("begin matching VSRs to reference GTF to identify the relevant transcripts.\
 # Inexact matching: match the IR junction then index all transcript ids which overlap with it. Filter those with at least one coord in common with the initially matched transcript. Filter these again for transcripts containing an exon which completely encapsulates the IR region. (This actually works really well.)
 
 # UPDATE: IR events can simply match to the "VSR"!!
+# UPDATE2: no, they cant. simply because it can't catch nested IR exons.
+
+# IR inexact matching
+# match the IR to transcript junctions
+# obtain transcripts overlapping the matched transcript AND lying on the same strand AND (if available) the same gene_name
 
 # subset the recon GTF and exon table by chromosomes in common so that we can map2 over them
 ## split exon table by chromosome
@@ -607,15 +615,15 @@ vector_ref_genome_fasta_path <- paste(vector_ref_genome_paths_by_chr[vector_ref_
 
 list_alternative_exons_by_chr <- list_alternative_exons_by_chr[vector_chr_in_commmon]
 list_recon_gtf_subset_by_chr <- list_recon_gtf_subset_by_chr[vector_chr_in_commmon]
-message("match VSRs to reconstructed transcriptome")
+cat("match VSRs to reconstructed transcriptome\n")
 list_recon_entries_matched_to_exons <- future_map2(
   .x = list_alternative_exons_by_chr,
   .y = list_recon_gtf_subset_by_chr,
   .f = function(a1, a2) {
     
     # DEBUG ###
-    # a1 <- list_alternative_exons_by_chr[[3]]
-    # a2 <- list_recon_gtf_subset_by_chr[[3]]
+    # a1 <- list_alternative_exons_by_chr[[1]]
+    # a2 <- list_recon_gtf_subset_by_chr[[1]]
     ##########
     
     # message(a1$chr %>% unique)
@@ -625,7 +633,7 @@ list_recon_entries_matched_to_exons <- future_map2(
       .f = function(b1, b2) {
         
         # DEBUG ###
-        # b1 <- a1 %>% array_tree %>% .[[5]]
+        # b1 <- a1 %>% array_tree %>% .[[18]]
         ###########
         
         # message(b2)
@@ -637,10 +645,51 @@ list_recon_entries_matched_to_exons <- future_map2(
         # IR EVENTS
         if (grepl(x = b1$splicemode, pattern = intron_retention_string) == TRUE) {
           
+          # VSR MATCHING
           # match transcripts to the IR region
           list_matched_GTF_exon_entries <- extract_overlapping.exons(query_chr = b1$chr, query_start = b1$VSR_start %>% type.convert, query_end = b1$VSR_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
           # get parent transcript entries
           list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
+          
+          # INEXACT MATCHING IF VSR MATCHING FAILS
+          if (list_matched_GTF_exon_entries %>% length == 0) {
+            list_GTF_entries_matched_to_IR_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$alternative_exon_start %>% type.convert, query_end = b1$alternative_exon_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon")
+            # extract overlapping, same strand, (and maybe) same gene_name/gene_id transcripts.
+            tibble_IR_junction_parent_transcript_entries <- a2[which(a2$transcript_id %in% names(list_GTF_entries_matched_to_IR_junction) &
+                                                               a2$type == "transcript"), ]
+            # get overlapping/samestrand/same gene_id transcript entries
+            ## determine if it's called "gene_name" or "gene_id"
+            tibble_gene_name <- a2 %>% head %>% dplyr::select(contains("gene_id"), contains("gene_name"))
+            gene_name_or_gene_id <- colnames(tibble_gene_name[, 1])
+            
+            if (a2 %>% dplyr::select(contains("gene_id"), contains("gene_name")) %>% ncol != 0) {
+              tibble_transcript_entries_overlapping_IR_junction_transcripts <- 
+                a2[which(a2$type == "transcript" &
+                     a2$start <= (tibble_IR_junction_parent_transcript_entries$end %>% max) &
+                     a2$end >= (tibble_IR_junction_parent_transcript_entries$start %>% min) & 
+                     a2$strand %in% (tibble_IR_junction_parent_transcript_entries$strand %>% unique) &
+                     (a2[, gene_name_or_gene_id] %>% unlist) %in% (tibble_IR_junction_parent_transcript_entries[, gene_name_or_gene_id] %>% unlist)), ]
+            } else if (a2 %>% dplyr::select(contains("gene_id"), contains("gene_name")) %>% ncol == 0) {
+              tibble_transcript_entries_overlapping_IR_junction_transcripts <- 
+                a2[which(a2$type == "transcript" &
+                     a2$start <= (tibble_IR_junction_parent_transcript_entries$end %>% max) &
+                     a2$end >= (tibble_IR_junction_parent_transcript_entries$start %>% min) & 
+                     a2$strand %in% (tibble_IR_junction_parent_transcript_entries$strand %>% unique)), ]
+            }
+            
+            # retrieve the full entries of overlapping transcripts
+            tibble_all_candidate_overlapping_full_entries <- a2[which(a2$transcript_id %in% tibble_transcript_entries_overlapping_IR_junction_transcripts$transcript_id), ]
+            
+            # extract only transcripts with encapsulating exons. These are the final exon matches.
+            list_matched_GTF_exon_entries <- 
+              tibble_all_candidate_overlapping_full_entries[tibble_all_candidate_overlapping_full_entries$type == "exon" &
+                                                         tibble_all_candidate_overlapping_full_entries$start <= b1$alternative_exon_start %>% type.convert &
+                                                         tibble_all_candidate_overlapping_full_entries$end >= b1$alternative_exon_end %>% type.convert, ] %>% 
+              dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+            # get parent transcript entries
+            list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~tibble_all_candidate_overlapping_full_entries[which(tibble_all_candidate_overlapping_full_entries$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
+          }
+          
           ### EXON SKIPPING
         } else if (vector_VSR_exon_coords %>% unique %>% length == 4) {
           
@@ -648,47 +697,46 @@ list_recon_entries_matched_to_exons <- future_map2(
           list_matched_GTF_exon_entries <- extract_overlapping.exons(query_chr = b1$chr, query_start = b1$alternative_exon_start %>% type.convert, query_end = b1$alternative_exon_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
           # get parent transcript entries
           list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
+          
           ### PARTIAL EXON EXTENSIONS
         } else if (vector_VSR_exon_coords %>% unique %>% length == 3) {
           
-          # return the genomic interval that corresponds to the extension junction
-          granges_VSR <- toGRanges(data.frame(chr = "chr1", start = b1$VSR_start, end = b1$VSR_end))
-          granges_exon <- toGRanges(data.frame(chr = "chr1", start = b1$alternative_exon_start, end = b1$alternative_exon_end))
-          tibble_extension_junction <- subtractRegions(granges_VSR, granges_exon) %>% as_tibble
-          # match transcripts to the extension junction
-          list_GTF_entries_matched_to_extension_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = tibble_extension_junction$start, query_end = tibble_extension_junction$end, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = FALSE, return_type = "exon")
+          # ENHANCED EXON EXTENSION MATCHING
+          # Strategy: 
+          # 1. Determine the common VSR and exon coord.
+          # 2. Calculate the genomic coord of the DR + 1 nucleotide.
+          # This is done using the equation: genome_coord_first_nucleotide_extending_into_common_region = common + (common_coord-VSR_only_coord)/(abs(common_coord-VSR_only_coord))
+          # 3. Find the CONSTITUTIVE (native, non-extended) exon by requiring no overlap with the DR but has either the start or end coord = the DR + 1 nucleotide.
+          # 4. The exonic matches are any exon which overlaps the region of the constitutive span AND contains the WHOLE DR on the same strand.
+          common_coord <- intersect(c(b1$VSR_start %>% type.convert, b1$VSR_end %>% type.convert), 
+                                    c(b1$alternative_exon_start %>% type.convert, b1$alternative_exon_end %>% type.convert))
+          VSR_only_coord <- setdiff(c(b1$VSR_start %>% type.convert, b1$VSR_end %>% type.convert), common_coord)
+          exon_only_coord <- setdiff(c(b1$alternative_exon_start %>% type.convert, b1$alternative_exon_end %>% type.convert), common_coord)
+          genome_coord_first_nucleotide_extending_into_common_region = common_coord + ((common_coord - VSR_only_coord)/(abs(common_coord - VSR_only_coord)))
+          
+          tibble_GTF_exons_with_DR_plus_one_nucleotide <- 
+            a2[(which(a2$type == "exon" &
+                        (a2$start == genome_coord_first_nucleotide_extending_into_common_region |
+                           a2$end == genome_coord_first_nucleotide_extending_into_common_region))), ]
+          # require no overlap with DR
+          tibble_constitutive_exons <- 
+            tibble_GTF_exons_with_DR_plus_one_nucleotide[!(tibble_GTF_exons_with_DR_plus_one_nucleotide$start <= max(common_coord, exon_only_coord) &
+                                                             tibble_GTF_exons_with_DR_plus_one_nucleotide$end >= min(common_coord, exon_only_coord)), ]
+          
+          # find exons overlapping with the constitutive and containing the whole DR regions.
+          list_matched_GTF_exon_entries <- 
+            a2[which(a2$type == "exon" &
+                       a2$strand %in% (tibble_constitutive_exons$strand %>% unique) &
+                       # constitutive region overlap
+                       a2$start <= max(tibble_constitutive_exons$start %>% max, tibble_constitutive_exons$end %>% max) &
+                       a2$end >= min(tibble_constitutive_exons$start %>% min, tibble_constitutive_exons$end %>% min) &
+                       # DR encapsulation
+                       a2$start <= min(common_coord, exon_only_coord) &
+                       a2$end >= max(common_coord, exon_only_coord)), ] %>%
+            dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+          
           # get parent transcript entries
-          list_parent_GTF_transcript_entries <- purrr::map(.x = list_GTF_entries_matched_to_extension_junction %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_GTF_entries_matched_to_extension_junction %>% names)
-          
-          # filter parent transcript entries for those that contain the differential region (alternative exon).
-          if (list_parent_GTF_transcript_entries %>% length == 0) {
-            
-            vector_logical_parent_transcript_entry_contains_differential_region <- FALSE
-            
-          } else {
-            
-            vector_logical_parent_transcript_entry_contains_differential_region <- purrr::map(
-              .x = list_parent_GTF_transcript_entries, 
-              .f = function(c1) {
-                
-                # DEBUG ###
-                # c1 <- list_parent_GTF_transcript_entries[[1]]
-                ###########
-                
-                # filter the parent entry for exonic records only
-                tibble_exonic_only <- c1[c1$type == "exon", ]
-                # logical test
-                logical_test_for_differential_region_containing_exon_entries <- any(tibble_exonic_only$start <= b1$alternative_exon_start %>% type.convert & tibble_exonic_only$end >= b1$alternative_exon_end %>% type.convert)
-                
-                return(logical_test_for_differential_region_containing_exon_entries)
-                
-              } ) %>% unlist
-            
-          }
-          
-          # filter
-          list_matched_GTF_exon_entries <- list_GTF_entries_matched_to_extension_junction[vector_logical_parent_transcript_entry_contains_differential_region %>% which]
-          list_parent_GTF_transcript_entries <- list_parent_GTF_transcript_entries[vector_logical_parent_transcript_entry_contains_differential_region %>% which]
+          list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
           
         } # END CONDITIONS ###
         
@@ -699,7 +747,11 @@ list_recon_entries_matched_to_exons <- future_map2(
         # extract the start codon entries
         parent_transcript_start_codon <- list_parent_GTF_transcript_entries %>% purrr::map(~.x %>% dplyr::filter(type == "start_codon"))
         # generate a flag per matched transcript indicating the presence of start codon
-        list_start_codon_present <- parent_transcript_start_codon %>% purrr::map(~.x %>% nrow > 0)
+        if (use_start_codon == "YES") {
+          list_start_codon_present <- parent_transcript_start_codon %>% purrr::map(~.x %>% nrow > 0)
+        } else if (use_start_codon == "NO") {
+          list_start_codon_present <- parent_transcript_start_codon %>% purrr::map(~FALSE)
+        }
         
         # extract the stop codon entries
         parent_transcript_stop_codon <- list_parent_GTF_transcript_entries %>% purrr::map(~.x %>% dplyr::filter(type == "stop_codon"))
@@ -720,31 +772,42 @@ list_recon_entries_matched_to_exons <- future_map2(
         
       }, .progress = TRUE)
     
+    # keep elements that didn't have any matches to GTF
+    list_per_chromosome_unmatched <- list_per_chromosome %>% purrr::keep(.p = ~.x$list_matched_GTF_exon_entries %>% length == 0)
     # prune elements that didn't have any matches to GTF
     list_per_chromosome_pruned <- list_per_chromosome %>% purrr::discard(.p = ~.x$list_matched_GTF_exon_entries %>% length == 0)
     
-    return(list_per_chromosome_pruned)
+    return(list("unmatched_list" = list_per_chromosome_unmatched,
+                "pruned_list" = list_per_chromosome_pruned))
     
   }, .progress = TRUE)
 
 if (save_workspace_when_done == "DEBUG") {
-  message("saving workspace...")
+  cat("saving workspace...\n")
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
 }
 
+# write the entries that didn't have any matches to the reference GTF.
+tibble_recon_entries_matched_to_exons_unmatched <- list_recon_entries_matched_to_exons %>% purrr::map(~.x$unmatched_list) %>% flatten %>% purrr::map(~.x[c("chr", "VSR_start", "VSR_end", "alternative_exon_start", "alternative_exon_end", "strand", "splicemode", "gene_name", "organism", "custom_identifier")] %>% as_tibble) %>% rbindlist %>% as_tibble
+# write
+write.table(x = tibble_recon_entries_matched_to_exons_unmatched, file = paste(output_dir, "/", output_name, "_unmatched.exons.txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+# extract the pruned entries to continue
+list_recon_entries_matched_to_exons_pruned <- list_recon_entries_matched_to_exons %>% purrr::map(~.x$pruned_list)
+
 # retrieve all forward nucleotides of each parent transcript
-message("do three frame translation")
+cat("do three frame translation\n")
 list_three_frame_translation <- future_map2(
-  .x = list_recon_entries_matched_to_exons,
+  .x = list_recon_entries_matched_to_exons_pruned,
   .y = vector_ref_genome_fasta_path,
   .f = function(a1, a2) {
     
     # DEBUG ###
-    # a1 <- list_recon_entries_matched_to_exons[[1]]
-    # a2 <- vector_ref_genome_fasta_path[[1]]
+    # a1 <- list_recon_entries_matched_to_exons_pruned[[18]]
+    # a2 <- vector_ref_genome_fasta_path[[18]]
     ###########
     
-    # message(a2)
+    message(a2)
     
     # temporary allocation to ref genome fasta list
     reference_genome_fasta_chr_temp <- seqinr::read.fasta(file = a2, forceDNAtolower = FALSE)
@@ -754,13 +817,13 @@ list_three_frame_translation <- future_map2(
       .f = function(b1, b2) {
         
         # DEBUG ###
-        # b1 <- a1[[1]]
+        # b1 <- a1[[78]]
         ###########
         
-        # message(b2)
+        message(b2)
         
         # generate all forward genome-relative coords for each matched transcript
-        list_all_forward_genome_relative_coords_of_parent_transcript <- b1$list_parent_GTF_transcript_entries %>% purrr::map(~.x[.x$type == "exon", ] %>% purrr::map2(.x = .$start, .y = .$end, .f = ~.x:.y) %>% unlist %>% sort) 
+        list_all_forward_genome_relative_coords_of_parent_transcript <- b1$list_parent_GTF_transcript_entries %>% purrr::map(~.x[.x$type == "exon", ] %>% purrr::map2(.x = .$start, .y = .$end, .f = ~.x:.y) %>% unlist %>% unique %>% sort) 
         # generate stranded coords
         list_all_stranded_genome_relative_coords_of_parent_transcript <- purrr::map2(
           .x = b1$list_matched_strand, 
@@ -864,40 +927,7 @@ list_three_frame_translation <- future_map2(
             
           } )
         
-        # three-frame translation
-        list_raw_three_frame_translation <- purrr::pmap(
-          .l = list(
-            "c1" = list_all_stranded_nucleotides_of_parent_transcript,
-            "c2" = list_transcript_relative_first_nt_of_start_codon,
-            "c3" = list_transcript_relative_last_nt_of_stop_codon,
-            "c4" = b1$list_start_codon_present
-          ),
-          .f = function(c1, c2, c3, c4) {
-            
-            # DEBUG ###
-            # c1 <- list_all_stranded_nucleotides_of_parent_transcript[[1]]
-            # c2 <- list_transcript_relative_first_nt_of_start_codon[[1]]
-            # c3 <- list_transcript_relative_last_nt_of_stop_codon[[1]]
-            # c4 <- b1$list_start_codon_present %>% .[[1]]
-            ##########
-            
-            list_3FT_result <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = c1[c2:c3], strand = "+")
-            
-            # keep only frame 0 if start codon was present
-            if (c4 == TRUE) {
-              list_3FT_result <- list_3FT_result %>% purrr::map(~list_3FT_result$translation_frame_0)
-            }
-            
-            return(list_3FT_result)
-            
-          } )
-        
-        # filter 3FT result for valid ORF
-        # Method:
-        # 1. Get transcript-relative co-ords of the alternative exon start and end
-        # 2. Determine whether the alternative exon was in the translated range (i.e. between the start and stop codons)
-        # 3. Find valid ORF after adjusting for the translatable range.
-        
+        # get transcript-relative start and end positions
         list_transcript_relative_position_alternative_exon_start <- purrr::map(
           .x = list_all_stranded_genome_relative_coords_of_parent_transcript,
           .f = function(c1) {
@@ -924,11 +954,11 @@ list_three_frame_translation <- future_map2(
           ), 
           .f = function(c1, c2, c3, c4) {
             
-            # 5' UTR check. Alternative exon must contain at least 3 nucleotides which were translated.
-            if (c1 < (c3 + 2) & c2 < (c3 + 2)) {
+            # 5' UTR check. Alternative exon must contain at least 5 nucleotides which were translated.
+            if (c1 < (c3 + 5) & c2 < (c3 + 5)) {
               return("alternative_exon_is_in_five_prime_utr")
               # 3' UTR check.
-            } else if (c1 > (c4 - 2) & c2 > (c4 - 2)) {
+            } else if (c1 > (c4 - 5) & c2 > (c4 - 5)) {
               return("alternative_exon_is_in_three_prime_utr")
               # 5' UTR overlap check
             } else if (c3 %in% c1:c2) {
@@ -941,6 +971,49 @@ list_three_frame_translation <- future_map2(
             }
             
           } )
+        
+        # three-frame translation
+        # NOTE: if there are not at least 5 exons translatable, then we don't translate.
+        list_raw_three_frame_translation <- purrr::pmap(
+          .l = list(
+            "c1" = list_all_stranded_nucleotides_of_parent_transcript,
+            "c2" = list_transcript_relative_first_nt_of_start_codon,
+            "c3" = list_transcript_relative_last_nt_of_stop_codon,
+            "c4" = b1$list_start_codon_present,
+            "c5" = list_flag_alternative_exon_location
+          ),
+          .f = function(c1, c2, c3, c4, c5) {
+            
+            # DEBUG ###
+            # c1 <- list_all_stranded_nucleotides_of_parent_transcript[[4]]
+            # c2 <- list_transcript_relative_first_nt_of_start_codon[[4]]
+            # c3 <- list_transcript_relative_last_nt_of_stop_codon[[4]]
+            # c4 <- b1$list_start_codon_present %>% .[[4]]
+            # c5 <- list_flag_alternative_exon_location[[4]]
+            ##########
+            
+            if (c5 %in% c("alternative_exon_is_in_five_prime_utr", "alternative_exon_is_in_three_prime_utr") == FALSE) {
+              list_3FT_result <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = c1[c2:c3], strand = "+")
+            } else if (c5 %in% c("alternative_exon_is_in_five_prime_utr", "alternative_exon_is_in_three_prime_utr") == TRUE) {
+              list_3FT_result <- c(0:2) %>% 
+                purrr::map(.f = ~"*") %>% 
+                set_names(c("translation_frame_0", "translation_frame_1", "translation_frame_2"))
+            } 
+            
+            # keep only frame 0 if start codon was present
+            if (c4 == TRUE) {
+              list_3FT_result <- list_3FT_result %>% purrr::map(~list_3FT_result$translation_frame_0)
+            }
+            
+            return(list_3FT_result)
+            
+          } )
+        
+        # filter 3FT result for valid ORF
+        # Method:
+        # 1. Get transcript-relative co-ords of the alternative exon start and end (moved to above)
+        # 2. Determine whether the alternative exon was in the translated range (i.e. between the start and stop codons)
+        # 3. Find valid ORF after adjusting for the translatable range.
         
         # determine valid ORFs
         ## 1. first determine the effective translated ES and EE.
@@ -1083,16 +1156,16 @@ list_three_frame_translation <- future_map2(
   }, .progress = TRUE) # L1 - per chromosome
 
 if (save_workspace_when_done == "YES" | save_workspace_when_done == "DEBUG") {
-  message("saving list...")
+  cat("saving list...\n")
   save(list_three_frame_translation, file = paste(output_dir, "/", output_name, "_list_three_frame_translation.list", sep = ""))
 }
 
 if (save_workspace_when_done == "DEBUG") {
-  message("saving workspace...")
+  cat("saving workspace...\n")
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
 }
 
-message("percolate and tibblise")
+cat("percolate and tibblise\n")
 list_summarised_results <- future_map(
   .x = list_three_frame_translation %>% flatten,
   .f = function(a1) {
@@ -1195,7 +1268,7 @@ list_summarised_results <- future_map(
                           a1$gene_name, sep = "")
     
     # create tibble of exon information including the fasta header
-    tibble_exon_info <- purrr::splice(a1[c("chr", "VSR_start", "VSR_end", "alternative_exon_start", "alternative_exon_end", "strand", "splicemode")],
+    tibble_exon_info <- purrr::splice(a1[c("chr", "VSR_start", "VSR_end", "alternative_exon_start", "alternative_exon_end", "strand", "splicemode", "gene_name")],
                                       "fasta_header" = fasta_header,
                                       "final_identifier" = final_identifier) %>%
       as_tibble
@@ -1212,7 +1285,7 @@ list_summarised_results <- future_map(
   }, .progress = TRUE)
 
 if (save_workspace_when_done == "DEBUG") {
-  message("saving workspace...")
+  cat("saving workspace...\n")
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
 }
 

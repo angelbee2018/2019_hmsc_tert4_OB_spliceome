@@ -89,7 +89,7 @@ nonchrname <- input_args$nonchrname
 save_workspace_when_done <- input_args$save_workspace_when_done
 
 # DEBUG ########
-# tibble_JUM_diff_table <- read.delim("/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7855_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_JUM_diff_table <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7855_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # # strsplit into a chr start end strand tibble
 # list_constituent_junctions <- tibble_JUM_diff_table[, c("Gene", "splicemode", "chr", "start", "end", "strand")] %>% 
 #   array_tree %>%
@@ -122,18 +122,20 @@ save_workspace_when_done <- input_args$save_workspace_when_done
 #              "organism" = "Homo sapiens",
 #              "custom_identifier" = NA)
 # 
-# junction_table_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na_constituent_junctions.txt"
-# intron_retention_string <- "intron_retention"
-# reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
-# reference_genome_fasta_dir <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-# upstream_window_size <- 50
-# downstream_window_size <- 50
-# output_name <- "test_differential_JUM_strawberry"
-# output_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/"
-# ncores <- 4
-# chrmode <- 1
-# nonchrname <- NULL
-# save_workspace_when_done <- "YES"
+
+junction_table_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt"
+intron_retention_string <- "intron_retention"
+reconstructed_gtf_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
+source_tag <- "JUM_differential_debug"
+reference_genome_fasta_dir <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+upstream_window_size <- 50
+downstream_window_size <- 50
+output_name <- "test_differential_JUM_strawberry"
+output_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/debug/"
+ncores <- "30x4"
+chrmode <- 1
+nonchrname <- NULL
+save_workspace_when_done <- "YES"
 
 ##################################
 
@@ -690,7 +692,7 @@ list_junction_3FT_result <- future_pmap(
       cat("now processing entry number", b2, "/", length(list_3FT_result_unnest_temp), "\n")
       
       # define the element indices inside the list which contains info for each frame.
-      element.indices_frame_info <- grep(x = names(b1), pattern = "frame_\\d$")
+      element.indices_frame_info <- grep(x = names(b1), pattern = "frame_\\d")
       # element indices containing the virtual peptides
       element.indices_virtual_peptides <- grep(x = names(b1), pattern = "translation_frame_\\d")
       # element indices of the frame info but not the virtual peptides

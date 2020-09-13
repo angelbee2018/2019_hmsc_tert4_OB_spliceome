@@ -123,19 +123,19 @@ save_workspace_when_done <- input_args$save_workspace_when_done
 #              "custom_identifier" = NA)
 # 
 
-junction_table_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt"
-intron_retention_string <- "intron_retention"
-reconstructed_gtf_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
-source_tag <- "JUM_differential_debug"
-reference_genome_fasta_dir <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
-upstream_window_size <- 50
-downstream_window_size <- 50
-output_name <- "test_differential_JUM_strawberry"
-output_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/debug/"
-ncores <- "30x4"
-chrmode <- 1
-nonchrname <- NULL
-save_workspace_when_done <- "YES"
+# junction_table_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na_constituent_junctions.txt"
+# intron_retention_string <- "intron_retention"
+# reconstructed_gtf_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
+# source_tag <- "JUM_differential_debug"
+# reference_genome_fasta_dir <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+# upstream_window_size <- 50
+# downstream_window_size <- 50
+# output_name <- "test_differential_JUM_strawberry"
+# output_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/debug/"
+# ncores <- "30x4"
+# chrmode <- 1
+# nonchrname <- NULL
+# save_workspace_when_done <- "YES"
 
 ##################################
 
@@ -349,6 +349,7 @@ calculate_translation_frame_relative_start_end_position <- function(ES, EE, TL, 
 }
 
 # FUNCTIONS to test if the left/right side of stop codons in an exon are translatable or not. (i.e. whether uORF or dORF exists or not)
+## NOTE: by definition, the first AA of the uORF is the first nucleotide in the window.
 find_valid_uORF <- function(list) {
   
   AA_sequence <- list[[1]] %>% unlist
@@ -373,7 +374,7 @@ find_valid_uORF <- function(list) {
   
 }
 
-
+## NOTE: by definition, the first AA of the dORF is the last nucleotide in the window - dORF AA length + 1!!
 find_valid_dORF <- function(list) {
   
   AA_sequence <- list[[1]] %>% unlist
@@ -732,7 +733,9 @@ tibble_three_frame_translate_result <- tibble_three_frame_translate_result[-whic
 tibble_three_frame_translate_result <- tibble_three_frame_translate_result[-which(duplicated(tibble_three_frame_translate_result[, c("uORF_valid", "dORF_valid")])), ]
 
 # bind the uORF and dORF translation results together.
-tibble_three_frame_translate_result_unique.entries <- dplyr::bind_rows(tibble_three_frame_translate_result %>% dplyr::select(-dORF_valid) %>% dplyr::rename("virtual_peptide_sequence" = "uORF_valid"), tibble_three_frame_translate_result %>% dplyr::select(-uORF_valid) %>% dplyr::rename("virtual_peptide_sequence" = "dORF_valid")) %>% 
+tibble_three_frame_translate_result_unique.entries <- dplyr::bind_rows(
+  tibble_three_frame_translate_result %>% dplyr::select(-dORF_valid, -junction_AA_position_downstream) %>% dplyr::rename("virtual_peptide_sequence" = "uORF_valid", "junction_AA_position" = "junction_AA_position_upstream") %>% tibble::add_column("ORF" = "uORF"), 
+  tibble_three_frame_translate_result %>% dplyr::select(-uORF_valid, -junction_AA_position_upstream) %>% dplyr::rename("virtual_peptide_sequence" = "dORF_valid", "junction_AA_position" = "junction_AA_position_downstream") %>% tibble::add_column("ORF" = "dORF")) %>% 
   # remove all "NONE_VALID" sequences
   .[-which(.$virtual_peptide_sequence == "NONE_VALID" | .$virtual_peptide_sequence == ""), ] %>% dplyr::distinct(., virtual_peptide_sequence, .keep_all = TRUE) 
 

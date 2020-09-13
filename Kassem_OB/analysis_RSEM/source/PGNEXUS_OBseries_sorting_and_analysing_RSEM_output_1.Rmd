@@ -14,8 +14,8 @@ output: html_document
 library(tidyverse)
 library(gtools)
 library(extrafont)
-loadfonts(device = "win")
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# loadfonts(device = "win")
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
 
 library(edgeR)
@@ -46,11 +46,11 @@ library(PFAM.db)
 library(bc3net)
 library(data.table)
 
-OBseries_sampleandaccessionlists_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/"
+OBseries_sampleandaccessionlists_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/"
 
-OBseries_rsem_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_1_original/RSEM_quant_results/"
+OBseries_rsem_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_1_original/RSEM_quant_results/"
 
-OBseries_R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_1_original/R_processing_results/"
+OBseries_R_processing_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_1_original/R_processing_results/"
 
 if(! dir.exists(OBseries_R_processing_results_dir) ) {
      dir.create(OBseries_R_processing_results_dir, recursive = TRUE)}
@@ -1199,10 +1199,10 @@ write.table(x = wide_tibble_of_final_SOM_summary_5_by_5_OBseries, file = paste(O
 # import tibble of scRNA-Seq cluster inclusion and exclusion biomarkers
 # process them by unlisting the concatenated gene names.
 list_scRNAseq_inclusion_exclusion_biomarkers <- list(
-  "unique_inclusion" = read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_unique_inclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree,
-  "unique_exclusion" = read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_unique_exclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree,
-  "inclusion" = read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_inclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree,
-  "exclusion" = read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_exclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree
+  "unique_inclusion" = read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_unique_inclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree,
+  "unique_exclusion" = read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_unique_exclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree,
+  "inclusion" = read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_inclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree,
+  "exclusion" = read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/geneset_exclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble %>% setNames(c("cluster", "genes")) %>% array_tree
 ) 
 
 # strsplit
@@ -1258,14 +1258,14 @@ list_scRNAseq_inclusion_exclusion_biomarkers <- purrr::map2(.x = list_scRNAseq_i
 # flatten, rbind and tibblise.
 tibble_inclusion_exclusion_biomarkers_expression <- list_scRNAseq_inclusion_exclusion_biomarkers %>% flatten %>% rbindlist %>% as_tibble %>% type_convert
 
-# make average tibble for each group
+# make average and (avg +/-1sd) tibble for each group ###
 tibble_inclusion_exclusion_biomarkers_expression_average.line <- tibble_inclusion_exclusion_biomarkers_expression %>% dplyr::group_by(inclusion_or_exclusion, scRNAseq_cluster, timepoint) %>% 
-  dplyr::summarise("avg_expr" = mean(scaled_expr))
-
+  dplyr::summarise("avg_expr" = mean(scaled_expr),
+                   "avg_expr_plus_1sd" = mean(scaled_expr) + sd(scaled_expr),
+                   "avg_expr_minus_1sd" = mean(scaled_expr) - sd(scaled_expr))
 # order the cluster order factors
-tibble_inclusion_exclusion_biomarkers_expression[, "scRNAseq_cluster"] <- factor(tibble_inclusion_exclusion_biomarkers_expression$scRNAseq_cluster %>% as.character, levels = c(11, 10, 1, 3, 6, 7, 8, 0, 2, 9, 5, 4) %>% as.character)
-
-tibble_inclusion_exclusion_biomarkers_expression_average.line[, "scRNAseq_cluster"] <- factor(tibble_inclusion_exclusion_biomarkers_expression_average.line$scRNAseq_cluster %>% as.character, levels = c(11, 10, 1, 3, 6, 7, 8, 0, 2, 9, 5, 4) %>% as.character)
+tibble_inclusion_exclusion_biomarkers_expression[, "scRNAseq_cluster"] <- factor(tibble_inclusion_exclusion_biomarkers_expression$scRNAseq_cluster %>% as.character, levels = c(11, 1, 3, 6, 10, 7, 8, 0, 2, 9, 5, 4) %>% as.character)
+tibble_inclusion_exclusion_biomarkers_expression_average.line[, "scRNAseq_cluster"] <- factor(tibble_inclusion_exclusion_biomarkers_expression_average.line$scRNAseq_cluster %>% as.character, levels = c(11, 1, 3, 6, 10, 7, 8, 0, 2, 9, 5, 4) %>% as.character)
 
 # THE GGPLOT ###
 # OB series
@@ -1283,6 +1283,22 @@ ggplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
  ggsave(filename = paste(OBseries_R_processing_results_dir, "gene_expression_profiles_biomarkers_per_scRNAseq_cluster_OBseries_qvalue0.01_fc2.pdf", sep = ""), device = "pdf", dpi = 600, width = 14, height = 25, units = "cm") +
  ggsave(filename = paste(OBseries_R_processing_results_dir, "gene_expression_profiles_biomarkers_per_scRNAseq_cluster_OBseries_qvalue0.01_fc2.svg", sep = ""), device = "svg", dpi = 600, width = 14, height = 25, units = "cm")
+
+ggplot() +
+  geom_col(data = tibble_inclusion_exclusion_biomarkers_expression_average.line, aes(x = timepoint, y = avg_expr, group = scRNAseq_cluster, fill = inclusion_or_exclusion), colour = "black", size = 0.2) +
+  geom_errorbar(data = tibble_inclusion_exclusion_biomarkers_expression_average.line, aes(x = timepoint, ymax = avg_expr_plus_1sd, ymin = avg_expr_minus_1sd, group = scRNAseq_cluster), colour = "black", size = 0.2) +
+  scale_colour_manual(values = c("black")) +
+  scale_fill_manual(name = NULL, limits = c("exclusion", "inclusion", "unique_exclusion", "unique_inclusion"), values = c("red", "forestgreen", "red", "forestgreen")) + 
+  facet_grid(scRNAseq_cluster ~ inclusion_or_exclusion) +
+  ggtitle(paste("Gene expression profiles\nDifferential inclusion/exclusion biomarkers per scRNA-Seq cluster", sep = "")) +
+  scale_x_discrete(limits = vec_timepoint_order_OBseries_short, labels = vec_timepoint_order_OBseries_short_edited) +
+  xlab("Time-point") +
+  ylab("Scaled expr Level") +
+  # guides(colour = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), panel.spacing = unit(0, "lines")) +
+ ggsave(filename = paste(OBseries_R_processing_results_dir, "gene_expression_errorbars_biomarkers_per_scRNAseq_cluster_OBseries_qvalue0.01_fc2.pdf", sep = ""), device = "pdf", dpi = 600, width = 17, height = 25, units = "cm") +
+ ggsave(filename = paste(OBseries_R_processing_results_dir, "gene_expression_errorbars_biomarkers_per_scRNAseq_cluster_OBseries_qvalue0.01_fc2.svg", sep = ""), device = "svg", dpi = 600, width = 17, height = 25, units = "cm")
 
 write.table(x = tibble_inclusion_exclusion_biomarkers_expression, file = paste(OBseries_R_processing_results_dir, "gene_expression_profiles_biomarkers_per_scRNAseq_cluster_OBseries_qvalue0.01_fc2.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -1605,7 +1621,7 @@ vector_goterms_ordered <- tibble_reordered$Term
 # melt for ggplot 
 long_tibble_reordered <- reshape2::melt(tibble_reordered, variable.name = "timepoint", value.name = "Padj", id.vars = c("Term", "Ont")) %>% as_tibble
 
-# plot the main heatmap
+# plot the main bulk RNA-Seq heatmap
 ggplot(long_tibble_reordered, aes(fill = -Padj)) +
   geom_tile(aes(y = timepoint, x = Term)) +
   ggtitle(paste("Heatmap of any significant BP GOterms per timepoint", sep = "")) +
@@ -1616,34 +1632,69 @@ ggplot(long_tibble_reordered, aes(fill = -Padj)) +
   ggsave(filename = paste(OBseries_R_processing_results_dir, "heatmap_BP_GOterms_per_timepoint_all.pdf", sep = ""), device = "pdf", dpi = 600, width = 20, height = 40, units = "cm", limitsize = FALSE)
 
 # plot select GO terms
-vector_goterms_to_plot <- c("response to unfolded protein", "positive regulation of mitotic cell cycle", "negative regulation of mitotic cell cycle", "ossification", "response to glucocorticoid", "osteoblast differentiation", "extracellular matrix organization", "actin cytoskeleton organization", "p38MAPK cascade", "Wnt signaling pathway", "regulation of BMP signaling pathway", "negative regulation of cell death", "integrin-mediated signaling pathway", "cell migration")
+vector_goterms_to_plot_bulk <- c("response to unfolded protein", "positive regulation of mitotic cell cycle", "ossification", "response to glucocorticoid", "osteoblast differentiation", "extracellular matrix organization", "actin cytoskeleton organization", "p38MAPK cascade", "Wnt signaling pathway", "regulation of BMP signaling pathway", "negative regulation of cell death", "integrin-mediated signaling pathway", "cell migration", "canonical glycolysis")
 
 ggplot(long_tibble_reordered, aes(fill = -Padj)) +
   geom_tile(aes(x = timepoint, y = Term)) + 
   ggtitle(paste("Heatmap of select BP GOterms per timepoint", sep = "")) +
   scale_x_discrete(breaks = vec_timepoint_order_OBseries_short, labels = vec_timepoint_order_OBseries_short_edited, limits = vec_timepoint_order_OBseries_short) +
-  scale_y_discrete(breaks = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)], labels = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)], limits = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)]) +
+  scale_y_discrete(breaks = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot_bulk)], labels = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot_bulk)], limits = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot_bulk)]) +
   scale_fill_gradientn(colours = c("white", "yellow", "red", "black"), values = c(0, 0.5, 0.95, 1)) + 
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(lineheight = 0.75, colour = "black"), axis.title.y = element_text(), text = element_text(family = "Helvetica")) +
   ggsave(filename = paste(OBseries_R_processing_results_dir, "heatmap_BP_GOterms_per_timepoint_select.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm", limitsize = FALSE)
 
 # import tibble of scRNA-Seq cluster GO terms
-tibble_scRNAseq_clusterwise_biomarker_hyperGO <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/GSEA_hyperGO_inclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble
+tibble_scRNAseq_clusterwise_biomarker_hyperGO <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/GSEA_hyperGO_inclusion_biomarkers_per_cluster.txt", sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble
 
 tibble_scRNAseq_clusterwise_biomarker_hyperGO <- tibble_scRNAseq_clusterwise_biomarker_hyperGO %>% dplyr::mutate_at(.vars = "cluster", as.character)
 
-vector_scRNAseq_cluster_order <- c(1, 3, 6, 10, 7, 8, 0, 2, 4, 5, 9) %>% as.character
+vector_scRNAseq_cluster_order <- c(1, 3, 6, 10, 7, 8, 0, 2, 9, 5, 4) %>% as.character
 
+# get GO Term order
+## dcast
+wide_tibble_scRNAseq_clusterwise_biomarker_hyperGO <- tibble_scRNAseq_clusterwise_biomarker_hyperGO %>% 
+  dplyr::select(-Phyper) %>% 
+  reshape2::dcast(formula = Term ~ paste("cluster_", cluster, sep = ""), value.var = "Padj") %>%
+  as_tibble
+
+wide_tibble_scRNAseq_clusterwise_biomarker_hyperGO[is.na(wide_tibble_scRNAseq_clusterwise_biomarker_hyperGO)] <- 1
+
+dist_result <- dist(wide_tibble_scRNAseq_clusterwise_biomarker_hyperGO[, paste("cluster_", vector_scRNAseq_cluster_order, sep = "")], method = "euclidean")
+hclust_result <- hclust(dist_result, method = "ward.D2")
+dendrogram <- as.dendrogram(hclust_result)
+
+matrix_PCA1_rowwise <- prcomp(wide_tibble_scRNAseq_clusterwise_biomarker_hyperGO[, paste("cluster_", vector_scRNAseq_cluster_order, sep = "")] %>% t) %>% .[["rotation"]] %>% .[, 1]
+dendrogram_reordered <- reorder(dendrogram, matrix_PCA1_rowwise)
+
+tibble_reordered_scRNAseq <- wide_tibble_scRNAseq_clusterwise_biomarker_hyperGO[dendrogram_reordered %>% unlist, ]
+# get the order of goterms due to the clustering
+vector_goterms_ordered_scRNAseq <- tibble_reordered_scRNAseq$Term
+
+# plot select GO terms
+vector_goterms_to_plot_scRNAseq <- c("response to unfolded protein", "mitotic cell cycle", "negative regulation of G2/M transition of mitotic cell cycle", "ossification", "mRNA splicing, via spliceosome", "NIK/NF-kappaB signaling", "SRP-dependent cotranslational protein targeting to membrane", "p38MAPK cascade", "response to stress", "response to glucocorticoid", "osteoblast differentiation", "negative regulation of cell death", "actin cytoskeleton organization", "regulated exocytosis", "stem cell population maintenance", "negative regulation of Wnt signaling pathway")
+
+# same order as bulk
+# ggplot(tibble_scRNAseq_clusterwise_biomarker_hyperGO, aes(fill = -Padj)) +
+#   geom_tile(aes(x = cluster, y = Term)) + 
+#   ggtitle(paste("Heatmap of select BP GOterms per cluster", sep = "")) +
+#   scale_x_discrete(breaks = vector_scRNAseq_cluster_order, labels = vector_scRNAseq_cluster_order, limits = vector_scRNAseq_cluster_order) +
+#   scale_y_discrete(breaks = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot_scRNAseq)], labels = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot_scRNAseq)], limits = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot_scRNAseq)]) +
+#   scale_fill_gradientn(colours = c("black"), na.value = "white") +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(lineheight = 0.75, colour = "black"), axis.title.y = element_text(), text = element_text(family = "Helvetica")) +
+#   ggsave(filename = paste(OBseries_R_processing_results_dir, "heatmap_BP_GOterms_per_scRNAseq_cluster_bulk_order.pdf", sep = ""), device = "pdf", dpi = 600, width = 14, height = 10, units = "cm", limitsize = FALSE)
+
+# independent order for scRNA-Seq
 ggplot(tibble_scRNAseq_clusterwise_biomarker_hyperGO, aes(fill = -Padj)) +
   geom_tile(aes(x = cluster, y = Term)) + 
   ggtitle(paste("Heatmap of select BP GOterms per cluster", sep = "")) +
   scale_x_discrete(breaks = vector_scRNAseq_cluster_order, labels = vector_scRNAseq_cluster_order, limits = vector_scRNAseq_cluster_order) +
-  scale_y_discrete(breaks = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)], labels = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)], limits = vector_goterms_ordered[which(vector_goterms_ordered %in% vector_goterms_to_plot)]) +
+  scale_y_discrete(breaks = vector_goterms_ordered_scRNAseq[which(vector_goterms_ordered_scRNAseq %in% vector_goterms_to_plot_scRNAseq)], labels = vector_goterms_ordered_scRNAseq[which(vector_goterms_ordered_scRNAseq %in% vector_goterms_to_plot_scRNAseq)], limits = vector_goterms_ordered_scRNAseq[which(vector_goterms_ordered_scRNAseq %in% vector_goterms_to_plot_scRNAseq)]) +
   scale_fill_gradientn(colours = c("black"), na.value = "white") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(lineheight = 0.75, colour = "black"), axis.title.y = element_text(), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(OBseries_R_processing_results_dir, "heatmap_BP_GOterms_per_scRNAseq_cluster_select.pdf", sep = ""), device = "pdf", dpi = 600, width = 14, height = 10, units = "cm", limitsize = FALSE)
+  ggsave(filename = paste(OBseries_R_processing_results_dir, "heatmap_BP_GOterms_per_scRNAseq_cluster_scRNAseq_order.pdf", sep = ""), device = "pdf", dpi = 600, width = 14, height = 10, units = "cm", limitsize = FALSE)
 
 ```
 

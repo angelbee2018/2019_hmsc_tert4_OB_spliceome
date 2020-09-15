@@ -1,0 +1,29 @@
+source_dir="/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RNA_structure_prediction/source/"
+
+# all timepoints, strawberry/stringtiemerge
+(Rscript $source_dir"gtf_transcript_sequence_extractor.R" \
+--organism_name homo_sapiens \
+--source_tag alltimepoints_stringtiemerged_sequences \
+--reconstructed_transcript_gtf_path /mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf \
+--reference_genome_fasta_dir /mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/ \
+--rna_mode rna \
+--output_dir /mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RNA_structure_prediction/results_gtf_sequence_extractor/ \
+--output_name alltimepoints_stringtiemerged \
+--ncores 30x4 \
+--chrmode 1 \
+--save_workspace_when_done NO \
+--line_wrap 0) &
+
+# ensembl reference
+(Rscript $source_dir"gtf_transcript_sequence_extractor.R" \
+--organism_name homo_sapiens \
+--source_tag ensembl_reference_sequences \
+--reconstructed_transcript_gtf_path /mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf \
+--reference_genome_fasta_dir /mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/ \
+--rna_mode rna \
+--output_dir /mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RNA_structure_prediction/results_gtf_sequence_extractor/ \
+--output_name ensembl_reference_sequences \
+--ncores 30x4 \
+--chrmode 1 \
+--save_workspace_when_done NO \
+--line_wrap 0) &

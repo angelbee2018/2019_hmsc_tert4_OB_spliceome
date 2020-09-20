@@ -85,11 +85,8 @@ vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d
 vector_of_comparisons_final <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-# tibble_ref_gtf <- rtracklayer::import("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
-
-# tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
 
 ```
 
@@ -4911,9 +4908,8 @@ We just consider differential regions to be any differential exon.
 
 query_name <- "all_differential"
 
-plan(list(tweak(multiprocess, workers = 30),
-          tweak(multiprocess, workers = 2))
-)
+plan(multiprocess)
+options(mc.cores = 16)
 
 intron_retention_string <- "IR"
 
@@ -5513,5 +5509,8 @@ ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.pdf", sep = ""), device = "pdf", dpi = 600, width = 4, height = 8, units = "cm") +
  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
+
+write.table(x = tibble_PTM_tally, file = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
 
 ```

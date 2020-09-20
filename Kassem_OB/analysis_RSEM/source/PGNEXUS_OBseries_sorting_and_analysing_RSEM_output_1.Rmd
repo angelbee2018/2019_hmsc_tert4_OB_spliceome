@@ -1259,19 +1259,19 @@ list_scRNAseq_inclusion_exclusion_biomarkers <- purrr::map2(.x = list_scRNAseq_i
 tibble_inclusion_exclusion_biomarkers_expression <- list_scRNAseq_inclusion_exclusion_biomarkers %>% flatten %>% rbindlist %>% as_tibble %>% type_convert
 
 # make average and (avg +/-1sd) tibble for each group ###
-tibble_inclusion_exclusion_biomarkers_expression_average.line <- tibble_inclusion_exclusion_biomarkers_expression %>% dplyr::group_by(inclusion_or_exclusion, scRNAseq_cluster, timepoint) %>% 
+tibble_inclusion_exclusion_biomarkers_expression_average_sd <- tibble_inclusion_exclusion_biomarkers_expression %>% dplyr::group_by(inclusion_or_exclusion, scRNAseq_cluster, timepoint) %>% 
   dplyr::summarise("avg_expr" = mean(scaled_expr),
                    "avg_expr_plus_1sd" = mean(scaled_expr) + sd(scaled_expr),
                    "avg_expr_minus_1sd" = mean(scaled_expr) - sd(scaled_expr))
 # order the cluster order factors
 tibble_inclusion_exclusion_biomarkers_expression[, "scRNAseq_cluster"] <- factor(tibble_inclusion_exclusion_biomarkers_expression$scRNAseq_cluster %>% as.character, levels = c(11, 1, 3, 6, 10, 7, 8, 0, 2, 9, 5, 4) %>% as.character)
-tibble_inclusion_exclusion_biomarkers_expression_average.line[, "scRNAseq_cluster"] <- factor(tibble_inclusion_exclusion_biomarkers_expression_average.line$scRNAseq_cluster %>% as.character, levels = c(11, 1, 3, 6, 10, 7, 8, 0, 2, 9, 5, 4) %>% as.character)
+tibble_inclusion_exclusion_biomarkers_expression_average_sd[, "scRNAseq_cluster"] <- factor(tibble_inclusion_exclusion_biomarkers_expression_average_sd$scRNAseq_cluster %>% as.character, levels = c(11, 1, 3, 6, 10, 7, 8, 0, 2, 9, 5, 4) %>% as.character)
 
 # THE GGPLOT ###
-# OB series
+## line plot
 ggplot() +
   geom_line(data = tibble_inclusion_exclusion_biomarkers_expression, aes(x = timepoint, y = scaled_expr, group = ensembl_gene_id), alpha = 0.1, size = 0.5) +
-  geom_line(data = tibble_inclusion_exclusion_biomarkers_expression_average.line, aes(x = timepoint, y = avg_expr, group = scRNAseq_cluster), colour = "white", size = 0.7) +
+  geom_line(data = tibble_inclusion_exclusion_biomarkers_expression_average_sd, aes(x = timepoint, y = avg_expr, group = scRNAseq_cluster), colour = "white", size = 0.7) +
   scale_colour_manual(values = c("black")) +
   facet_grid(scRNAseq_cluster ~ inclusion_or_exclusion) +
   ggtitle(paste("Gene expression profiles\nDifferential inclusion/exclusion biomarkers per scRNA-Seq cluster", sep = "")) +
@@ -1284,9 +1284,10 @@ ggplot() +
  ggsave(filename = paste(OBseries_R_processing_results_dir, "gene_expression_profiles_biomarkers_per_scRNAseq_cluster_OBseries_qvalue0.01_fc2.pdf", sep = ""), device = "pdf", dpi = 600, width = 14, height = 25, units = "cm") +
  ggsave(filename = paste(OBseries_R_processing_results_dir, "gene_expression_profiles_biomarkers_per_scRNAseq_cluster_OBseries_qvalue0.01_fc2.svg", sep = ""), device = "svg", dpi = 600, width = 14, height = 25, units = "cm")
 
+## bar plot
 ggplot() +
-  geom_col(data = tibble_inclusion_exclusion_biomarkers_expression_average.line, aes(x = timepoint, y = avg_expr, group = scRNAseq_cluster, fill = inclusion_or_exclusion), colour = "black", size = 0.2) +
-  geom_errorbar(data = tibble_inclusion_exclusion_biomarkers_expression_average.line, aes(x = timepoint, ymax = avg_expr_plus_1sd, ymin = avg_expr_minus_1sd, group = scRNAseq_cluster), colour = "black", size = 0.2) +
+  geom_col(data = tibble_inclusion_exclusion_biomarkers_expression_average_sd, aes(x = timepoint, y = avg_expr, group = scRNAseq_cluster, fill = inclusion_or_exclusion), colour = "black", size = 0.2) +
+  geom_errorbar(data = tibble_inclusion_exclusion_biomarkers_expression_average_sd, aes(x = timepoint, ymax = avg_expr_plus_1sd, ymin = avg_expr_minus_1sd, group = scRNAseq_cluster), colour = "black", size = 0.2) +
   scale_colour_manual(values = c("black")) +
   scale_fill_manual(name = NULL, limits = c("exclusion", "inclusion", "unique_exclusion", "unique_inclusion"), values = c("red", "forestgreen", "red", "forestgreen")) + 
   facet_grid(scRNAseq_cluster ~ inclusion_or_exclusion) +

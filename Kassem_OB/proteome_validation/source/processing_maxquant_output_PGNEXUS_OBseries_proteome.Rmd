@@ -333,15 +333,18 @@ average_replicates_by_column <- function(table, design_factor, min_replicates) {
 
 ```{r}
 
-list_maxquant_run_dirs <- list("2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/txt/",
-                               "2020_phosphoproteome_OBseries_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons_deskside/txt/",
-                               # "sp.hsa.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons/txt/",
-                               # "con_sp.hsa.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons/txt/",
-                               "2012_PGNEXUS_proteome_con.sp.canonical.isoforms_katana" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_con.sp.canonical.isoforms_katana/txt/",
-                               # "2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons_katana" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons_katana/txt/",
-                               "2012_PGNEXUS_proteome_junc.exons_dragon" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_junc.exons_dragon/txt/"
-                               )
-                               
+list_maxquant_run_dirs <- list(
+  "2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/txt/",
+  # "2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons_deskside" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons_deskside/txt/",
+  "2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons_deskside/txt/",
+  "2020_phosphoproteome_OBseries_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons_deskside/txt/",
+  
+  "2012_PGNEXUS_proteome_con.sp.canonical.isoforms" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_con.sp.canonical.isoforms_katana/txt/",
+  "2012_PGNEXUS_proteome_con_sp.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_con_sp.canonical.isoforms_junc.exons_deskside/txt/",
+  "2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons_deskside/txt/",
+  "2012_PGNEXUS_proteome_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_junc.exons_deskside/txt/"
+)
+
 list_output.table_categories <- list("modification_specific_peptides" = "modificationSpecificPeptides.txt", 
                                      "msms" = "msms.txt",
                                      "peptides" = "peptides.txt", 
@@ -614,7 +617,7 @@ str(list_local_FDR)
 
 ```{r}
 
-tibble_junc.exons_filtered <- list_imported_maxquant_tibbles_processed[c("2012_PGNEXUS_proteome_junc.exons_dragon", "2020_phosphoproteome_OBseries_junc.exons")] %>% purrr::map2(.x = ., .y = names(.), ~.x$peptides %>% add_column("dbrun" = .y)) %>% rbindlist(fill = TRUE) %>% as_tibble %>% 
+tibble_junc.exons_filtered <- list_imported_maxquant_tibbles_processed[c("2012_PGNEXUS_proteome_junc.exons", "2020_phosphoproteome_OBseries_junc.exons")] %>% purrr::map2(.x = ., .y = names(.), ~.x$peptides %>% add_column("dbrun" = .y)) %>% rbindlist(fill = TRUE) %>% as_tibble %>% 
   dplyr::filter(PEP <= 0.01 & Score >= 30 & str_detect(string = Leading.razor.protein, pattern = "^REV") == FALSE)
 
 # count the number of splice peptides identified.
@@ -627,6 +630,21 @@ cat("\nnumber of NON-AMBIGUOUS junctions validated: ", tibble_junc.exons_filtere
 cat("\nnumber of NON-AMBIGUOUS exons validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% .[-grep(x = tibble_junc.exons_filtered$Proteins, pattern = ";")] %>% .[grep(x = ., pattern = "PSISigma")] %>% unique %>% length)
 
 cat("\nnumber of TOTAL exons validated: ", tibble_junc.exons_filtered %>% .$Proteins %>% strsplit(split = "\\;") %>% unlist %>% .[grep(x = ., pattern = "PSISigma")] %>% unique %>% length)
+
+# we need to get the total unique number of identifiers from each FASTA. so import then count.
+## import FASTA and extract unique identifiers
+list_fasta_exons_differential_combined <- seqinr::read.fasta(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/PSISigma_differential_combined_3FT.fasta", seqtype = "AA", as.string = TRUE, forceDNAtolower = FALSE)
+vector_unique_identifiers_exons_differential_combined <- names(list_fasta_exons_differential_combined) %>% gsub(x = ., pattern = ".*\\|(.*)\\|.*", replacement = "\\1") %>% unique
+list_fasta_exons_constitutive_combined <- seqinr::read.fasta(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/PSISigma_constitutive_combined_3FT.fasta", seqtype = "AA", as.string = TRUE, forceDNAtolower = FALSE) 
+vector_unique_identifiers_exons_constitutive_combined <- names(list_fasta_exons_constitutive_combined) %>% gsub(x = ., pattern = ".*\\|(.*)\\|.*", replacement = "\\1") %>% unique
+
+list_fasta_junctions_differential <- seqinr::read.fasta(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/JUM_junctions_differential_3FT.fasta", seqtype = "AA", as.string = TRUE, forceDNAtolower = FALSE)
+vector_unique_identifiers_junctions_differential_combined <- names(list_fasta_junctions_differential) %>% gsub(x = ., pattern = ".*\\|(.*)\\|.*", replacement = "\\1") %>% unique
+list_fasta_junctions_constitutive <- seqinr::read.fasta(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/JUM_junctions_constitutive_3FT.fasta", seqtype = "AA", as.string = TRUE, forceDNAtolower = FALSE)
+vector_unique_identifiers_junctions_constitutive_combined <- names(list_fasta_junctions_constitutive) %>% gsub(x = ., pattern = ".*\\|(.*)\\|.*", replacement = "\\1") %>% unique
+
+cat("\nnumber of total unique exons in the fasta: ", length(vector_unique_identifiers_exons_differential_combined) + length(vector_unique_identifiers_exons_constitutive_combined))
+cat("\nnumber of total unique junctions in the fasta: ", length(vector_unique_identifiers_junctions_differential_combined) + length(vector_unique_identifiers_junctions_constitutive_combined))
 
 ```
 
@@ -1062,7 +1080,7 @@ tibble_exon_peptides_only <- tibble_class_I_phosphosites[grep(x = tibble_class_I
 list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
   
   # DEBUG ###
-  # a1 <- tibble_junction_peptides_only[27, ]
+  # a1 <- tibble_junction_peptides_only[103, ]
   ###########
   
   cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
@@ -1213,8 +1231,8 @@ list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_
     
     # get transcript relative nt coords
     ## NOTE: this is strand-dependent.
-    parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-    parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+    parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + tibble_matched_3FT_entry$list_transcript_relative_first_nt_of_start_codon - 1
+    parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + tibble_matched_3FT_entry$list_transcript_relative_first_nt_of_start_codon - 1
     
     # get genome-relative positions for every nt encoding the tryptic peptide
     ## have to take the strand into account.
@@ -1326,7 +1344,7 @@ write.table(x = tibble_bedfile, file = paste(R_processing_results_dir, "phosphos
 list_genome.relative.positions_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
   
   # DEBUG ###
-  # a1 <- tibble_junction_peptides_only[1, ]
+  # a1 <- tibble_junction_peptides_only %>% array_tree %>% .[[103]]
   ###########
   
   cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
@@ -1334,59 +1352,65 @@ list_genome.relative.positions_junctions_only <- future_imap(.x = tibble_junctio
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_JUM$virtual_peptide_sequence, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
   
-  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table, ]
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table %>% na.omit, ]
   
-  # get the ORF status. this will dictate how we determine the translation-relative coords.
-  ORF_status <- tibble_matched_3FT_entry$ORF
-  
-  # for dORF, the position of the first AA is going to be the end of the window - the valid ORF length.
-  ORF_AA_length <- nchar(tibble_matched_3FT_entry$virtual_peptide_sequence)
-  
-  # get translated transcript-relative AA coords
-  if (ORF_status == "uORF") {
-    translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$window_start_AA_position %>% trimws %>% as.numeric) - 1
-    translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$window_start_AA_position %>% trimws %>% as.numeric) - 1
-  } else if (ORF_status == "dORF") {
-    # must get the position of the first AA of the dORF first.
-    translation_frame_relative_dORF_start <- (tibble_matched_3FT_entry$window_end_AA_position %>% trimws %>% as.numeric) - ORF_AA_length + 1
+  if (tibble_matched_3FT_entry %>% nrow == 0) {
+    return(NULL)
+  } else {
     
-    translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
-    translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+    # get the ORF status. this will dictate how we determine the translation-relative coords.
+    ORF_status <- tibble_matched_3FT_entry$ORF
+    
+    # for dORF, the position of the first AA is going to be the end of the window - the valid ORF length.
+    ORF_AA_length <- nchar(tibble_matched_3FT_entry$virtual_peptide_sequence)
+    
+    # get translated transcript-relative AA coords
+    if (ORF_status == "uORF") {
+      translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$window_start_AA_position %>% trimws %>% as.numeric) - 1
+      translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$window_start_AA_position %>% trimws %>% as.numeric) - 1
+    } else if (ORF_status == "dORF") {
+      # must get the position of the first AA of the dORF first.
+      translation_frame_relative_dORF_start <- (tibble_matched_3FT_entry$window_end_AA_position %>% trimws %>% as.numeric) - ORF_AA_length + 1
+      
+      translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+      translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+    }
+    
+    # get transcript relative nt coords
+    ## NOTE: this is strand-dependent.
+    parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+    parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+    
+    # get genome-relative positions for every nt encoding the tryptic peptide
+    ## have to take the strand into account.
+    ### extract the genome-relative forward coords of every nt in the parent transcript
+    ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+    vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+    ### use the transcript-relative nt coords to match
+    ### then sort in increasing order for the next step
+    if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
+      
+      all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+      
+    } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
+      
+      all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+      
+    }
+    
+    # the block details are still vector at this point. 
+    # must paste collapse in order to use in the BED file.
+    tibble_position_info <- tibble(
+      "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
+      "genome_relative_positions_phosphosite" = paste(all_genome_relative_positions_of_tryptic_peptide, collapse = ","),
+      "final_identifier" = a1$Leading.proteins %>% paste %>% trimws,
+      "strand"= tibble_matched_3FT_entry$matched_junction_strand,
+      "protein_sequence_tryptic_peptide" = a1$Sequence %>% paste %>% trimws)
+    
+    # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+    return(tibble_position_info)      
+    
   }
-  
-  # get transcript relative nt coords
-  ## NOTE: this is strand-dependent.
-  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-  
-  # get genome-relative positions for every nt encoding the tryptic peptide
-  ## have to take the strand into account.
-  ### extract the genome-relative forward coords of every nt in the parent transcript
-  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
-  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
-  ### use the transcript-relative nt coords to match
-  ### then sort in increasing order for the next step
-  if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
-    
-    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-    
-  } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
-    
-    all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-    
-  }
-  
-  # the block details are still vector at this point. 
-  # must paste collapse in order to use in the BED file.
-  tibble_position_info <- tibble(
-    "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
-    "genome_relative_positions_phosphosite" = paste(all_genome_relative_positions_of_tryptic_peptide, collapse = ","),
-    "final_identifier" = a1$Leading.proteins %>% paste %>% trimws,
-    "strand"= tibble_matched_3FT_entry$matched_junction_strand,
-    "protein_sequence_tryptic_peptide" = a1$Sequence %>% paste %>% trimws)
-  
-  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-  return(tibble_position_info)      
   
 }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM", "tibble_junction_peptides_only", "first", "last")) )
 
@@ -1397,7 +1421,7 @@ list_genome.relative.positions_junctions_only <- future_imap(.x = tibble_junctio
 list_genome.relative.positions_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
   
   # DEBUG ###
-  # a1 <- tibble_exon_peptides_only[4, ]
+  # a1 <- tibble_exon_peptides_only %>% array_tree %>% .[[4]]
   ###########
   
   cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
@@ -1405,37 +1429,53 @@ list_genome.relative.positions_exons_only <- future_imap(.x = tibble_exon_peptid
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_PSIsigma$virtual_peptide_sequence, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
   
-  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma[row_index_of_matched_3FT_table, ]
+  tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_PSIsigma[row_index_of_matched_3FT_table %>% na.omit, ]
   
-  # get the ORF status. this will dictate how we determine the translation-relative coords.
-  ORF_status <- tibble_matched_3FT_entry$ORF_type
-  
-  # for dORF, the position of the first AA is going to be the exon end (EE) position - the valid ORF length + 1
-  ORF_AA_length <- nchar(tibble_matched_3FT_entry$virtual_peptide_sequence)
-  
-  # get translated transcript-relative AA coords
-  if (ORF_status == "uORF") {
-    translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
-    translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
-  } else if (ORF_status == "dORF") {
-    # must get the position of the first AA of the dORF first.
-    translation_frame_relative_dORF_start <- (tibble_matched_3FT_entry$list_translation_frame_relative_effective_EE %>% trimws %>% as.numeric) - ORF_AA_length + 1
+  if (tibble_matched_3FT_entry %>% nrow == 0) {
+    return(NULL)
+  } else {
     
-    translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
-    translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+    # get the ORF status. this will dictate how we determine the translation-relative coords.
+    ORF_status <- tibble_matched_3FT_entry$ORF_type
+    
+    # for dORF, the position of the first AA is going to be the exon end (EE) position - the valid ORF length + 1
+    ORF_AA_length <- nchar(tibble_matched_3FT_entry$virtual_peptide_sequence)
+    
+    # get translated transcript-relative AA coords
+    if (ORF_status == "uORF") {
+      translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
+      translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
+    } else if (ORF_status == "dORF") {
+      # must get the position of the first AA of the dORF first.
+      translation_frame_relative_dORF_start <- (tibble_matched_3FT_entry$list_translation_frame_relative_effective_EE %>% trimws %>% as.numeric) - ORF_AA_length + 1
+      
+      translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+      translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+    }
+    
+    # get parent transcript-relative nt coords
+    parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + tibble_matched_3FT_entry$list_transcript_relative_first_nt_of_start_codon - 1
+    parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + tibble_matched_3FT_entry$list_transcript_relative_first_nt_of_start_codon - 1
+    
+    # get genome-relative positions for every nt encoding the tryptic peptide
+    ## NOTE: coords of parent transcript were already sorted by stranded order. Makes life much simpler
+    vec_stranded_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$list_all_stranded_genome_relative_coords_of_parent_transcript %>% strsplit(split = ",") %>% unlist %>% as.numeric
+    ### use the transcript-relative nt coords to match
+    all_genome_relative_positions_of_tryptic_peptide <- vec_stranded_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+    
+    # the block details are still vector at this point. 
+    # must paste collapse in order to use in the BED file.
+    tibble_position_info <- tibble(
+      "chrom" = tibble_matched_3FT_entry$chr,
+      "genome_relative_positions_phosphosite" = paste(all_genome_relative_positions_of_tryptic_peptide, collapse = ","),
+      "final_identifier" = a1$Leading.proteins %>% paste %>% trimws,
+      "strand"= tibble_matched_3FT_entry$list_matched_strand,
+      "protein_sequence_tryptic_peptide" = a1$Sequence %>% paste %>% trimws)
+    
+    # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+    return(tibble_position_info)      
+    
   }
-  
-  # the block details are still vector at this point. 
-  # must paste collapse in order to use in the BED file.
-  tibble_position_info <- tibble(
-    "chrom" = tibble_matched_3FT_entry$chr,
-    "genome_relative_positions_phosphosite" = paste(all_genome_relative_positions_of_tryptic_peptide, collapse = ","),
-    "final_identifier" = a1$Leading.proteins %>% paste %>% trimws,
-    "strand"= tibble_matched_3FT_entry$list_matched_strand,
-    "protein_sequence_tryptic_peptide" = a1$Sequence %>% paste %>% trimws)
-  
-  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-  return(tibble_position_info)      
   
 }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma", "first", "last")))
 

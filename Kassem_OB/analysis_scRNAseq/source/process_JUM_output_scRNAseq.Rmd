@@ -47,19 +47,19 @@ library(data.table)
 library(Rfast)
 
 # shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/mnt/Tertiary/sharedfolder/"
 
-R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/JUM/"
+R_processing_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/JUM/"
 # results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/"
 
 if(! dir.exists(R_processing_results_dir) ) {
      dir.create(R_processing_results_dir, recursive = TRUE)}
 
-JUM_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/results_JUM/run_2_clusters_and_anticlusters/"
+JUM_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/results_JUM/run_2_clusters_and_anticlusters/"
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-# tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
@@ -1332,14 +1332,24 @@ tibble_number_of_LSV_biomarkers_per_cluster <- long_tibble_LSV_biomarkers_per_cl
 write.table(tibble_number_of_LSV_biomarkers_per_cluster, file = paste(R_processing_results_dir, "tibble_number_of_LSV_biomarkers_per_cluster.txt", sep = ""), sep = "\t", quote = FALSE, col.names = TRUE, row.names = FALSE)
 
 # import bulk JUM differential table 
-tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_1_PGNEXUS_OBseries_pvalue1/results/figures/wide_table_of_1062_junctions_dPSI_OB_diff_any_qvalue0.01_any_dPSI_greaterthan_0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 # filter for only genes which were in the bulk dataset.
-long_tibble_LSV_biomarkers_per_cluster_filtered_by_bulk <- dplyr::inner_join(long_tibble_LSV_biomarkers_per_cluster, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::select(Gene, AS_event_ID, sub_junction_start_coor, sub_junction_end_coor) %>% setNames(c("Gene", "AS_event_ID_bulk", "sub_junction_start_coor_bulk", "sub_junction_end_coor_bulk")), by = c("Gene"))
+long_tibble_LSV_biomarkers_per_cluster_filtered_by_bulk <- dplyr::inner_join(long_tibble_LSV_biomarkers_per_cluster, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::select(Gene, AS_event_ID, sub_junction_start_coor, sub_junction_end_coor, splicemode) %>% setNames(c("Gene", "AS_event_ID_bulk", "sub_junction_start_coor_bulk", "sub_junction_end_coor_bulk", "splicemode_bulk")), by = c("Gene"))
 # write table
 write.table(long_tibble_LSV_biomarkers_per_cluster_filtered_by_bulk, file = paste(R_processing_results_dir, "long_tibble_LSV_biomarkers_per_cluster_filtered_by_bulk.txt", sep = ""), sep = "\t", quote = FALSE, col.names = TRUE, row.names = FALSE)
 
 ```
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2748,7 +2758,7 @@ tibble_ENSP_to_uniprotkb <- biomaRt::getBM(attributes = c("ensembl_peptide_id", 
 library(rtracklayer)
 
 tibble_ref_gtf_original <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
-# tibble_ref_gtf_original <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+# tibble_ref_gtf_original <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
 
 tibble_ref_gtf_original <- tibble_ref_gtf_original %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
 
@@ -2757,14 +2767,14 @@ colnames(tibble_ref_gtf_original) <- c("chr", "start", "end", "width", "strand",
 tibble_ref_gtf_original <- tibble_ref_gtf_original %>% mutate_if(is.factor, as.character)
 
 # import dbPTM info
-# Z:/dbPTM_download/extract/allPTM_human.txt
+# /mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt
 tibble_dbPTM_allhuman_annotations <- read.delim("/media/Ubuntu/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-# dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
 # import PhosphoSitePlus info
-# Z:/phosphositeplus_phosphosites_human.tab
+# /mnt/Tertiary/sharedfolder/phosphositeplus_phosphosites_human.tab
 tibble_phosphositeplus_allhuman_phosphosites <- read.delim("/media/Ubuntu/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-# tibble_phosphositeplus_allhuman_phosphosites <- read.delim("Z:/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# tibble_phosphositeplus_allhuman_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
 # change the residue position column
 tibble_phosphositeplus_allhuman_phosphosites[, "modified_residue_position"] <- gsub(x = tibble_phosphositeplus_allhuman_phosphosites$modified_residue_position, pattern = "^([A-Z])([0-9]{1,5})(.*)", replacement = "\\2")
@@ -4147,7 +4157,7 @@ print("rip")
 
 ```{r}
 
-clipseq_dir <- "Z:/isoform_usage_project/CLIPseq_files/"
+clipseq_dir <- "/mnt/Tertiary/sharedfolder/isoform_usage_project/CLIPseq_files/"
 
 FLASHseq_dir <- "Y:/2019_FLASHseq/results/R_processing_results/"
 
@@ -5556,7 +5566,7 @@ set directories
 
 # the EXACT path of the file, not its containing directory
 
-logCPM_OBseries_anysig_DEGs_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_2_eRNA/R_processing_results/edgeR_GLM_DEGs_logCPM.txt"
+logCPM_OBseries_anysig_DEGs_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_RSEM/run_2_eRNA/R_processing_results/edgeR_GLM_DEGs_logCPM.txt"
 
 ```
 

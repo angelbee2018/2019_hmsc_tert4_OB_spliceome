@@ -5121,7 +5121,7 @@ write.table(x = tibble_ref_entries_matched_to_exons_unmatched, file = paste(R_pr
 list_ref_entries_matched_to_exons_pruned <- list_ref_entries_matched_to_exons %>% purrr::map(~.x$pruned_list) %>% flatten
 
 plan(multiprocess)
-options(mc.cores = 6)
+options(mc.cores = 8)
 
 # add the matched CDS from the exon number and transcript ids of matched exons
 list_ref_entries_matched_to_exons.and.CDS <- list_ref_entries_matched_to_exons_pruned %>% future_map(
@@ -5429,6 +5429,9 @@ message("percent of differential regions matched to protein coding transcript: "
 message("percent of differential regions matched to an lncRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "lncRNA") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 message("percent of differential regions matched to a miRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "miRNA") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 
+
+message("percent of differential regions overlapping a start codon: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "start_codon") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+message("percent of differential regions overlapping a stop codon: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "stop_codon") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
@@ -5482,11 +5485,11 @@ message("total number of unique exons with any sort of protein-level annotation:
 
 message("total percent of unique exons overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
-message("total percent of unique exons overlapping a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique exons matching a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons matching a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons matching a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons matching a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total number of unique exons matching a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
 ```
 
@@ -5511,6 +5514,5 @@ ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +
  ggsave(filename = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.svg", sep = ""), device = "svg", dpi = 600, width = 4, height = 8, units = "cm") 
 
 write.table(x = tibble_PTM_tally, file = paste(R_processing_results_dir, "tally_overlapping_PTMs_differential_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_exons_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
 
 ```

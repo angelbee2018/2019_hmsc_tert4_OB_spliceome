@@ -3036,6 +3036,8 @@ list_of_attributes_to_retrieve <- list("interpro" = c("ensembl_peptide_id", "int
 
 ```{r}
 
+options(mc.cores = 10)
+
 # read tables
 list_of_tibbles_biomart_domain_annotation <- future_map(.x = names(list_of_attributes_to_retrieve), .f = ~read.delim(paste(shared_dir, "table_biomart_ENSP_to_", .x, "_38.98.txt", sep = ""), row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble", "shared_dir"))) %>% 
   set_names(names(list_of_attributes_to_retrieve))
@@ -3622,6 +3624,8 @@ message("percent of differential regions matched to protein coding transcript: "
 message("percent of differential regions matched to an lncRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "lncRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
 message("percent of differential regions matched to a miRNA transcript: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "miRNA") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
 
+message("percent of differential regions overlapping a start codon: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "start_codon") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
+message("percent of differential regions overlapping a stop codon: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "stop_codon") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
 message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
 message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
 message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length))
@@ -3671,7 +3675,7 @@ ggplot(tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)) %>
 
 write.table(x = tibble_interpro_id_tally_per_ASeventID %>% dplyr::arrange(desc(tally)), file = paste(R_processing_results_dir, "tally_overlapping_interpro_domains_differential_junctions_", dPSI_cutoff,  "_", p_or_q_value, qpvalue_cutoff, "_", nrow(tibble_protein_level_summary_count), "_VSRs_anysig_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-message("total number of unique LSVs with any sort of protein-level annotation: ", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length, " (", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length *100/nrow(tibble_final_transcript_feature_annotation), "% of those which have any transcript annotation)")
+message("total number of unique LSVs with any sort of protein-level annotation: ", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length, " (", tibble_final_biomart_annotation$AS_event_ID %>% unique %>% length *100/tibble_final_transcript_feature_annotation$AS_event_ID %>% unique %>% length, "% of those which have any transcript annotation)")
 
 message("total percent of unique LSVs overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 

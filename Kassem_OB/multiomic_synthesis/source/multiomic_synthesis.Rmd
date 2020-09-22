@@ -1382,15 +1382,15 @@ ggplot(data = tibble_combined_biomart_RNAlevel, aes(x = `interpro_description`, 
   geom_text(stat = "identity", aes(label = tally), position = position_dodge(width = 1), hjust = -0.1) +
   # geom_text(stat = "identity", aes(y = tally + 10 + ((floor(tally %>% log10) + 1) * 12.5), label = significant %>% (function(x) {y <- x; y[y == TRUE] <- "*"; y[y == FALSE] <- ""; return(y) } )) , position = position_dodge(width = 1), vjust = 0.8, size = 8, colour = "forestgreen") +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 25)) +
-  ylim(c(0, tibble_combined_biomart_RNAlevel$tally %>% max * 1.2)) +
+  ylim(c(0, tibble_combined_biomart_RNAlevel$tally %>% max * 1.3)) +
   ggtitle("Top 10 interpro domains, JUM and PSI-Sigma, differential") +
   xlab("Interpro domain") +
   ylab("Number of VSRs/exons") +
   coord_flip() +
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_with_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_with_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
+  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
+  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
 
 ```
 
@@ -1417,15 +1417,15 @@ ggplot(data = tibble_combined_PTMs_RNAlevel, aes(x = `PTM_type`, y = tally, fill
   geom_text(stat = "identity", aes(label = tally), position = position_dodge(width = 1), hjust = -0.1) +
   # geom_text(stat = "identity", aes(y = tally + 10 + ((floor(tally %>% log10) + 1) * 12.5), label = significant %>% (function(x) {y <- x; y[y == TRUE] <- "*"; y[y == FALSE] <- ""; return(y) } )) , position = position_dodge(width = 1), vjust = 0.8, size = 8, colour = "forestgreen") +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 25)) +
-  ylim(c(0, tibble_combined_PTMs_RNAlevel$tally %>% max(na.rm = TRUE) * 1.2)) +
+  ylim(c(0, tibble_combined_PTMs_RNAlevel$tally %>% max(na.rm = TRUE) * 1.3)) +
   ggtitle("Top 10 PTMs, JUM and PSI-Sigma, differential") +
   xlab("PTM type") +
   ylab("Number of VSRs/exons") +
   coord_flip() +
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_with_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 6, units = "cm") +
-  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_with_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 6, units = "cm")
+  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 6, units = "cm") +
+  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 6, units = "cm")
 
 ```
 
@@ -2724,10 +2724,10 @@ message("total number of unique VSRs with any sort of protein-level annotation: 
 message("total percent of unique VSRs overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
 message("total percent of unique VSRs overlapping a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique VSRs overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique VSRs overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique VSRs overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique VSRs overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique VSRs overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique VSRs overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique VSRs overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique VSRs overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
 # PTM level
 tibble_PTM_filtered_by_proteome_JUM_tally <- tibble_JUM_junction_ontology_PTMs_filtered %>% 
@@ -2834,10 +2834,10 @@ message("total number of unique exons with any sort of protein-level annotation:
 message("total percent of unique exons overlapping an interpro domain: ", length(which(tibble_protein_level_summary_count$overlaps_interpro_domain == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
 message("total percent of unique exons overlapping a low complexity region: ", length(which(tibble_protein_level_summary_count$overlaps_LCR == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
-message("total number of unique exons overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique exons overlapping a disordered region: ", length(which(tibble_protein_level_summary_count$overlaps_disordered_region == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique exons overlapping a coiled-coiled domain: ", length(which(tibble_protein_level_summary_count$overlaps_ncoils == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique exons overlapping a signalp domain: ", length(which(tibble_protein_level_summary_count$overlaps_signalp == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
+message("total percent of unique exons overlapping a tmhmm domain: ", length(which(tibble_protein_level_summary_count$overlaps_tmhmm == TRUE))/nrow(tibble_protein_level_summary_count) * 100)
 
 # PTM level
 tibble_PTM_tally_filtered_by_proteome_PSIsigma <- tibble_PSIsigma_exon_ontology_PTMs_filtered %>% 
@@ -2897,8 +2897,8 @@ ggplot(data = tibble_combined_biomart_RNAlevel_filtered_by_proteome, aes(x = `in
   coord_flip() +
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_filtered_by_proteome_with_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_filtered_by_proteome_with_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
+  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_filtered_by_proteome_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
+  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_filtered_by_proteome_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
 
 ### PTMs
 tibble_combined_PTMs_RNAlevel_filtered_by_proteome <- dplyr::full_join(tibble_PTM_filtered_by_proteome_JUM_tally %>% dplyr::rename("tally_JUM" = "tally"), 
@@ -2929,8 +2929,8 @@ ggplot(data = tibble_combined_PTMs_RNAlevel_filtered_by_proteome, aes(x = `PTM_t
   coord_flip() +
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_filtered_by_proteome_with_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 6, units = "cm") +
-  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_filtered_by_proteome_with_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 6, units = "cm")
+  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_filtered_by_proteome_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 6, units = "cm") +
+  ggsave(filename = paste(results_dir, "tibble_combined_PTM_RNAlevel_filtered_by_proteome_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 6, units = "cm")
 
 ```
 
@@ -3035,7 +3035,7 @@ NOTE: For all the proteome-filtered, MUST walk along the **CDS**.
 - Each interpro domain
 - dbPTM sites (which already includes phosphositeplus)
 
-## set environment and GTF
+### set environment and GTF
 
 ```{r}
 
@@ -3075,7 +3075,7 @@ tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibbl
 
 ```
 
-### Reference preprocessing: define and map topologies, cast reference regions onto exon/CDS-relative coords.
+### Reference preprocessing: define and map topologies, cast reference regions onto exon-relative coords.
 
 1. define exonic and CDS relative topology mapping
 2. create the effective exome/CDSome
@@ -3083,7 +3083,7 @@ tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibbl
 
 NOTE: biomart regions and PTM sites need to be pre-cast onto the genome before converting to CDS-relative coords.
 
-#### construction of the effective exome
+#### construction of the effective exome AND transcript region conversion
 
 ```{r}
 
@@ -3154,7 +3154,9 @@ granges_effective_exome <- toGRanges(tibble_effective_exome %>%
 
 # move non-exonic entries over to transcript-relative coords.
 ## we will choose everything except for gene, transcript and selenocysteine because they span across multiple exons and hence will break the matching algorithm.
-tibble_non_exonic_GTF_entries <- tibble_ref_gtf_original[tibble_ref_gtf_original$type %in% c("CDS", "start_codon", "stop_codon", "five_prime_utr", "three_prime_utr"), ]
+tibble_non_exonic_GTF_entries <- dplyr::bind_rows(
+  tibble_ref_gtf_original[tibble_ref_gtf_original$type %in% c("CDS", "start_codon", "stop_codon", "five_prime_utr", "three_prime_utr"), ],
+  tibble_ref_gtf_original[tibble_ref_gtf_original$type == "exon" & tibble_ref_gtf_original$transcript_biotype %in% c("protein_coding", "lncRNA", "miRNA"), ] )
 ## group-split the non-exonic entries by chromosome so we can map2 over both.
 list_non_exonic_GTF_entries <- purrr::map(.x = names(list_exonic_GTF_entries_genome_to_exon_relative_mapping),
                                           .f = ~tibble_non_exonic_GTF_entries[tibble_non_exonic_GTF_entries$chr == .x, ])
@@ -3204,14 +3206,23 @@ list_non_exonic_GTF_entries_exon_relative_coords <- future_map2(.x = list_exonic
 tibble_non_exonic_GTF_entries_exon_relative_coords <- list_non_exonic_GTF_entries_exon_relative_coords %>% 
   purrr::map(~.x %>% rbindlist(use.names = TRUE)) %>% rbindlist(use.names = TRUE) %>% as_tibble %>% type_convert
 
-# save(tibble_non_exonic_GTF_entries_exon_relative_coords, file = "/media/angel/seagate_500/tibble_non_exonic_GTF_entries_exon_relative_coords.Rlist")
+# create granges of transcript "type" and "transcript_biotype".
+## this is a little complicated because we're splitting by two rows. but basically we have to group_split the exonic and non-exonic entries separately
+## the non-exonic will be split by "type" and the exonic will be split by "transcript_biotype".
+## then splice the lists together.
+## this is because transcript biotypes to be split can be both non-exon or exon, whereas non-exon/exon to be split are always in one transcript_biotype.
+list_split_ensembl_transcript_types_and_biotypes <- purrr::splice(
+  tibble_non_exonic_GTF_entries_exon_relative_coords %>% 
+    dplyr::filter(type != "exon") %>%
+    dplyr::group_split(type) %>%
+    set_names(purrr::map(.x = ., .f = ~.x$type %>% unique)),
+  tibble_non_exonic_GTF_entries_exon_relative_coords %>% 
+    dplyr::filter(type == "exon") %>%
+    dplyr::group_split(transcript_biotype) %>%
+    set_names(purrr::map(.x = ., .f = ~.x$transcript_biotype %>% unique))
+) %>% flatten
 
-# load(file = "/media/angel/seagate_500/tibble_non_exonic_GTF_entries_exon_relative_coords.Rlist")
-
-# create granges of transcript "type" 
-list_granges_ensembl_transcript_types <- tibble_non_exonic_GTF_entries_exon_relative_coords %>%
-  dplyr::group_split(type) %>%
-  set_names(purrr::map(.x = ., .f = ~.x$type %>% unique)) %>%
+list_granges_ensembl_transcript_types <- list_split_ensembl_transcript_types_and_biotypes %>%
   purrr::map(~toGRanges(.x[, c("chr", "transcript_relative_start", "transcript_relative_end")] %>% 
                           # turn chr column into chr1 chr2 etc...
                           dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
@@ -3303,7 +3314,7 @@ granges_effective_CDSome <- toGRanges(tibble_effective_CDSome %>%
 
 ```
 
-### Preprocessing: convert differential positions into UNIQUE Granges and convert to exon/CDS-relative coords.
+### Preprocessing: convert differential positions into UNIQUE Granges and convert to exon-relative coords.
 
 #### differential exonic positions
 
@@ -3976,7 +3987,7 @@ load(file = paste(results_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tib
 
 ```
 
-#### Cast biomart regions onto the genome, convert to CDS-relative topology, then convert to granges.
+#### Cast biomart regions onto the genome, convert to exon*-relative topology, then convert to granges.
 
 ```{r}
 
@@ -4070,7 +4081,7 @@ list_of_tibbles_biomart_regions_cast_onto_genome <- list_of_tibbles_biomart_regi
 # )
 
 ## convert vector of discontinuous sites into chr, start, end.
-list_of_tibbles_biomart_regions_cast_onto_genome_simple_ranges <- purrr::map(
+list_of_tibbles_biomart_regions_cast_onto_genome_simple_ranges <- future_map(
   .x = list_of_tibbles_biomart_regions_cast_onto_genome, 
   .f = function(a1) {
     
@@ -4104,7 +4115,7 @@ list_of_tibbles_biomart_regions_cast_onto_genome_simple_ranges <- purrr::map(
       dplyr::filter(chr %in% c(1:22, "X", "Y")) %>%
       return
                     
-  })
+  }, .progress = TRUE)
 
 plan(list(tweak(multiprocess, workers = 4),
           tweak(multiprocess, workers = 8),
@@ -4114,7 +4125,7 @@ plan(list(tweak(multiprocess, workers = 4),
 # recast the continuous genome-relative biomart ranges onto the CDS.
 # L1: different biomart annotations
 # L2: split by chromosome
-list_of_tibbles_biomart_regions_cast_onto_CDS_simple_ranges <- future_map(
+list_of_tibbles_biomart_regions_cast_onto_exome_simple_ranges <- future_map(
   .x = list_of_tibbles_biomart_regions_cast_onto_genome_simple_ranges,
   .f = function(a1) {
     
@@ -4130,24 +4141,24 @@ list_of_tibbles_biomart_regions_cast_onto_CDS_simple_ranges <- future_map(
     # get chromosomes in common with the CDS-relative mapping
     chr_in_common <- intersect(
       names(list_tibbles_biomart_regions_split_by_chromosome),
-      names(list_CDS_GTF_entries_genome_to_CDS_relative_mapping)
+      names(list_exonic_GTF_entries_genome_to_exon_relative_mapping)
     )
     
     ## map2 over exonic and non-exonic GTF entries, per chromosome
-    list_of_tibbles_biomart_regions_CDS_relative_coords_single_annotation <- future_map2(
-      .x = list_CDS_GTF_entries_genome_to_CDS_relative_mapping[chr_in_common],
+    list_of_tibbles_biomart_regions_exome_relative_coords_single_annotation <- future_map2(
+      .x = list_exonic_GTF_entries_genome_to_exon_relative_mapping[chr_in_common],
       .y = list_tibbles_biomart_regions_split_by_chromosome[chr_in_common],
       .f = function(b1, b2) {
         
         # DEBUG ###
-        # b1 <- list_CDS_GTF_entries_genome_to_CDS_relative_mapping[chr_in_common] %>% .[[1]]
+        # b1 <- list_exonic_GTF_entries_genome_to_exon_relative_mapping[chr_in_common] %>% .[[1]]
         # b2 <- list_tibbles_biomart_regions_split_by_chromosome[chr_in_common] %>% .[[1]]
         ###########
         
         # list-ify the biomart entries, one element per row.
         list_biomart_subset <- b2 %>% array_tree
         # loop thru each element, find overlapping exonic interval, subtract 
-        list_biomart_subset_CDS_relative_coords <- future_map(
+        list_biomart_subset_exome_relative_coords <- future_map(
           .x = list_biomart_subset,
           .f = function(c1) {
             
@@ -4155,17 +4166,17 @@ list_of_tibbles_biomart_regions_cast_onto_CDS_simple_ranges <- future_map(
             # c1 <- list_biomart_subset[[1]]
             ###########
             
-            tibble_matching_CDS_entry <- b1[which(b1$start <= c1$start %>% type.convert & c1$end %>% type.convert <= b1$end), ]
+            tibble_matching_exome_entry <- b1[which(b1$start <= c1$start %>% type.convert & c1$end %>% type.convert <= b1$end), ]
             
             # based on shift (start)g - (start)t, we splice in the the CDS-relative coords of this genome-relative biomart element.
-            shift <- tibble_matching_CDS_entry$start - tibble_matching_CDS_entry$CDS_relative_start
-            CDS_relative_start <- (c1$start %>% type.convert) - shift
-            CDS_relative_end <- (c1$end %>% type.convert) - shift
+            shift <- tibble_matching_exome_entry$start - tibble_matching_exome_entry$transcript_relative_start
+            transcript_relative_start <- (c1$start %>% type.convert) - shift
+            transcript_relative_end <- (c1$end %>% type.convert) - shift
             
             output_tibble <- splice(
               c1,
-              "CDS_relative_start" = CDS_relative_start %>% list,
-              "CDS_relative_end" = CDS_relative_end %>% list
+              "transcript_relative_start" = transcript_relative_start %>% list,
+              "transcript_relative_end" = transcript_relative_end %>% list
             ) %>% as_tibble
             
             return(output_tibble)
@@ -4173,26 +4184,26 @@ list_of_tibbles_biomart_regions_cast_onto_CDS_simple_ranges <- future_map(
           }, .progress = TRUE, .options = future_options(globals = c("b1")) )
         
         # rbindlist and tibblise
-        tibble_biomart_subset_CDS_relative_coords <- list_biomart_subset_CDS_relative_coords %>% rbindlist %>% as_tibble
+        tibble_biomart_subset_exome_relative_coords <- list_biomart_subset_exome_relative_coords %>% rbindlist %>% as_tibble
         
-        return(tibble_biomart_subset_CDS_relative_coords)
+        return(tibble_biomart_subset_exome_relative_coords)
         
       }, .progress = TRUE)
     
     # rbind and tibblise
-    tibble_biomart_regions_CDS_relative_coords_single_annotation <- list_of_tibbles_biomart_regions_CDS_relative_coords_single_annotation %>% 
+    tibble_biomart_regions_exome_relative_coords_single_annotation <- list_of_tibbles_biomart_regions_exome_relative_coords_single_annotation %>% 
       rbindlist %>% as_tibble %>% type_convert
     
-    return(tibble_biomart_regions_CDS_relative_coords_single_annotation)
+    return(tibble_biomart_regions_exome_relative_coords_single_annotation)
     
   }, .progress = TRUE )
 
 # finally convert the CDS relative biomart regions into granges
-list_granges_biomart_regions_CDS_relative <- future_map(
-  .x = list_of_tibbles_biomart_regions_cast_onto_CDS_simple_ranges,
+list_granges_biomart_regions_exome_relative <- future_map(
+  .x = list_of_tibbles_biomart_regions_cast_onto_exome_simple_ranges,
   .f = function(a1) {
     
-    granges_biomart_region <- toGRanges(a1[, c("chr", "start", "end")] %>% 
+    granges_biomart_region <- toGRanges(a1[, c("chr", "transcript_relative_start", "transcript_relative_end")] %>% 
                                           # turn chr column into chr1 chr2 etc...
                                           dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
                                           type_convert %>% 
@@ -4205,7 +4216,7 @@ list_granges_biomart_regions_CDS_relative <- future_map(
 
 ```
 
-#### cast dbPTM sites onto the genome, convert to CDS-relative topology, then convert to granges.
+#### cast dbPTM sites onto the genome, convert to exon*-relative topology, then convert to granges.
 
 ```{r}
 
@@ -4291,10 +4302,10 @@ plan(list(tweak(multiprocess, workers = 4),
           tweak(multiprocess, workers = 4))
 )
 
-# recast the continuous genome-relative biomart ranges onto the CDS.
+# recast the continuous genome-relative biomart ranges onto the *exome
 # L1: different biomart annotations
 # L2: split by chromosome
-list_of_tibbles_PTM_sites_cast_onto_CDS_simple_ranges <- future_map(
+list_of_tibbles_PTM_sites_cast_onto_exome_simple_ranges <- future_map(
   .x = list_of_tibbles_PTM_sites_cast_onto_genome_simple_ranges,
   .f = function(a1) {
     
@@ -4310,24 +4321,24 @@ list_of_tibbles_PTM_sites_cast_onto_CDS_simple_ranges <- future_map(
     # get chromosomes in common with the CDS-relative mapping
     chr_in_common <- intersect(
       names(list_tibbles_regions_split_by_chromosome),
-      names(list_CDS_GTF_entries_genome_to_CDS_relative_mapping)
+      names(list_exonic_GTF_entries_genome_to_exon_relative_mapping)
     )
     
     ## map2 over exonic and non-exonic GTF entries, per chromosome
-    list_of_tibbles_PTM_sites_CDS_relative_coords_single_annotation <- future_map2(
-      .x = list_CDS_GTF_entries_genome_to_CDS_relative_mapping[chr_in_common],
+    list_of_tibbles_PTM_sites_exome_relative_coords_single_annotation <- future_map2(
+      .x = list_exonic_GTF_entries_genome_to_exon_relative_mapping[chr_in_common],
       .y = list_tibbles_regions_split_by_chromosome[chr_in_common],
       .f = function(b1, b2) {
         
         # DEBUG ###
-        # b1 <- list_CDS_GTF_entries_genome_to_CDS_relative_mapping[chr_in_common] %>% .[[1]]
+        # b1 <- list_exonic_GTF_entries_genome_to_exon_relative_mapping[chr_in_common] %>% .[[1]]
         # b2 <- list_tibbles_regions_split_by_chromosome[chr_in_common] %>% .[[1]]
         ###########
         
         # list-ify the entries, one element per row.
         list_subset <- b2 %>% array_tree
         # loop thru each element, find overlapping CDS interval, subtract 
-        list_PTM_subset_CDS_relative_coords <- future_map(
+        list_PTM_subset_exome_relative_coords <- future_map(
           .x = list_subset,
           .f = function(c1) {
             
@@ -4338,14 +4349,14 @@ list_of_tibbles_PTM_sites_cast_onto_CDS_simple_ranges <- future_map(
             tibble_matching_CDS_entry <- b1[which(b1$start <= c1$start %>% type.convert & c1$end %>% type.convert <= b1$end), ]
             
             # based on shift (start)g - (start)t, we splice in the the CDS-relative coords of this genome-relative biomart element.
-            shift <- tibble_matching_CDS_entry$start - tibble_matching_CDS_entry$CDS_relative_start
-            CDS_relative_start <- (c1$start %>% type.convert) - shift
-            CDS_relative_end <- (c1$end %>% type.convert) - shift
+            shift <- tibble_matching_CDS_entry$start - tibble_matching_CDS_entry$transcript_relative_start
+            transcript_relative_start <- (c1$start %>% type.convert) - shift
+            transcript_relative_end <- (c1$end %>% type.convert) - shift
             
             output_tibble <- splice(
               c1,
-              "CDS_relative_start" = CDS_relative_start %>% list,
-              "CDS_relative_end" = CDS_relative_end %>% list
+              "transcript_relative_start" = transcript_relative_start %>% list,
+              "transcript_relative_end" = transcript_relative_end %>% list
             ) %>% as_tibble
             
             return(output_tibble)
@@ -4353,26 +4364,26 @@ list_of_tibbles_PTM_sites_cast_onto_CDS_simple_ranges <- future_map(
           }, .progress = TRUE, .options = future_options(globals = c("b1")) )
         
         # rbindlist and tibblise
-        tibble_PTM_subset_CDS_relative_coords <- list_PTM_subset_CDS_relative_coords %>% rbindlist %>% as_tibble
+        tibble_PTM_subset_exome_relative_coords <- list_PTM_subset_exome_relative_coords %>% rbindlist %>% as_tibble
         
-        return(tibble_PTM_subset_CDS_relative_coords)
+        return(tibble_PTM_subset_exome_relative_coords)
         
       }, .progress = TRUE)
     
     # rbind and tibblise
-    tibble_PTM_sites_CDS_relative_coords_single_annotation <- list_of_tibbles_PTM_sites_CDS_relative_coords_single_annotation %>% 
+    tibble_PTM_sites_exome_relative_coords_single_annotation <- list_of_tibbles_PTM_sites_exome_relative_coords_single_annotation %>% 
       rbindlist %>% as_tibble %>% type_convert
     
-    return(tibble_PTM_sites_CDS_relative_coords_single_annotation)
+    return(tibble_PTM_sites_exome_relative_coords_single_annotation)
     
   }, .progress = TRUE )
 
 # finally convert the CDS relative PTM sites into granges
-list_granges_PTM_sites_CDS_relative <- future_map(
-  .x = list_of_tibbles_PTM_sites_cast_onto_CDS_simple_ranges,
+list_granges_PTM_sites_exome_relative <- future_map(
+  .x = list_of_tibbles_PTM_sites_cast_onto_exome_simple_ranges,
   .f = function(a1) {
     
-    granges_PTM_sites <- toGRanges(a1[, c("chr", "start", "end")] %>% 
+    granges_PTM_sites <- toGRanges(a1[, c("chr", "transcript_relative_start", "transcript_relative_end")] %>% 
                                           # turn chr column into chr1 chr2 etc...
                                           dplyr::mutate_at(.vars = "chr", .funs = function(x) {paste("chr", x, sep = "")} ) %>%
                                           type_convert %>% 
@@ -4384,25 +4395,6 @@ list_granges_PTM_sites_CDS_relative <- future_map(
   }, .progress = TRUE )
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ### Permutation test
 
@@ -4431,14 +4423,14 @@ list_granges_CDS_differential_positions <- list(
 
 ```
 
-- we use random shuffle permutations at the level of the exome or CDS. This is because contiguity is achieved in the exome and CDS.
-
 #### transcript regions - loop thru each type of region - **EXOME**
+
+- we use random shuffle permutations at the level of the exome or CDS. This is because contiguity is achieved in the exome and CDS.
 
 ```{r}
 
 plan(list(tweak(multiprocess, workers = 2),
-          tweak(multiprocess, workers = 5),
+          tweak(multiprocess, workers = 8),
           tweak(multiprocess, workers = 8))
 )
 
@@ -4485,37 +4477,40 @@ list_permtest_exonic_transcript_types <- future_map(
 
                                                       
 save(list_permtest_exonic_transcript_types, file = paste(results_dir, "list_permtest_exonic_transcript_types.Rlist", sep = ""))
-# load(file = paste(results_dir, "permtest_JUM_diff.exonic.all.RNA_vs_fixed.genomic.ensembl.transcript.type.Rlist", sep = ""))
+# load(file = paste(results_dir, "list_permtest_exonic_transcript_types.Rlist", sep = ""))
+
+# extract the pvalues
+list_permtest_exonic_transcript_types_pvalues <- list_permtest_exonic_transcript_types %>% purrr::map(.f = ~purrr::map(.x = .x, .f = ~.x$numOverlaps$pval))
 
 ```
 
-#### biomarts regions - loop thru each type of region - **CDSome**
+#### biomarts regions - loop thru each type of region - **EXOME (revised)**
 
 ```{r}
 
 plan(list(tweak(multiprocess, workers = 4),
           tweak(multiprocess, workers = 7),
-          tweak(multiprocess, workers = 8))
+          tweak(multiprocess, workers = 4))
 )
 
 # permtests
 ## L1: JUM/PSI-Sigma, filtered/unfiltered
 ## L2: biomart region
 ## NOTE: we do not need to filter by proteome for the exome.
-list_permtest_CDS_biomart_regions <- future_map(
-  .x = list_granges_CDS_differential_positions, 
+list_permtest_exonic_biomart_regions <- future_map(
+  .x = list_granges_exonic_differential_positions, 
   .f = function(a1) {
     
     # DEBUG ###
-    # a1 <- list_granges_CDS_differential_positions[[1]]
+    # a1 <- list_granges_exonic_differential_positions[[1]]
     ###########
     
     list_result <- future_map(
-      .x = list_granges_biomart_regions_CDS_relative,
+      .x = list_granges_biomart_regions_exome_relative,
       .f = function(b1) {
         
         # DEBUG ###
-        # b1 <- list_granges_biomart_regions_CDS_relative[[1]]
+        # b1 <- list_granges_biomart_regions_exome_relative[[1]]
         ###########
         
         # 4 cores for 1,000 iterations; 8 cores for 10,000
@@ -4527,12 +4522,12 @@ list_permtest_CDS_biomart_regions <- future_map(
                            per.chromosome = FALSE,
                            evaluate.function = numOverlaps,
                            ntimes = 10000,
-                           genome = granges_effective_CDSome,
+                           genome = granges_effective_exome,
                            # min.parallel = 8,
                            alternative = "greater",
                            force.parallel = TRUE,
                            verbose = TRUE,
-                           mc.cores = 8) %>%
+                           mc.cores = 4) %>%
           return
         
       }, .progress = TRUE )
@@ -4540,37 +4535,41 @@ list_permtest_CDS_biomart_regions <- future_map(
   }, .progress = TRUE )
 
                                                       
-save(list_permtest_CDS_biomart_regions, file = paste(results_dir, "list_permtest_CDS_biomart_regions.Rlist", sep = ""))
+save(list_permtest_exonic_biomart_regions, file = paste(results_dir, "list_permtest_exonic_biomart_regions.Rlist", sep = ""))
+# load(file = paste(results_dir, "list_permtest_exonic_biomart_regions.Rlist", sep = ""))
+
+# extract the pvalues
+list_permtest_exonic_biomart_regions_pvalues <- list_permtest_exonic_biomart_regions %>% purrr::map(.f = ~purrr::map(.x = .x, .f = ~.x$numOverlaps$pval))
 
 ```
 
-#### PTMs - loop thru each type of PTM - **CDSome**
+#### PTMs - loop thru each type of PTM - **EXOME (revised)**
 
 ```{r}
 
 plan(list(tweak(multiprocess, workers = 4),
-          tweak(multiprocess, workers = 7),
-          tweak(multiprocess, workers = 8))
+          tweak(multiprocess, workers = 12),
+          tweak(multiprocess, workers = 4))
 )
 
 # permtests
 ## L1: JUM/PSI-Sigma, filtered/unfiltered
 ## L2: biomart region
 ## NOTE: we do not need to filter by proteome for the exome.
-list_permtest_CDS_PTMs <- future_map(
-  .x = list_granges_CDS_differential_positions, 
+list_permtest_exonic_PTMs <- future_map(
+  .x = list_granges_exonic_differential_positions, 
   .f = function(a1) {
     
     # DEBUG ###
-    # a1 <- list_granges_CDS_differential_positions[[1]]
+    # a1 <- list_granges_exonic_differential_positions[[1]]
     ###########
     
     list_result <- future_map(
-      .x = list_granges_PTM_sites_CDS_relative,
+      .x = list_granges_PTM_sites_exome_relative,
       .f = function(b1) {
         
         # DEBUG ###
-        # b1 <- list_granges_PTM_sites_CDS_relative[[1]]
+        # b1 <- list_granges_PTM_sites_exome_relative[[1]]
         ###########
         
         # 4 cores for 1,000 iterations; 8 cores for 10,000
@@ -4582,13 +4581,12 @@ list_permtest_CDS_PTMs <- future_map(
                            per.chromosome = FALSE,
                            evaluate.function = numOverlaps,
                            ntimes = 10000,
-                           genome = granges_effective_CDSome,
+                           genome = granges_effective_exome,
                            # min.parallel = 8,
                            alternative = "greater",
                            force.parallel = TRUE,
                            verbose = TRUE,
-                           mc.cores = 8,
-                           future.fork.enable = TRUE) %>%
+                           mc.cores = 4) %>%
           return
         
       }, .progress = TRUE )
@@ -4596,7 +4594,19 @@ list_permtest_CDS_PTMs <- future_map(
   }, .progress = TRUE )
 
                                                       
-save(list_permtest_CDS_PTMs, file = paste(results_dir, "list_permtest_CDS_PTMs.Rlist", sep = ""))
+save(list_permtest_exonic_PTMs, file = paste(results_dir, "list_permtest_exonic_PTMs.Rlist", sep = ""))
+# load(file = paste(results_dir, "list_permtest_exonic_PTMs.Rlist", sep = ""))
+
+# extract the pvalues
+list_permtest_exonic_PTMs_pvalues <- list_permtest_exonic_PTMs %>% purrr::map(.f = ~purrr::map(.x = .x, .f = ~.x$numOverlaps$pval))
+
+
+```
+
+```{r}
+
+# optional: save workspace for debugging because i'm going to run this overnight and go to sleep.
+save.image(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/multiomic_synthesis/source/22092020_topology_conversion_bootstrapping.RData")
 
 ```
 

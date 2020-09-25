@@ -53,11 +53,13 @@ list_input_arg_info = list(
               help = "Compulsory. output directory. where do you want to save the custom databases? IMPORTANT: directory must end in a \"/\". e.g. correct: ~/outputdir/ incorrect: ~/outputdir", metavar = "character"),
   "10" = make_option(c("-C", "--ncores"), type = "character", default = 0, 
                   help = "Optional. Number of cores to use. possible inputs: numbers 1 to any integer. By default, uses all cores (ncores = 0). If a single number is specified, it will just tell future to loop thru chromosomes in parallel using the specified core count. If numberxnumber for example 7x4 then 28 cores will be used. 7 for chromosomes and 4 for inside each chromosome.", metavar = "character"),
-  "11" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
+  "11" = make_option(c("-S", "--use_start_codon"), type = "character", default = "YES", 
+                    help = "Optional but you should really choose the right option. This option tells the program whether or not there are start codons provided for each transcript (where available). It's useful if you want to re-annotate e.g. the reference Ensembl GTF for the presence of PTCs, so that the program will not consider all 3 translation frames but only consider the frame containing the annotated start codon. If for any reason a transcript doesn't have an associated start codon, the program will revert to considering all 3 frames. By default, start codons are used where applicable, and 3-frame translation is used whenever a start codon annotation is not available (YES). NO: always 3-frame translation. ALWAYS: discard transcripts without start codon annotation.", metavar = "character"),
+  "12" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
                   help = "Optional. Specifies which chromosomes to do: select what chromosomes you want translated. possible inputs: numbers 0-2. 0 (default): nuclear chromosomes only i,e, 1:22, X & Y. 1: nuclear + mitochondrial i.e. 1:22, X & Y, M. 2: everything including haplotype/fusion chromosomes etc... this is possible provided the chromosome names.", metavar = "integer"),
-  "12" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
+  "13" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
                     help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you are doing haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The script won't try to search for a second file. In ensembl, this file is called \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character"),
-  "13" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
+  "14" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
                      help = "Turn this on if you want to save the R workspace in the same name as the --output_name. YES: saves at the end. DEBUG: saves at each critical step. NO: doesn't save.", metavar = "character")
 )
 
@@ -84,6 +86,7 @@ downstream_window_size <- input_args$downstream_window_size
 output_name <- input_args$output_name
 output_dir <- input_args$output_dir
 ncores <- input_args$ncores
+use_start_codon <- input_args$use_start_codon
 chrmode <- input_args$chrmode
 nonchrname <- input_args$nonchrname
 save_workspace_when_done <- input_args$save_workspace_when_done
@@ -126,6 +129,7 @@ save_workspace_when_done <- input_args$save_workspace_when_done
 # junction_table_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na_constituent_junctions.txt"
 # intron_retention_string <- "intron_retention"
 # reconstructed_gtf_path <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/GRAND_OBseries_ref_denovo_reconstructed_stringtiemerged.gtf"
+# reconstructed_gtf_path <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 # source_tag <- "JUM_differential_debug"
 # reference_genome_fasta_dir <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
 # upstream_window_size <- 50
@@ -133,6 +137,7 @@ save_workspace_when_done <- input_args$save_workspace_when_done
 # output_name <- "test_differential_JUM_strawberry"
 # output_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_database_generation/debug/"
 # ncores <- "30x4"
+# use_start_codon <- "YES"
 # chrmode <- 1
 # nonchrname <- NULL
 # save_workspace_when_done <- "YES"
@@ -149,6 +154,7 @@ cat("downstream_window_size:", downstream_window_size, "\n")
 cat("output_name:", output_name, "\n")
 cat("output_dir:", output_dir, "\n")
 cat("ncores:", ncores, "\n")
+cat("use_start_codon:", use_start_codon, "\n")
 cat("chrmode:", chrmode, "\n")
 cat("nonchrname:", nonchrname, "\n")
 cat("save_workspace_when_done:", save_workspace_when_done, "\n")
@@ -574,21 +580,34 @@ list_junction_3FT_result <- future_pmap(
     list_matched_coords_temp <- future_imap(.x = list_GTF_matching_junction_entries, .f = function(b1, b2) {
       
       # DEBUG ###
-      # b1 <- list_GTF_matching_junction_entries[[269]]
+      b1 <- list_GTF_matching_junction_entries[[2]]
       ###########
       
       cat("now processing entry number", b2, "/", length(list_GTF_matching_junction_entries), "\n")
       
       # extract the magnetised junction start and end coords.
-      result <- list("3FT_info" = purrr::map(.x = b1$matching_GTF_entries, .f = ~list(
-        "matched_junction_chr" = .x$junction_specifications$seqnames %>% paste,
-        "matched_junction_start" = .x$junction_specifications$start %>% paste,
-        "matched_junction_end" = .x$junction_specifications$end %>% paste,
-        "matched_junction_strand" = .x$junction_specifications$strand %>% paste,
-        # generate vector of all nucleotide coors from $start to $end
-        "all_parent_transcript_coords" = purrr::map2(.x = .x[["parent_transcript"]]$start, .y = .x[["parent_transcript"]]$end, .f = ~.x:.y) %>% unlist %>% sort) %>%
+      `3FT_info` <- purrr::map(.x = b1$matching_GTF_entries, .f = function(c1) {
+        
+        # DEBUG ###
+        # c1 <- b1$matching_GTF_entries %>% .[[1]]
+        ###########
+        
+        current_strand <- c1$parent_transcript$strand %>% unique
+        
+        list(
+          "matched_junction_chr" = c1$junction_specifications$seqnames %>% paste,
+          "matched_junction_start" = c1$junction_specifications$start %>% paste,
+          "matched_junction_end" = c1$junction_specifications$end %>% paste,
+          "matched_junction_strand" = c1$junction_specifications$strand %>% paste,
+          "start_codon_present" = (c1$parent_transcript$type == "start_codon") %>% which %>% length > 0,
+          "tibble_start_codon_entries" = c1$parent_transcript %>% .[(c1$parent_transcript$type == "start_codon") %>% which, ],
+          "stop_codon_present" = (c1$parent_transcript$type == "stop_codon") %>% which %>% length > 0,
+          "tibble_stop_codon_entries" = c1$parent_transcript %>% .[(c1$parent_transcript$type == "stop_codon") %>% which, ],
+          # generate vector of all nucleotide coords from $start to $end
+          "all_parent_transcript_coords" = purrr::map2(.x = c1[["parent_transcript"]]$start, .y = c1[["parent_transcript"]]$end, .f = ~.x:.y) %>% unlist %>% sort) %>%
           # add in the TRANSCRIPT-RELATIVE POSITIONS of the JUNCTION ACCORDING TO THE SPECIFIED WINDOW
           purrr::splice(., 
+                        "genomic_position_first_nt_of_start_codon" = 
                         "translation_window_start_transcript.relative" = if (.$matched_junction_strand == "+") {
                           max(1, which(.$all_parent_transcript_coords == (.$matched_junction_start %>% as.numeric - 1)) - upstream_window_size + 1) 
                         } else if (.$matched_junction_strand == "-") {
@@ -610,7 +629,10 @@ list_junction_3FT_result <- future_pmap(
                           which(.$all_parent_transcript_coords %>% rev == (.$matched_junction_start %>% as.numeric - 1)) 
                         },
                         # add in all the nucleotide coords of the PARENT transcript
-                        "parent_transcript_forward_nucleotides" = reference_genome_fasta_chr_temp[[b1$chr %>% paste]][.$all_parent_transcript_coords])))
+                        "parent_transcript_forward_nucleotides" = reference_genome_fasta_chr_temp[[b1$chr %>% paste]][.$all_parent_transcript_coords]) %>% 
+        return
+        
+      } )
       
       return(splice(b1,
                     result))
@@ -679,7 +701,7 @@ list_junction_3FT_result <- future_pmap(
     }, .progress = TRUE) # L2
     
     # flatten and distribute the fasta header into all of its child 3FT results
-    list_3FT_result_unnest_temp <- list_3FT_result_temp %>% purrr::discard(.p = ~.x %>% length == 0) %>% purrr::discard(.p = ~.x$`3FT_info` %>% length == 0) %>% purrr::map(.x = list_3FT_result_temp, .f = ~purrr::cross2(.x[c("chr", "start", "end", "strand", "gene_name", "fasta_header", "final_identifier", "splicemode")] %>% list, .x$`3FT_info`)) %>% flatten %>% purrr::map(.f = ~.x %>% flatten)
+    list_3FT_result_unnest_temp <- list_3FT_result_temp %>% purrr::discard(.p = ~.x %>% length == 0) %>% purrr::discard(.p = ~.x$`3FT_info` %>% length == 0) %>% purrr::map(.x = list_3FT_result_temp, .f = ~purrr::cross2(.x[c("chr", "start", "end", "strand", "gene_name", "fasta_header", "final_identifier")] %>% list, .x$`3FT_info`)) %>% flatten %>% purrr::map(.f = ~.x %>% flatten)
     
     # rearrange info into a tibble. one translation frame per row. %>% flatten
     # first, tibblise the translation frame elements of the list, then as_tibble the rest.

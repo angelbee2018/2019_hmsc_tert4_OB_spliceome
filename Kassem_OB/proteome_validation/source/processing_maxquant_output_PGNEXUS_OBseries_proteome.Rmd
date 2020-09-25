@@ -44,6 +44,11 @@ library(data.table)
 library(seqinr)
 # library(Rfast)
 
+# import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
+tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% 
+  as_tibble %>%
+  dplyr::mutate_if(is.factor, as.character)
+
 # maxquant_junctions.3FT_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_maxquant/run_1_PGNEXUS_OBseries_allsamples_angel.junctions.3FT/txt/"
 
 R_processing_results_dir <- paste("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/", sep = "")
@@ -574,15 +579,16 @@ ggplot(long_tibble_evidence_tibbles_facet.peptideclass.dbrun %>% dplyr::distinct
 ```{r}
 
 # calculate the peptide FDR based on the evidence.txt information
-list_local_FDR <- purrr::map(.x = list_imported_maxquant_tibbles_processed[vector_evidence.txt_list.indices], .f = function(.x) {
+list_local_FDR <- purrr::map(.x = list_imported_maxquant_tibbles_processed[c("2012_PGNEXUS_proteome_junc.exons", "2020_phosphoproteome_OBseries_junc.exons")], .f = function(a1) {
   
-  .x <- list_imported_maxquant_tibbles_processed[vector_evidence.txt_list.indices][[1]]
+  .x <- a1$peptides 
+  # %>% dplyr::filter(PEP < 0.0034)
   
-  number_of_reverse_hits_exons <- grep(x = .x$Leading.proteins, pattern = "(REV__exon)") %>% length
-  number_of_reverse_hits_junctions <- grep(x = .x$Leading.proteins, pattern = "(REV__junction)") %>% length
+  number_of_reverse_hits_exons <- grep(x = .x$Leading.razor.protein, pattern = "(REV__psisigma)", ignore.case = TRUE) %>% length
+  number_of_reverse_hits_junctions <- grep(x = .x$Leading.razor.protein, pattern = "(REV__jum)", ignore.case = TRUE) %>% length
   
-  number_of_total_hits_exons <- grep(x = .x$Leading.proteins, pattern = "(exon_)") %>% length
-  number_of_total_hits_junctions <- grep(x = .x$Leading.proteins, pattern = "(junction_)") %>% length
+  number_of_total_hits_exons <- intersect(grep(x = .x$Leading.razor.protein, pattern = "(psisigma)", ignore.case = TRUE), which(.x$Proteins != "")) %>% length
+  number_of_total_hits_junctions <- intersect(grep(x = .x$Leading.razor.protein, pattern = "(jum)", ignore.case = TRUE), which(.x$Proteins != "")) %>% length
   
   FDR_exons <- number_of_reverse_hits_exons/number_of_total_hits_exons
   FDR_junctions <- number_of_reverse_hits_junctions/number_of_total_hits_junctions
@@ -613,7 +619,7 @@ str(list_local_FDR)
 
 # Proteomic validation
 
-## Filter for PEP and score
+## Junc/exons only: Filter for PEP and score
 
 ```{r}
 
@@ -621,15 +627,7 @@ tibble_junc.exons_filtered <- list_imported_maxquant_tibbles_processed[c("2012_P
   dplyr::filter(PEP <= 0.01 & Score >= 30 & str_detect(string = Leading.razor.protein, pattern = "^REV") == FALSE)
 
 # count the number of splice peptides identified.
-cat("\nnumber of junctions/exons validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% unique %>% length)
-
-cat("\nnumber of NON-AMBIGUOUS junctions/exons validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% .[-grep(x = tibble_junc.exons_filtered$Proteins, pattern = ";")] %>% unique %>% length)
-
-cat("\nnumber of NON-AMBIGUOUS junctions validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% .[-grep(x = tibble_junc.exons_filtered$Proteins, pattern = ";")] %>% .[grep(x = ., pattern = "JUM")] %>% unique %>% length)
-
-cat("\nnumber of NON-AMBIGUOUS exons validated: ", tibble_junc.exons_filtered$Leading.razor.protein %>% .[-grep(x = tibble_junc.exons_filtered$Proteins, pattern = ";")] %>% .[grep(x = ., pattern = "PSISigma")] %>% unique %>% length)
-
-cat("\nnumber of TOTAL exons validated: ", tibble_junc.exons_filtered %>% .$Proteins %>% strsplit(split = "\\;") %>% unlist %>% .[grep(x = ., pattern = "PSISigma")] %>% unique %>% length)
+cat("\nnumber of junctions/exons with at least some protein evidence: ", tibble_junc.exons_filtered$Proteins %>% strsplit(split = ";") %>% unlist %>% unique %>% length)
 
 # we need to get the total unique number of identifiers from each FASTA. so import then count.
 ## import FASTA and extract unique identifiers
@@ -647,6 +645,10 @@ cat("\nnumber of total unique exons in the fasta: ", length(vector_unique_identi
 cat("\nnumber of total unique junctions in the fasta: ", length(vector_unique_identifiers_junctions_differential_combined) + length(vector_unique_identifiers_junctions_constitutive_combined))
 
 ```
+
+
+
+## Swissprot: Known isoforms and 
 
 ## Gene set enrichment
 
@@ -746,7 +748,11 @@ list_tryptic_junc_peptides_spanning_logical_test <- list_tryptic_junc_peptides_m
                                                                                                                                ))
 
 # count of shame
-cat("\nWe have identified", which(list_tryptic_junc_peptides_spanning_logical_test %>% unlist == TRUE) %>% length, "peptides which span a splice junction.")
+cat("\nTHIS IS THE NUMBER OF VALIDATED JUNCTIONS FOR JUM")
+
+cat("\nWe have identified", which(list_tryptic_junc_peptides_spanning_logical_test %>% unlist == TRUE & grepl(x = tibble_junc.exons_filtered_with.gene.name_split_juncs.only$Proteins, pattern = "JUM_constitutive")) %>% length, "peptides which span a splice junction (constitutive).")
+
+cat("\nWe have identified", which(list_tryptic_junc_peptides_spanning_logical_test %>% unlist == TRUE & grepl(x = tibble_junc.exons_filtered_with.gene.name_split_juncs.only$Proteins, pattern = "JUM_differential")) %>% length, "peptides which span a splice junction (differential).")
 
 # write the processed table.
 # write.table(tibble_PGNEXUS_MSMS_junction_peptides_with_SJ_crossing_info, file = paste(R_processing_results_dir, "PGNEXUS_MSMS_identified_JUM_q0.01_dpsi0.2_junc.peptides_with_SJ.info.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
@@ -757,36 +763,37 @@ cat("\nWe have identified", which(list_tryptic_junc_peptides_spanning_logical_te
 
 ```{r}
 
-tibble_junction_spanning_peptides_identifier.gene <- tibble_junc.exons_filtered_with.gene.name_split_juncs.only[which(list_tryptic_junc_peptides_spanning_logical_test %>% unlist == TRUE), c("gene_name", "Leading.razor.protein", "Sequence")]
+tibble_junction_spanning_peptides_identifier.gene <- tibble_junc.exons_filtered_with.gene.name_split_juncs.only[which(list_tryptic_junc_peptides_spanning_logical_test %>% unlist == TRUE), c("gene_name", "Leading.razor.protein", "Sequence", "splicemode")]
 
 ```
 
-#### GO enrichment for all junction spanning peptides + exonic peptides identified
+#### GO enrichment for all junction spanning peptides + exonic peptides identified. 
+#### NOTE: THESE ARE NOT VALIDATING. THEY ARE JUST PEPTIDES WHICH PASSED THE SCORE AND PEP CUTOFF.
 
 ```{r}
 
 # join exonic peptides and junction-spanning peptides into the same table
-tibble_confirmed_junc.exons <- dplyr::bind_rows(tibble_junction_spanning_peptides_identifier.gene, tibble_junc.exons_to_gene.name[grep(x = tibble_junc.exons_to_gene.name$Leading.razor.protein, pattern = "PSISigma"), ]) %>% 
+tibble_unconfirmed_junc.exons <- dplyr::bind_rows(tibble_junction_spanning_peptides_identifier.gene, tibble_junc.exons_to_gene.name[grep(x = tibble_junc.exons_to_gene.name$Leading.razor.protein, pattern = "PSISigma"), ]) %>% 
   dplyr::arrange(gene_name)
 
 cat("number of exons per gene: ")
-tibble_confirmed_junc.exons %>% dplyr::filter(str_detect(string = Leading.razor.protein, pattern = "exon")) %>% dplyr::distinct(Leading.razor.protein, .keep_all = TRUE) %>% group_by(gene_name) %>% dplyr::summarise("tally_ids_per_gene" = n()) %>% dplyr::arrange(desc(tally_ids_per_gene)) %>% na.omit %>% .$tally_ids_per_gene %>% mean %>% print
+tibble_unconfirmed_junc.exons %>% dplyr::filter(str_detect(string = Leading.razor.protein, pattern = "exon")) %>% dplyr::distinct(Leading.razor.protein, .keep_all = TRUE) %>% group_by(gene_name) %>% dplyr::summarise("tally_ids_per_gene" = n()) %>% dplyr::arrange(desc(tally_ids_per_gene)) %>% na.omit %>% .$tally_ids_per_gene %>% mean %>% print
 
 cat("number of junctions per gene: ")
-tibble_confirmed_junc.exons %>% dplyr::filter(str_detect(string = Leading.razor.protein, pattern = "junction")) %>% dplyr::distinct(Leading.razor.protein, .keep_all = TRUE) %>% group_by(gene_name) %>% dplyr::summarise("tally_ids_per_gene" = n()) %>% dplyr::arrange(desc(tally_ids_per_gene)) %>% na.omit %>% .$tally_ids_per_gene %>% mean %>% print
+tibble_unconfirmed_junc.exons %>% dplyr::filter(str_detect(string = Leading.razor.protein, pattern = "junction")) %>% dplyr::distinct(Leading.razor.protein, .keep_all = TRUE) %>% group_by(gene_name) %>% dplyr::summarise("tally_ids_per_gene" = n()) %>% dplyr::arrange(desc(tally_ids_per_gene)) %>% na.omit %>% .$tally_ids_per_gene %>% mean %>% print
 
 # write table
-write.table(tibble_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_brief.info_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+write.table(tibble_unconfirmed_junc.exons, file = paste(R_processing_results_dir, "table_brief.info_unconfirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 # CONDUCT ENRICHMENT
-tibble_hyperGO_confirmed_junc.exons <- dplyr::bind_rows(GOHyperGAll(catdb = catdb, gocat = "MF", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
-                                                        GOHyperGAll(catdb = catdb, gocat = "BP", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
-                                                        GOHyperGAll(catdb = catdb, gocat = "CC", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction) %>% as_tibble
+tibble_hyperGO_confirmed_junc.exons <- dplyr::bind_rows(GOHyperGAll(catdb = catdb, gocat = "MF", sample = tibble_unconfirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "BP", sample = tibble_unconfirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "CC", sample = tibble_unconfirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction) %>% as_tibble
 
-write.table(tibble_hyperGO_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_hyperGO_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+write.table(tibble_hyperGO_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_hyperGO_unconfirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 # write the geneset
-write.table(tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, file = paste(R_processing_results_dir, "table_geneset_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+write.table(tibble_unconfirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, file = paste(R_processing_results_dir, "table_geneset_unconfirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 ```
 
@@ -804,8 +811,8 @@ Step 4 (outside R): BEDtoBAM
 ```{r}
 
 # split table by exons or junctions
-tibble_junction_peptides_only <- tibble_junc.exons_filtered[grep(x = tibble_junc.exons_filtered$Leading.razor.protein, pattern = "JUM"), ]
-tibble_exon_peptides_only <- tibble_junc.exons_filtered[grep(x = tibble_junc.exons_filtered$Leading.razor.protein, pattern = "PSISigma"), ]
+tibble_junction_peptides_only <- tibble_junc.exons_filtered[grep(x = tibble_junc.exons_filtered$Leading.razor.protein, pattern = "JUM", ignore.case = TRUE), ]
+tibble_exon_peptides_only <- tibble_junc.exons_filtered[grep(x = tibble_junc.exons_filtered$Leading.razor.protein, pattern = "PSISigma", ignore.case = TRUE), ]
 
 # to get the genome-relative coords of tryptic peptides, loop thru every tryptic peptide + fasta identifier combination
 # extract the MQ outputted start/end positions: 
@@ -818,13 +825,13 @@ tibble_exon_peptides_only <- tibble_junc.exons_filtered[grep(x = tibble_junc.exo
 ## retrieve the row index of the detailed 3FT table
 ## match FASTA header and sequence
 ## take the first match is fine.
-list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
+list_peptide_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
   
   # DEBUG ###
   # a1 <- tibble_junction_peptides_only[56, ]
   ###########
   
-  cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+  # cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
   
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_JUM$virtual_peptide_sequence, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
@@ -914,7 +921,8 @@ list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>
     "qName" = a1$Sequence %>% paste %>% trimws)
   
   # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-  return(tibble_block_info)      
+  return(list("tibble_block_info" = tibble_block_info,
+              "vector_genomic_positions" = all_genome_relative_positions_of_tryptic_peptide))
   
 }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_detailed_3FT_summary_JUM", "tibble_junction_peptides_only", "first", "last")))
 
@@ -922,13 +930,13 @@ list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>
 ## retrieve the row index of the detailed 3FT table
 ## match FASTA header and sequence
 ## take the first match is fine.
-list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
+list_peptide_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_tree, .f = function(a1, a2) {
   
   # DEBUG ###
   # a1 <- tibble_exon_peptides_only[1, ]
   ###########
   
-  cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
+  # cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
   
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.razor.protein %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_PSIsigma$virtual_peptide_sequence, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
@@ -941,22 +949,22 @@ list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_
   # for dORF, the position of the first AA is going to be the exon end (EE) position - the valid ORF length + 1
   ORF_AA_length <- nchar(tibble_matched_3FT_entry$virtual_peptide_sequence)
   
-  # get translated transcript-relative AA coords
+  # get translation-relative AA coords
   if (ORF_status == "uORF") {
-    translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
-    translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
+    translation_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
+    translation_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$list_translation_frame_relative_effective_ES %>% trimws %>% as.numeric) - 1
   } else if (ORF_status == "dORF") {
     # must get the position of the first AA of the dORF first.
     translation_frame_relative_dORF_start <- (tibble_matched_3FT_entry$list_translation_frame_relative_effective_EE %>% trimws %>% as.numeric) - ORF_AA_length + 1
     
-    translated_transcript_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
-    translated_transcript_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+    translation_relative_AA_start <- (a1$Start.position %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
+    translation_relative_AA_end <- (a1$End.position %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
   }
   
   # get transcript relative nt coords
   ## NOTE: this is strand-dependent.
-  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
+  parent_transcript_relative_nt_start <- 3*(translation_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + tibble_matched_3FT_entry$list_transcript_relative_first_nt_of_start_codon - 1
+  parent_transcript_relative_nt_end <- 3*translation_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)  + tibble_matched_3FT_entry$list_transcript_relative_first_nt_of_start_codon - 1
   
   # get genome-relative positions for every nt encoding the tryptic peptide
   ## have to take the strand into account.
@@ -1021,18 +1029,19 @@ list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_
     "qName" = a1$Sequence %>% paste %>% trimws)
   
   # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-  return(tibble_block_info)      
+  return(list("tibble_block_info" = tibble_block_info,
+              "vector_genomic_positions" = all_genome_relative_positions_of_tryptic_peptide))
   
 }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma_diff", "first", "last")))
 
 # rbind and tibblise
-tibble_bedfile <- splice(list_bedfile_junctions_only, list_bedfile_exons_only) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
+tibble_peptide_bedfile <- splice(list_peptide_bedfile_junctions_only %>% purrr::map(~.x$tibble_block_info), list_peptide_bedfile_exons_only %>% purrr::map(~.x$tibble_block_info)) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
 
 # track line
 # cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
 # 
 # append = TRUE
-write.table(x = tibble_bedfile, file = paste(R_processing_results_dir, "proteome_coverage_JUM_PSISigma_cons_diff_strawberry_maxquant.bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+write.table(x = tibble_peptide_bedfile, file = paste(R_processing_results_dir, "proteome_coverage_JUM_PSISigma_cons_diff_strawberry_maxquant.bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 # GO TO BEDTOOLS NOW ###
 # cd /media/Ubuntu/sharedfolder/bedtools2/bin/
@@ -1042,6 +1051,196 @@ write.table(x = tibble_bedfile, file = paste(R_processing_results_dir, "proteome
 # 
 # # add the QNAME for real this time
 # tibble_bedfile2 <- read.delim(file = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
+
+```
+
+#### validate PSI-Sigma exons using the .bed file.
+
+```{r}
+
+plan(list(tweak(multiprocess, workers = 8),
+          tweak(multiprocess, workers = 4)))
+
+# extract only the unique sequence entries from PSI-Sigma
+tibble_PSIsigma_peptide_bedfile_unique <- tibble_peptide_bedfile[grep(x = tibble_peptide_bedfile$name, pattern = "PSIsigma", ignore.case = TRUE), ] %>%
+  dplyr::distinct(chrom, strand, start, end, blockCount, blockSizes, blockStarts, .keep_all = TRUE) %>%
+  # extract the exonic coords
+  dplyr::mutate("alternative_exon_start" = gsub(x = name, pattern = ".*VSR_([^_]+)_exon_([^\\:]+)\\:([0-9]+)\\-([0-9]+)$", replacement = "\\3"),
+                "alternative_exon_end" = gsub(x = name, pattern = ".*VSR_([^_]+)_exon_([^\\:]+)\\:([0-9]+)\\-([0-9]+)$", replacement = "\\4"))
+
+# list-ify by chromosome for looping with the ensembl GTF
+
+chr_in_common <- intersect(tibble_PSIsigma_peptide_bedfile_unique$chrom %>% unique, tibble_ref_gtf$seqnames %>% unique)
+
+list_PSIsigma_peptide_bedfile_unique_by_chr <- purrr::map(.x = chr_in_common, .f = ~tibble_PSIsigma_peptide_bedfile_unique[tibble_PSIsigma_peptide_bedfile_unique$chrom == .x, ]) %>%
+  set_names(chr_in_common)
+
+list_tibble_ref_gtf_by_chr <- purrr::map(.x = chr_in_common, .f = ~tibble_ref_gtf[tibble_ref_gtf$seqnames == .x, ]) %>%
+  set_names(chr_in_common)
+
+list_validation_result <- future_map2(
+  .x = list_PSIsigma_peptide_bedfile_unique_by_chr,
+  .y = list_tibble_ref_gtf_by_chr,
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- list_PSIsigma_peptide_bedfile_unique_by_chr[[1]]
+    # a2 <- list_tibble_ref_gtf_by_chr[[1]]
+    ###########
+    
+    result_L2 <- future_map(
+      .x = a1 %>% array_tree,
+      .f = function(b1) {
+        
+        # DEBUG ###
+        # b1 <- a1 %>% array_tree %>% .[[2]]
+        ###########
+        
+        # We only have to deal with scenarios in which the alternative exon is LONGER than the reference exons.
+        # In these cases, we require the protein evidence to lie at least partly in the region unique to the exon. 
+        # To that end, we should just ONLY match reference exons which are only PARTIALLY OVERLAPPING with the alernative exon, and find whether the protein evidence is in the overhanging region.
+        
+        # find all ref. exons overlapping with the alternative exon.
+        tibble_ref_exons_partially_overlapping_alt_exon <- a2[which(a2$type == "exon" & 
+                                                                      a2$transcript_biotype == "protein_coding" &
+                                                                      a2$start < b1$alternative_exon_end %>% type.convert & 
+                                                                      a2$end > b1$alternative_exon_start %>% type.convert &
+                                                                      (a2$start > b1$alternative_exon_start %>% type.convert | 
+                                                                         a2$end < b1$alternative_exon_end %>% type.convert)), ]
+        
+        # see if there's an exact exon match to the alternative exon.
+        tibble_exact_exon_match_to_alternative_exon <- a2[which(a2$type == "exon" & 
+                                                                  a2$transcript_biotype == "protein_coding" &
+                                                                  a2$start == b1$alternative_exon_start %>% type.convert & 
+                                                                  a2$end == b1$alternative_exon_end %>% type.convert), ]
+        
+        # if no potential ambiguity then the protein evidence is validating.
+        # also if there's no corresponding exon in the reference THAT'S PROTEIN CODING, any evidence is validating too! (technically, proteme evidence validates CODING REGIONS of transcripts, and not technically exons themselves.) 
+        if (tibble_ref_exons_partially_overlapping_alt_exon %>% nrow == 0 | tibble_exact_exon_match_to_alternative_exon %>% nrow == 0) {
+          return("validating")
+        } else if (tibble_ref_exons_partially_overlapping_alt_exon %>% nrow > 0) {
+          
+          # get all the coords of the alternative exon
+          vec_all_genomic_positions_of_alternative_exon <- (b1$alternative_exon_start %>% type.convert):(b1$alternative_exon_end %>% type.convert)
+          
+          # list all the positions of the overhanging region.
+          ## get all the coords of each partially overlapping ref. exon.
+          list_all_genomic_positions_of_each_partially_overlapping_ref_exon <- purrr::map2(.x = tibble_ref_exons_partially_overlapping_alt_exon$start,
+                                                                                           .y = tibble_ref_exons_partially_overlapping_alt_exon$end,
+                                                                                           .f = ~.x:.y)
+          
+          # get overhang positions (setdiff) for each ref. exon
+          # NOTE: ORDER IS IMPORTANT. it's left arg. minus right arg.
+          list_all_genomic_positions_of_overhangs_per_ref_exon <- purrr::map(.x = list_all_genomic_positions_of_each_partially_overlapping_ref_exon,
+                                                                             .f = ~setdiff(vec_all_genomic_positions_of_alternative_exon, .x))
+          
+          # keep only unique overhang positions.
+          vector_all_unique_overhang_genomic_positions <- list_all_genomic_positions_of_overhangs_per_ref_exon %>% purrr::reduce(intersect)
+          
+          # finally test for overlap between the tryptic peptide and the overhang
+          logical_test_overhang_overlap <- any(vector_all_unique_overhang_genomic_positions <= b1$thickEnd & vector_all_unique_overhang_genomic_positions >= b1$thickStart)
+          
+          if (logical_test_overhang_overlap == TRUE) {
+            return("validating")
+          } else if (logical_test_overhang_overlap == FALSE) {
+            return("ambiguous")
+          }
+          
+        }
+        
+      } ) %>%  # L2: each tryptic peptide entry
+      set_names(nm = paste(a1$name,";", a1$thickStart, "-", a1$thickEnd, sep = ""))
+    
+  }, .progress = TRUE ) # L1: over chromosomes
+
+# tibblise into a summary of ambiguity for each exon
+tibble_PSIsigma_exon_ambiguity_summary <- list_validation_result %>% 
+  flatten %>% 
+  as_tibble(.name_repair = "unique") %>% 
+  t %>% 
+  as_tibble(name_repair = "unique", rownames = "final_identifier_and_peptide_coords") %>% 
+  setNames(c("final_identifier_and_peptide_coords", "ambiguity")) %>% 
+  dplyr::mutate("final_identifier" = gsub(x = final_identifier_and_peptide_coords, pattern = "(.*);(.*)", replacement = "\\1"))
+
+# finally the count of shame as we get absolutely screwed over by the sparseness of LC-MS.
+cat("\nTHIS IS THE NUMBER OF VALIDATED EXONS FOR PSI-SIGMA")
+
+cat("\nWe have identified", tibble_PSIsigma_exon_ambiguity_summary[grep(x = tibble_PSIsigma_exon_ambiguity_summary$final_identifier, pattern = "differential", ignore.case = TRUE), ] %>% dplyr::filter(ambiguity == "validating") %>% dplyr::distinct(final_identifier) %>% nrow, "peptides which are validating (differential).")
+
+cat("\nWe have identified", tibble_PSIsigma_exon_ambiguity_summary[grep(x = tibble_PSIsigma_exon_ambiguity_summary$final_identifier, pattern = "constitutive", ignore.case = TRUE), ] %>% dplyr::filter(ambiguity == "validating") %>% dplyr::distinct(final_identifier) %>% nrow, "peptides which are validating (constitutive).")
+
+```
+
+#### calculate statistics on the number of known vs. novel junctions/exons.
+
+```{r}
+
+options(mc.cores = 8)
+
+# retrieve genome-relative positions of tryptic peptides
+list_peptide_genome_relative_positions <- splice(list_peptide_bedfile_junctions_only %>% purrr::map(~.x$vector_genomic_positions), 
+                                                 list_peptide_bedfile_exons_only %>% purrr::map(~.x$vector_genomic_positions))
+# test for overlap with reference CDS regions
+## subset reference GTF for CDS regions only
+tibble_ref_gtf_CDS_only <- tibble_ref_gtf[tibble_ref_gtf$type == "CDS", ]
+
+options(mc.cores = 48)
+
+# NOTE: TRUE if overlaps with any reference CDS. FALSE if not.
+list_logical_test_for_CDS_overlap <- future_map2(
+  .x = list_peptide_genome_relative_positions,
+  .y = tibble_peptide_bedfile$chrom,
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- list_peptide_genome_relative_positions[[1]]
+    # a2 <- tibble_peptide_bedfile$chrom %>% .[[1]]
+    ###########
+    
+    result <- purrr::map(
+      .x = a1,
+      .f = function(b1) {
+        
+        (b1 < (tibble_ref_gtf_CDS_only[tibble_ref_gtf_CDS_only$seqnames == a2, ] %>% .$end) & 
+           b1 > (tibble_ref_gtf_CDS_only[tibble_ref_gtf_CDS_only$seqnames == a2, ] %>% .$start)) %>%
+          any %>%
+          return
+        
+      } )
+    
+    return(result %>% unlist %>% any == TRUE)
+    
+  }, .progress = TRUE)
+
+# finally count the number of novel peptides we have identified
+cat("\nTHIS IS THE NUMBER OF NOVEL SPLICE PEPTIDES IDENTIFIED")
+
+cat("\nWe have identified", tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% nrow, "novel peptides in proximity to splice regions")
+
+# we are now going to extract only the final_identifiers which are validating.
+vector_validated_final_identifiers <- c(tibble_PSIsigma_exon_ambiguity_summary[grep(x = tibble_PSIsigma_exon_ambiguity_summary$final_identifier, pattern = "constitutive", ignore.case = TRUE), ] %>% dplyr::filter(ambiguity == "validating") %>% dplyr::distinct(final_identifier) %>% unlist,
+                                        tibble_junction_spanning_peptides_identifier.gene$Leading.razor.protein %>% unlist)
+
+# write novel splice peptides as .bed file
+write.table(x = tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% .[.$name %in% vector_validated_final_identifiers, ], file = paste(R_processing_results_dir, "proteome_coverage_JUM_PSISigma_cons_diff_strawberry_maxquant_novel_validating_peptides.bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+cat("\nHence we have identified", tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% .[.$name %in% vector_validated_final_identifiers, ] %>% nrow, "novel splice junctions/exons, backed by proteome evidence.")
+
+# export validated junc.exons info and GO enrichment
+tibble_confirmed_junc.exons <- tibble_unconfirmed_junc.exons[tibble_unconfirmed_junc.exons$Leading.razor.protein %in% vector_validated_final_identifiers, ]
+
+# write table
+write.table(tibble_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_brief.info_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+# CONDUCT ENRICHMENT
+tibble_hyperGO_confirmed_junc.exons <- dplyr::bind_rows(GOHyperGAll(catdb = catdb, gocat = "MF", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "BP", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction,
+                                                        GOHyperGAll(catdb = catdb, gocat = "CC", sample = tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, Nannot = 2) %>% GOHyperGAll_benjamini_correction) %>% as_tibble
+
+write.table(tibble_hyperGO_confirmed_junc.exons, file = paste(R_processing_results_dir, "table_hyperGO_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+# write the geneset
+write.table(tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, file = paste(R_processing_results_dir, "table_geneset_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 ```
 
@@ -1063,8 +1262,8 @@ tibble_class_I_phosphosites <- list_imported_maxquant_tibbles_processed$`2020_ph
   dplyr::left_join(., list_imported_maxquant_tibbles_processed$`2020_phosphoproteome_OBseries_junc.exons`$peptides %>% dplyr::rename("Peptide.IDs" = "id") %>% dplyr::select(Peptide.IDs, Sequence), by = "Peptide.IDs")
 
 # split table by exons or junctions
-tibble_junction_peptides_only <- tibble_class_I_phosphosites[grep(x = tibble_class_I_phosphosites$Proteins, pattern = "^JUM"), ]
-tibble_exon_peptides_only <- tibble_class_I_phosphosites[grep(x = tibble_class_I_phosphosites$Proteins, pattern = "^PSISigma"), ]
+tibble_junction_peptides_only <- tibble_class_I_phosphosites[grep(x = tibble_class_I_phosphosites$Proteins, pattern = "^JUM", ignore.case = TRUE), ]
+tibble_exon_peptides_only <- tibble_class_I_phosphosites[grep(x = tibble_class_I_phosphosites$Proteins, pattern = "^PSISigma", ignore.case = TRUE), ]
 
 # to get the genome-relative coords of tryptic peptides, loop thru every tryptic peptide + fasta identifier combination
 # extract the MQ outputted start/end positions: 
@@ -1080,13 +1279,13 @@ tibble_exon_peptides_only <- tibble_class_I_phosphosites[grep(x = tibble_class_I
 list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>% array_tree, .f = function(a1, a2) {
   
   # DEBUG ###
-  # a1 <- tibble_junction_peptides_only[103, ]
+  # a1 <- tibble_junction_peptides_only[2, ]
   ###########
   
   cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
   
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Proteins %>% paste %>% trimws) %>% which,
-                                              str_detect(string = tibble_detailed_3FT_summary_JUM$virtual_peptide_sequence, pattern = a1$Sequence.window %>% gsub(pattern = "_", replacement = "") %>% paste %>% trimws) %>% which) %>% .[1]
+                                              str_detect(string = tibble_detailed_3FT_summary_JUM$virtual_peptide_sequence, pattern = a1$Sequence %>% gsub(pattern = "_", replacement = "") %>% paste %>% trimws) %>% which) %>% .[1]
   
   tibble_matched_3FT_entry <- tibble_detailed_3FT_summary_JUM[row_index_of_matched_3FT_table %>% na.omit, ]
   
@@ -1095,93 +1294,88 @@ list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>
   } else {
     
     # get the ORF status. this will dictate how we determine the translation-relative coords.
-  ORF_status <- tibble_matched_3FT_entry$ORF
-  
-  # for dORF, the position of the first AA is going to be the end of the window - the valid ORF length.
-  ORF_AA_length <- nchar(tibble_matched_3FT_entry$virtual_peptide_sequence)
-  
-  # get translated transcript-relative AA coords
-  if (ORF_status == "uORF") {
-    translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$window_start_AA_position %>% trimws %>% as.numeric) - 1
-    translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + (tibble_matched_3FT_entry$window_start_AA_position %>% trimws %>% as.numeric) - 1
-  } else if (ORF_status == "dORF") {
-    # must get the position of the first AA of the dORF first.
-    translation_frame_relative_dORF_start <- (tibble_matched_3FT_entry$window_end_AA_position %>% trimws %>% as.numeric) - ORF_AA_length + 1
+    ORF_status <- tibble_matched_3FT_entry$ORF
     
-    translated_transcript_relative_AA_start <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
-    translated_transcript_relative_AA_end <- (a1$Positions.within.proteins %>% trimws %>% as.numeric) + translation_frame_relative_dORF_start - 1
-  }
-  
-  # get transcript relative nt coords
-  ## NOTE: this is strand-dependent.
-  parent_transcript_relative_nt_start <- 3*(translated_transcript_relative_AA_start - 1) + 1 + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-  parent_transcript_relative_nt_end <- 3*translated_transcript_relative_AA_end + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric)
-  
-  # get genome-relative positions for every nt encoding the tryptic peptide
-  ## have to take the strand into account.
-  ### extract the genome-relative forward coords of every nt in the parent transcript
-  ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
-  vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
-  ### use the transcript-relative nt coords to match
-  all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-  
-  # NOTE: the following here does not need to be done because these coords are already stranded! but i will leave it here anyways for future reference/debug.
-  ### use the transcript-relative nt coords to match
-  ### then sort in increasing order for the next step
-  # if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
-  #   
-  #   all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-  #   
-  # } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
-  #   
-  #   all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
-  #   
-  # }
-  
-  # convert the individual nt positions to a set of ranges
-  ## achieve this by comparing n to n + 1
-  ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
-  tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
-                              "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
-    add_column("difference" = .$n.plus.1 - .$n)
-  
-  ## if there are no gaps, then just take the genomic range as the start:end
-  if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+    # get sequence length
+    tryptic_peptide_sequence_length <- a1$Sequence %>% nchar
     
-    vec_blockCount <- 1
-    vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
-    vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+    # get translated transcript-relative AA coords
+    if (ORF_status == "uORF") {
+      parent_transcript_relative_nt_start <- tibble_matched_3FT_entry$translation_window_start_transcript.relative + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + 3*(a1$Positions.within.proteins %>% trimws %>% as.numeric - 1) + 1
+      parent_transcript_relative_nt_end <- tibble_matched_3FT_entry$translation_window_start_transcript.relative + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + 3*tryptic_peptide_sequence_length
+    } else if (ORF_status == "dORF") {
+      parent_transcript_relative_nt_start <- tibble_matched_3FT_entry$first_nt_after_splice_junction_transcript_relative + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + 3*(a1$Positions.within.proteins %>% trimws %>% as.numeric - 1) + 1
+      parent_transcript_relative_nt_end <- tibble_matched_3FT_entry$first_nt_after_splice_junction_transcript_relative + (tibble_matched_3FT_entry$translation_frame %>% trimws %>% as.numeric) + 3*tryptic_peptide_sequence_length
+    }
     
-  } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+    # get genome-relative positions for every nt encoding the tryptic peptide
+    ## have to take the strand into account.
+    ### extract the genome-relative forward coords of every nt in the parent transcript
+    ### we assume it's already been sorted. if it wasn't sorted in increasing order, the 3FT would have ben completely wrong.
+    # vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric
+    ### use the transcript-relative nt coords to match
+    # all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
     
-    vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
-    vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
-                         tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
-    vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
-                       last(all_genome_relative_positions_of_tryptic_peptide))
-    vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+    # NOTE: the following here does not need to be done because these coords are already stranded! but i will leave it here anyways for future reference/debug.
+    ### use the transcript-relative nt coords to match
+    ### then sort in increasing order for the next step
+    vec_forward_genome_coords_of_parent_transcript <- tibble_matched_3FT_entry$all_parent_transcript_coords %>% strsplit(split = ",") %>% unlist %>% as.numeric %>% sort
     
-  }
-  
-  # the block details are still vector at this point. 
-  # must paste collapse in order to use in the BED file.
-  tibble_block_info <- tibble(
-    "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
-    "start" = first(all_genome_relative_positions_of_tryptic_peptide),
-    "end" = last(all_genome_relative_positions_of_tryptic_peptide),
-    "name" = a1$Leading.proteins %>% paste %>% trimws,
-    "score" = a1$Score %>% as.numeric,
-    "strand"= tibble_matched_3FT_entry$matched_junction_strand,
-    "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
-    "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
-    "itemRgb" = "255,187,0",
-    "blockCount" = vec_blockCount %>% paste(collapse = ","),
-    "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
-    "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
-    "qName" = a1$Sequence %>% paste %>% trimws)
-  
-  # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-  return(tibble_block_info) 
+    if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "+") {
+
+      all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+
+    } else if (tibble_matched_3FT_entry$matched_junction_strand %>% trimws %>% paste == "-") {
+
+      all_genome_relative_positions_of_tryptic_peptide <- vec_forward_genome_coords_of_parent_transcript %>% rev %>% .[parent_transcript_relative_nt_start:parent_transcript_relative_nt_end] %>% as.numeric %>% sort
+
+    }
+    
+    # convert the individual nt positions to a set of ranges
+    ## achieve this by comparing n to n + 1
+    ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
+    tibble_n_n.plus.1 <- tibble("n" = all_genome_relative_positions_of_tryptic_peptide %>% head(n = length(all_genome_relative_positions_of_tryptic_peptide) - 1),
+                                "n.plus.1" = all_genome_relative_positions_of_tryptic_peptide[-1]) %>% 
+      add_column("difference" = .$n.plus.1 - .$n)
+    
+    ## if there are no gaps, then just take the genomic range as the start:end
+    if (tibble_n_n.plus.1$difference %>% unique %>% length == 1) {
+      
+      vec_blockCount <- 1
+      vec_blockSizes <- length(all_genome_relative_positions_of_tryptic_peptide)
+      vec_blockStarts <- first(all_genome_relative_positions_of_tryptic_peptide)
+      
+    } else if (tibble_n_n.plus.1$difference %>% unique %>% length > 1) {
+      
+      vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
+      vec_blockStarts <- c(first(all_genome_relative_positions_of_tryptic_peptide), 
+                           tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
+      vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
+                         last(all_genome_relative_positions_of_tryptic_peptide))
+      vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
+      
+    }
+    
+    # the block details are still vector at this point. 
+    # must paste collapse in order to use in the BED file.
+    tibble_block_info <- tibble(
+      "chrom" = tibble_matched_3FT_entry$matched_junction_chr,
+      "start" = first(all_genome_relative_positions_of_tryptic_peptide),
+      "end" = last(all_genome_relative_positions_of_tryptic_peptide),
+      "name" = a1$Leading.proteins %>% paste %>% trimws,
+      "score" = a1$Score %>% as.numeric,
+      "strand"= tibble_matched_3FT_entry$matched_junction_strand,
+      "thickStart" = first(all_genome_relative_positions_of_tryptic_peptide),
+      "thickEnd" = last(all_genome_relative_positions_of_tryptic_peptide),
+      "itemRgb" = "255,187,0",
+      "blockCount" = vec_blockCount %>% paste(collapse = ","),
+      "blockSizes" = vec_blockSizes %>% paste(collapse = ","),
+      "blockStarts" = (vec_blockStarts - first(all_genome_relative_positions_of_tryptic_peptide)) %>% paste(collapse = ","),
+      "qName" = a1$Sequence %>% paste %>% trimws)
+    
+    # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
+    return(list("tibble_block_info" = tibble_block_info,
+              "vector_genomic_positions" = all_genome_relative_positions_of_tryptic_peptide))
     
   }
   
@@ -1297,7 +1491,8 @@ list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_
       "qName" = a1$Sequence %>% paste %>% trimws)
     
     # this represents the block info for ONE tryptic peptide identified by MQ. still have to loop thru the rest.
-    return(tibble_block_info)      
+    return(list("tibble_block_info" = tibble_block_info,
+              "vector_genomic_positions" = all_genome_relative_positions_of_tryptic_peptide))   
     
   }
   
@@ -1307,13 +1502,13 @@ list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_
 list_bedfile_exons_only_pruned <- list_bedfile_exons_only %>% purrr::discard(.p = ~.x %>% is.null == TRUE)
 
 # rbind and tibblise
-tibble_bedfile <- splice(list_bedfile_junctions_only, list_bedfile_exons_only) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
+tibble_phosphosite_bedfile <- splice(list_bedfile_junctions_only %>% purrr::map(~.x$tibble_block_info), list_bedfile_exons_only %>% purrr::map(~.x$tibble_block_info)) %>% rbindlist %>% as_tibble %>% dplyr::select(-qName)
 
 # track line
 # cat(paste("track name=\"", output_file_name_JUM, "\" description=\"", output_file_name_JUM, "\" graphType=junctions\n", sep = ""), file = paste(R_processing_results_dir, "proteomic_alignment_", a2, "_", b2, ".bed", sep = ""))
 # 
 # append = TRUE
-write.table(x = tibble_bedfile, file = paste(R_processing_results_dir, "phosphosite_coverage_JUM_PSISigma_cons_diff_strawberry_maxquant.bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+write.table(x = tibble_phosphosite_bedfile, file = paste(R_processing_results_dir, "phosphosite_coverage_JUM_PSISigma_cons_diff_strawberry_maxquant.bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
 # GO TO BEDTOOLS NOW ###
 # cd /media/Ubuntu/sharedfolder/bedtools2/bin/

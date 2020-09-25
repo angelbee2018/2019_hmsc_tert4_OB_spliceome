@@ -2388,6 +2388,17 @@ OB_anysig_GOtest_all_topten$Term <- stringr::str_trunc(string = OB_anysig_GOtest
 
 ```
 
+### extract the splicing information according to gene enrichment to identify any trends
+
+```{r}
+
+# PROTEIN KINASES ###
+vector_differential_protein_kinase_genes <- OB_anysig_GOtest_all_topten[OB_anysig_GOtest_all_topten$Term == "protein kinase activity", "SampleKeys"] %>% strsplit(split = " ") %>% unlist
+
+tibble_differential_anysig_with_na_protein_kinases <- PSI_levels_timeseries_OB_wide_with_na[PSI_levels_timeseries_OB_wide_with_na$Gene %in% vector_differential_protein_kinase_genes, ] %>% as_tibble
+
+```
+
 #### bar graph of GO terms
 
 ```{r}
@@ -3633,7 +3644,7 @@ message("percent of differential regions matched to a CDS region: ", 100 * grep(
 # PROTEIN-LEVEL
 # vector_unique_interpro_ids <- tibble_final_biomart_annotation$interpro %>% na.omit %>% unique
 
-tibble_protein_level_summary_count <- tibble_final_biomart_annotation %>% dplyr::group_by(AS_event_ID) %>% 
+tibble_protein_level_summary_count <- tibble_final_biomart_annotation %>% dplyr::group_by(AS_event_ID, splicemode) %>% 
   dplyr::summarise("overlaps_interpro_domain" = all(is.na(interpro)) == FALSE & intersect(interpro, tibble_non_family_interpro_entries$Accession) %>% length != 0,
                    "unique_interpro_ids" = interpro %>% na.omit %>% unique %>% paste(collapse = ";"),
                    "overlaps_LCR" = all(is.na(seg_start)) == FALSE,

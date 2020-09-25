@@ -542,28 +542,6 @@ tibble_GSE111900_SRSF2_coord_info_processed <- tibble_GSE111900_SRSF2_coord_info
 
 ```
 
-## Ago2 iCLIP dataset
-
-```{r}
-
-tibble_ago2_iclip_binding_sites <- read.delim("/mnt/4tb_ironwolf/miRNA_hMSC_TERT_OB_diff/iCLIP.hg38.miRNA_targets_MSC_diff_iCLIP_binding_sites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% 
-  as_tibble %>% 
-  dplyr::filter(chrom != "") %>%
-  dplyr::mutate_at(.vars = "chrom", .funs = function(x) {gsub(x = x, pattern = "chr", replacement = "")} )
-
-# split the iclip table by chromosome
-list_ago2_iclip_binding_sites_by_chr <- tibble_ago2_iclip_binding_sites %>% 
-  dplyr::group_split(chrom) %>%
-  set_names(nm = purrr::map(.x = ., .f = ~.x$chrom %>% unique) %>% unlist)
-# generate list of vectors of ago2 iCLIP binding site genome coords.
-list_of_vectors_ago2_iclip_binding_site_genome_coords <- purrr::map(.x = list_ago2_iclip_binding_sites_by_chr,
-                                                                    .f = ~purrr::map2(.x = .x$start,
-                                                                                      .y = .x$stop,
-                                                                                      .f = ~.x:.y)
-)
-
-```
-
 # Import files
 
 ## RNA expression section
@@ -693,7 +671,7 @@ tibble_JUM_junction_ontology_supp_info <- read.delim("/mnt/Tertiary/sharedfolder
 # PSI-Sigma ###
 tibble_PSIsigma_exon_ontology_supp_info <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/table_exon_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_PSIsigma_exon_ontology_unmatched_items <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/table_exon_ontology_unmatched_exons_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_PSIsigma_exon_ontology_unmatched_items <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/table_exon_ontology_unmatched_exons_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 ```
 
@@ -797,6 +775,29 @@ tibble_sierra_DTU_pairwise_clusters_all_simplified <- tibble_sierra_DTU_pairwise
 
 ```
 
+## Ago2 iCLIP dataset
+
+```{r}
+
+tibble_ago2_iclip_binding_sites <- read.delim("/mnt/4tb_ironwolf/miRNA_hMSC_TERT_OB_diff/iCLIP.hg38.miRNA_targets_MSC_diff_iCLIP_binding_sites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% 
+  as_tibble %>% 
+  dplyr::filter(chrom != "") %>%
+  dplyr::mutate_at(.vars = "chrom", .funs = function(x) {gsub(x = x, pattern = "chr", replacement = "")} )
+
+# split the iclip table by chromosome
+list_ago2_iclip_binding_sites_by_chr <- tibble_ago2_iclip_binding_sites %>% 
+  dplyr::group_split(chrom) %>%
+  set_names(nm = purrr::map(.x = ., .f = ~.x$chrom %>% unique) %>% unlist)
+# generate list of vectors of ago2 iCLIP binding site genome coords.
+list_of_vectors_ago2_iclip_binding_site_genome_coords <- purrr::map(.x = list_ago2_iclip_binding_sites_by_chr,
+                                                                    .f = ~purrr::map2(.x = .x$start,
+                                                                                      .y = .x$stop,
+                                                                                      .f = ~.x:.y)
+)
+
+```
+
+
 ## Proteome section
 
 ### Import all the non-homolog and non-superfamily entries from Interpro
@@ -816,6 +817,14 @@ tibble_non_family_interpro_entries <- c("interpro_active.site_entries.tsv", "int
 # tibble_2020.PO4_valid_phosphosites <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 tibble_2020.PO4_2012.proteome_valid_junc.exons <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_confirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_2020.PO4_2012.proteome_unconfirmed_junc.exons <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_unconfirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+# we have to use all the non-validating PSI-Sigma exons because although they don't validate the RNA exon, they validate any coding regions contained in the differential exon.
+tibble_2020.PO4_2012.proteome_valid_junc.exons_coding <- dplyr::bind_rows(
+  tibble_2020.PO4_2012.proteome_valid_junc.exons[grep(x = tibble_2020.PO4_2012.proteome_valid_junc.exons$Leading.razor.protein, pattern = "JUM", ignore.case = TRUE), ],
+  tibble_2020.PO4_2012.proteome_unconfirmed_junc.exons[grep(x = tibble_2020.PO4_2012.proteome_unconfirmed_junc.exons$Leading.razor.protein, pattern = "PSISigma", ignore.case = TRUE), ]
+)
+
 tibble_2020.PO4_valid_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 
@@ -1354,7 +1363,6 @@ write.table(x = vector_differential_genes_anysig_with_na, file = paste(results_d
   
 ```
 
-
 ## plot the interpro and PTM results from JUM and PSI-Sigma together 
 
 ### interpro
@@ -1474,7 +1482,7 @@ tibble_ago2_iclip_binding_sites_PSIsigma_genes <- tibble_ago2_iclip_binding_site
 
 ```
 
-### determine if there's any coordinate level overlap between differential regions/exons and Ago2 iCLIP
+### determine if there's any VSR-level overlap between differential regions/exons and Ago2 iCLIP
 
 ```{r}
 
@@ -1511,6 +1519,9 @@ list_matched_iCLIP_entries_per_differential_region_JUM_pruned <- list_matched_iC
 # percolate and tibblise
 tibble_differential_region_JUM_with_iclip_ago2 <- list_matched_iCLIP_entries_per_differential_region_JUM_pruned %>% purrr::map(~dplyr::bind_cols(.x[c("AS_event_ID", "splicemode", "Gene")], .x$tibble_matched_iclip_entries)) %>% rbindlist(use.names = TRUE) %>% as_tibble
 
+# write table
+write.table(x = tibble_differential_region_JUM_with_iclip_ago2, file = paste(results_dir, "tibble_differential_region_JUM_with_iclip_ago2.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
 # PSI-Sigma
 ## create list of vectors of differential positions (genomic coords)
 list_of_vectors_PSIsigma_differential_exon_positions <- tibble_PSIsigma_exon_ontology_supp_info$vector_genomic_coords_of_all_differential_exon_positions %>% 
@@ -1543,6 +1554,9 @@ list_matched_iCLIP_entries_per_differential_region_PSIsigma_pruned <- list_match
 
 # percolate and tibblise
 tibble_differential_region_PSIsigma_with_iclip_ago2 <- list_matched_iCLIP_entries_per_differential_region_PSIsigma_pruned %>% purrr::map(~dplyr::bind_cols(.x[c("diff_exon_coords", "splicemode", "matched_gene_names", "matched_strand")], .x$tibble_matched_iclip_entries)) %>% rbindlist(use.names = TRUE) %>% as_tibble
+
+# write table
+write.table(x = tibble_differential_region_PSIsigma_with_iclip_ago2, file = paste(results_dir, "tibble_differential_region_PSIsigma_with_iclip_ago2.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 
@@ -2621,7 +2635,7 @@ UNION_junc_coor_table_with_junction_identifier <- read.delim(paste(UNION_junc_co
   as_tibble %>%
   dplyr::mutate("junction_identifier" = paste(chr, ":", start, "-", end, ":", strand, sep = "") %>% gsub(pattern = "(.*)0$", replacement = "\\1*"))
 
-tibble_JUM_valid_junc.exons_with_junc_ID <- dplyr::left_join(tibble_2020.PO4_2012.proteome_valid_junc.exons %>%
+tibble_JUM_valid_junc.exons_with_junc_ID <- dplyr::left_join(tibble_2020.PO4_2012.proteome_valid_junc.exons_coding %>%
                                                                dplyr::rename("final_identifier" = "Leading.razor.protein") %>% 
                                                                dplyr::mutate("junction_identifier" = gsub(x = final_identifier, pattern = "JUM_.*junction_", replacement = "")),
                                                              UNION_junc_coor_table_with_junction_identifier,
@@ -2758,7 +2772,7 @@ ggplot(tibble_PTM_filtered_by_proteome_JUM_tally, aes(x = reorder(PTM_type, -tal
 ```{r}
 
 tibble_PSIsigma_exon_ontology_supp_info_filtered_by_proteome <- dplyr::semi_join(tibble_PSIsigma_exon_ontology_supp_info,
-                                                                                tibble_2020.PO4_2012.proteome_valid_junc.exons %>% 
+                                                                                tibble_2020.PO4_2012.proteome_valid_junc.exons_coding %>% 
                                                                                   dplyr::mutate("event_region_coords" = gsub(x = Leading.razor.protein, pattern = "^.*_VSR_([^\\_]+)_exon_(.*)$", replacement = "\\1"),
                                                                                                 "diff_exon_coords" = gsub(x = Leading.razor.protein, pattern = "^.*_VSR_([^\\_]+)_exon_(.*)$", replacement = "\\2")), 
                                                                                 by = c("event_region_coords", "diff_exon_coords"))

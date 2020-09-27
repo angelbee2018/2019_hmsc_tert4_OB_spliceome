@@ -3079,7 +3079,9 @@ list_of_tibbles_biomart_domain_annotation <- list_of_tibbles_biomart_domain_anno
 # write table
 # write.table(tibble_ENSP_to_uniprotkb, file = paste(shared_dir, "tibble_ENSP_to_uniprotkb_38.98.txt", sep = ""), row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
 # read table
-tibble_ENSP_to_uniprotkb <- read.delim(paste(shared_dir, "tibble_ENSP_to_uniprotkb_38.98.txt", sep = ""), row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+# tibble_ENSP_to_uniprotkb <- read.delim(paste(shared_dir, "tibble_ENSP_to_uniprotkb_38.98.txt", sep = ""), row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+load(file = paste(shared_dir, "tibble_uniprot_to_ENSP_mapping_table.tibble", paste = ""))
 
 ```
 
@@ -3429,135 +3431,137 @@ list_transcript_and_protein_relative_differential_coords <- future_imap(.x = lis
 
 # MATCH THE DIFFERENTIAL TRANSCRIPT-RELATIVE COORDS TO THE ENSEMBL GTF
 # MATCH THE DIFFERENTIAL PROTEIN-RELATIVE COORDS TO THE FETCHED BIOMART LIST AS WELL AS THE PTMS
-list_matched_annotation <- future_imap(.x = list_transcript_and_protein_relative_differential_coords, .f = function(.x, .y) {
-  
-  # WARNING!! FIX THIS WHEN NAMING THE FUNCTION!
-  # list_of_tibbles_biomart_domain_annotation <<- list_of_tibbles_biomart_domain_annotation
-  
-  # tibble_ENSP_to_uniprotkb <<- tibble_ENSP_to_uniprotkb
-  # tibble_PTM_combined <<- tibble_PTM_combined
-  # tibble_ref_gtf_original <<- tibble_ref_gtf_original
-  ############################################
-  
-  # DEBUG ###
-  # .x <- list_transcript_and_protein_relative_differential_coords[[1]]
-  ###########
-  
-  cat("\nnow processing: ", .y)
-  
-  input_list <- .x
-  
-  output_list <- purrr::splice(
+suppressMessages(
+  list_matched_annotation <- future_imap(.x = list_transcript_and_protein_relative_differential_coords, .f = function(.x, .y) {
     
-    input_list,
+    # WARNING!! FIX THIS WHEN NAMING THE FUNCTION!
+    # list_of_tibbles_biomart_domain_annotation <<- list_of_tibbles_biomart_domain_annotation
     
-    "transcript_features" = purrr::map(.x = input_list$vector_matched_transcript_ids, .f = function(.x) {
-      
-      # DEBUG ###
-      # .x <- input_list$vector_matched_transcript_ids %>% .[[1]]
-      ###########
-      
-      # subset the reference GTF by transcript_id
-      tibble_ref_gtf_subset_by_transcript_id <- tibble_ref_gtf_original[which(tibble_ref_gtf_original$transcript_id == .x), ]
-      
-      # test for which differential positions lie between a feature
-      row.indices_of_overlaps_with_differential_positions <- which(purrr::map2(.x = tibble_ref_gtf_subset_by_transcript_id$start, 
-                                                                               .y = tibble_ref_gtf_subset_by_transcript_id$end, 
-                                                                               .f = ~any(.x <= input_list$vector_genomic_coords_of_all_differential_exon_positions &
-                                                                                           .y >= input_list$vector_genomic_coords_of_all_differential_exon_positions)) %>% unlist)
-      
-      # extract matched GTF entries
-      matched_GTF_entries <- tibble_ref_gtf_subset_by_transcript_id[row.indices_of_overlaps_with_differential_positions, ]
-      
-      return(matched_GTF_entries)
-      
-    } ) %>% 
-      # rbind and spit out unique transcript feature types.
-      rbindlist(fill = TRUE, use.names = TRUE) %>% .[, c("type", "transcript_biotype")] %>% unlist %>% unique,
+    # tibble_ENSP_to_uniprotkb <<- tibble_ENSP_to_uniprotkb
+    # tibble_PTM_combined <<- tibble_PTM_combined
+    # tibble_ref_gtf_original <<- tibble_ref_gtf_original
+    ############################################
     
-    "biomart_annotations" = list(purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
-      
-      # DEBUG ###
-      # .x <- input_list$CDS_relative_differential_coords %>% .[[3]]
-      # .y <- names(input_list$CDS_relative_differential_coords) %>% .[3]
-      ###########
-      
-      CDS.relative.coords <- .x
-      protein.id <- .y
-      
-      # find domains which overlapped with the differential positions.
-      list_matched_biomart_annotations <- purrr::map2(.x = list_of_tibbles_biomart_domain_annotation, 
-                                                      .y = names(list_of_tibbles_biomart_domain_annotation),
-                                                      .f = function(.x, .y) {
-                                                        
-                                                        # DEBUG ###
-                                                        # .x <- list_of_tibbles_biomart_domain_annotation[[1]]
-                                                        # .y <- list_of_tibbles_biomart_domain_annotation[1] %>% names
-                                                        ###########
-                                                        
-                                                        tibble_domain_subset <- .x[.x$ensembl_peptide_id == protein.id, ]
-                                                        
-                                                        if (nrow(tibble_domain_subset) != 0) {
-                                                          
-                                                          # test matched_domain_entriesfor which differential positions lie between a domain
-                                                          row.indices_of_overlaps_with_differential_positions <- which(purrr::map2(
-                                                            .x = tibble_domain_subset$start, 
-                                                            .y = tibble_domain_subset$end, 
-                                                            .f = ~any(.x < CDS.relative.coords &
-                                                                        .y > CDS.relative.coords)) %>% unlist)
-                                                          
-                                                          # extract matched GTF entries
-                                                          tibble_matched_domain_entries <- tibble_domain_subset[row.indices_of_overlaps_with_differential_positions, ]
-                                                          
-                                                        } else if (nrow(tibble_domain_subset) == 0) {
-                                                          
-                                                          tibble_matched_domain_entries <- tibble_domain_subset
-                                                          
-                                                        }
-                                                        
-                                                        # calculate the degree of overlap
-                                                        tibble_matched_domain_entries <- tibble_matched_domain_entries %>% dplyr::mutate("percentage_overlap" = purrr::map2(.x = tibble_matched_domain_entries$start, .y = tibble_matched_domain_entries$end, .f = function(a1, a2) {(intersect(a1:a2, CDS.relative.coords) %>% length)/((a1:a2) %>% length)} ) %>% unlist)
-                                                        
-                                                        # rename the columns back to being domain-type specific
-                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "start", replacement = paste(.y, "_", "start", sep = ""))
-                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "end", replacement = paste(.y, "_", "end", sep = ""))
-                                                        colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "percentage_overlap", replacement = paste(.y, "_", "percentage_overlap", sep = ""))
-                                                        
-                                                        return(tibble_matched_domain_entries)
-                                                        
-                                                      } )
-      
-      # reduce into tibble by full join
-      tibble_matched_biomart_annotations <- list_matched_biomart_annotations %>% purrr::reduce(dplyr::full_join)
-      
-      return(tibble_matched_biomart_annotations)
-      
-    } ) %>% rbindlist(fill = TRUE, use.names = TRUE) %>% as_tibble ),
+    # DEBUG ###
+    # .x <- list_transcript_and_protein_relative_differential_coords[[1]]
+    ###########
     
-    "PTMs" =  list(
+    cat("\nnow processing: ", .y)
+    
+    input_list <- .x
+    
+    output_list <- purrr::splice(
       
-      purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
+      input_list,
+      
+      "transcript_features" = purrr::map(.x = input_list$vector_matched_transcript_ids, .f = function(.x) {
         
         # DEBUG ###
-        # .x <- input_list$CDS_relative_differential_coords %>% .[[1]]
-        # .y <- names(input_list$CDS_relative_differential_coords) %>% .[1]
+        # .x <- input_list$vector_matched_transcript_ids %>% .[[1]]
         ###########
         
-        tibble_uniprotkb_entries_from_ENSP <- tibble_ENSP_to_uniprotkb[which(tibble_ENSP_to_uniprotkb$ensembl_peptide_id == .y), ]
+        # subset the reference GTF by transcript_id
+        tibble_ref_gtf_subset_by_transcript_id <- tibble_ref_gtf_original[which(tibble_ref_gtf_original$transcript_id == .x), ]
         
-        tibble_combined_PTM_matching_entries <- tibble_uniprotkb_entries_from_ENSP %>% dplyr::left_join(., tibble_PTM_combined, by = "uniprotkb_entry") %>%
+        # test for which differential positions lie between a feature
+        row.indices_of_overlaps_with_differential_positions <- which(purrr::map2(.x = tibble_ref_gtf_subset_by_transcript_id$start, 
+                                                                                 .y = tibble_ref_gtf_subset_by_transcript_id$end, 
+                                                                                 .f = ~any(.x <= input_list$vector_genomic_coords_of_all_differential_exon_positions &
+                                                                                             .y >= input_list$vector_genomic_coords_of_all_differential_exon_positions)) %>% unlist)
+        
+        # extract matched GTF entries
+        matched_GTF_entries <- tibble_ref_gtf_subset_by_transcript_id[row.indices_of_overlaps_with_differential_positions, ]
+        
+        return(matched_GTF_entries)
+        
+      } ) %>% 
+        # rbind and spit out unique transcript feature types.
+        rbindlist(fill = TRUE, use.names = TRUE) %>% .[, c("type", "transcript_biotype")] %>% unlist %>% unique,
+      
+      "biomart_annotations" = list(purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
+        
+        # DEBUG ###
+        # .x <- input_list$CDS_relative_differential_coords %>% .[[3]]
+        # .y <- names(input_list$CDS_relative_differential_coords) %>% .[3]
+        ###########
+        
+        CDS.relative.coords <- .x
+        protein.id <- .y
+        
+        # find domains which overlapped with the differential positions.
+        list_matched_biomart_annotations <- purrr::map2(.x = list_of_tibbles_biomart_domain_annotation, 
+                                                        .y = names(list_of_tibbles_biomart_domain_annotation),
+                                                        .f = function(.x, .y) {
+                                                          
+                                                          # DEBUG ###
+                                                          # .x <- list_of_tibbles_biomart_domain_annotation[[1]]
+                                                          # .y <- list_of_tibbles_biomart_domain_annotation[1] %>% names
+                                                          ###########
+                                                          
+                                                          tibble_domain_subset <- .x[.x$ensembl_peptide_id == protein.id, ]
+                                                          
+                                                          if (nrow(tibble_domain_subset) != 0) {
+                                                            
+                                                            # test matched_domain_entriesfor which differential positions lie between a domain
+                                                            row.indices_of_overlaps_with_differential_positions <- which(purrr::map2(
+                                                              .x = tibble_domain_subset$start, 
+                                                              .y = tibble_domain_subset$end, 
+                                                              .f = ~any(.x < CDS.relative.coords &
+                                                                          .y > CDS.relative.coords)) %>% unlist)
+                                                            
+                                                            # extract matched GTF entries
+                                                            tibble_matched_domain_entries <- tibble_domain_subset[row.indices_of_overlaps_with_differential_positions, ]
+                                                            
+                                                          } else if (nrow(tibble_domain_subset) == 0) {
+                                                            
+                                                            tibble_matched_domain_entries <- tibble_domain_subset
+                                                            
+                                                          }
+                                                          
+                                                          # calculate the degree of overlap
+                                                          tibble_matched_domain_entries <- tibble_matched_domain_entries %>% dplyr::mutate("percentage_overlap" = purrr::map2(.x = tibble_matched_domain_entries$start, .y = tibble_matched_domain_entries$end, .f = function(a1, a2) {(intersect(a1:a2, CDS.relative.coords) %>% length)/((a1:a2) %>% length)} ) %>% unlist)
+                                                          
+                                                          # rename the columns back to being domain-type specific
+                                                          colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "start", replacement = paste(.y, "_", "start", sep = ""))
+                                                          colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "end", replacement = paste(.y, "_", "end", sep = ""))
+                                                          colnames(tibble_matched_domain_entries) <- gsub(x = colnames(tibble_matched_domain_entries), pattern = "percentage_overlap", replacement = paste(.y, "_", "percentage_overlap", sep = ""))
+                                                          
+                                                          return(tibble_matched_domain_entries)
+                                                          
+                                                        } )
+        
+        # reduce into tibble by full join
+        tibble_matched_biomart_annotations <- list_matched_biomart_annotations %>% purrr::reduce(dplyr::full_join)
+        
+        return(tibble_matched_biomart_annotations)
+        
+      } ) %>% rbindlist(fill = TRUE, use.names = TRUE) %>% as_tibble ),
+      
+      "PTMs" =  list(
+        
+        purrr::map2(.x = input_list$CDS_relative_differential_coords, .y = names(input_list$CDS_relative_differential_coords), .f = function(.x, .y) {
           
-          .[.$modified_residue_position %in% .x, ]
+          # DEBUG ###
+          # .x <- input_list$CDS_relative_differential_coords %>% .[[1]]
+          # .y <- names(input_list$CDS_relative_differential_coords) %>% .[1]
+          ###########
+          
+          tibble_uniprotkb_entries_from_ENSP <- tibble_ENSP_to_uniprotkb[which(tibble_ENSP_to_uniprotkb$ensembl_peptide_id == .y), ]
+          
+          tibble_combined_PTM_matching_entries <- tibble_uniprotkb_entries_from_ENSP %>% dplyr::left_join(., tibble_PTM_combined, by = "uniprotkb_entry") %>%
+            
+            .[.$modified_residue_position %in% .x, ]
+          
+          return(tibble_combined_PTM_matching_entries)
+          
+        } ) %>% rbindlist(fill = TRUE, use.names = TRUE) %>% as_tibble
         
-        return(tibble_combined_PTM_matching_entries)
-        
-      } ) %>% rbindlist(fill = TRUE, use.names = TRUE) %>% as_tibble
+      )
       
     )
     
-  )
-  
-}, .progress = TRUE, .options = future_options(globals = c("rbindlist", "list_of_tibbles_biomart_domain_annotation", "tibble_ENSP_to_uniprotkb", "tibble_PTM_combined", "tibble_ref_gtf_original", "as_tibble")))
+  }, .progress = TRUE, .options = future_options(globals = c("rbindlist", "list_of_tibbles_biomart_domain_annotation", "tibble_ENSP_to_uniprotkb", "tibble_PTM_combined", "tibble_ref_gtf_original", "as_tibble")))
+)
 
 # TIDY AND WRAP UP ALL THE ANNOTATIONS.
 # prepare for export

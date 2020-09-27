@@ -4240,14 +4240,14 @@ list_granges_biomart_regions_exome_relative <- future_map(
 # as_tibble %>%
 # na.omit
 
-# save(tibble_ENSP_to_uniprotkb, file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", paste = ""))
-load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", paste = ""))
+# save(tibble_ENSP_to_uniprotkb, file = paste(shared_dir, "tibble_uniprot_to_ENSP_mapping_table.tibble", paste = ""))
+load(file = paste(shared_dir, "tibble_uniprot_to_ENSP_mapping_table.tibble", paste = ""))
 
 # convert uniprotkb_entry into ENSP
 tibble_dbPTM_allhuman_annotations_with_ENSP <- dplyr::left_join(tibble_dbPTM_allhuman_annotations, tibble_ENSP_to_uniprotkb, by = "uniprotkb_entry") %>% 
   dplyr::filter(is.na(ensembl_peptide_id) != TRUE) %>% type_convert
 
-# cast onto genome.save(tibble_dbPTM_allhuman_annotati
+# cast onto genome.
 tibble_dbPTM_allhuman_annotations_cast_onto_genome <- tibble_dbPTM_allhuman_annotations_with_ENSP %>% 
   add_column("CDS_relative_coords_start" = ((3*.$modified_residue_position) - 2), "CDS_relative_coords_end" = (3*.$modified_residue_position)) %>% 
   dplyr::mutate("vec_all_CDS_relative_positions" = purrr::map2(.x = `CDS_relative_coords_start`, .y = `CDS_relative_coords_end`, .f = ~.x:.y)) %>%

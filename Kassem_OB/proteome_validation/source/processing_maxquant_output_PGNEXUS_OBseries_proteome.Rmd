@@ -646,10 +646,6 @@ cat("\nnumber of total unique junctions in the fasta: ", length(vector_unique_id
 
 ```
 
-
-
-## Swissprot: Known isoforms and 
-
 ## Gene set enrichment
 
 ```{r}
@@ -1394,7 +1390,7 @@ list_bedfile_exons_only <- future_imap(.x = tibble_exon_peptides_only %>% array_
   # a1 <- tibble_exon_peptides_only[4, ]
   ###########
   
-  cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
+  # cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
   
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_PSIsigma$virtual_peptide_sequence, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
@@ -1518,6 +1514,51 @@ write.table(x = tibble_phosphosite_bedfile, file = paste(R_processing_results_di
 # 
 # # add the QNAME for real this time
 # tibble_bedfile2 <- read.delim(file = paste(R_processing_results_dir, "bedfile_", a2, "_", b2, ".bed", sep = ""), sep = "\t", col.names = colnames(tibble_bedfile)[-length(colnames(tibble_bedfile))], row.names = NULL, header = FALSE, check.names = FALSE) %>% as_tibble
+
+```
+
+#### Get statistics on the number new/novel phosphosites
+
+STRATEGY: 
+1. Get ALL the genome-relative positions of BOTH juncs/exons (here) and swissprot (MQtobed) phosphosites. 
+2. Cast dbPTM sites onto genome
+3. Find which are novel.
+
+```{r}
+
+library(regioneR)
+library(rtracklayer)
+library(BSgenome.Hsapiens.UCSC.hg38)
+
+tibble_ref_gtf_original <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+# tibble_ref_gtf_original <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+
+tibble_ref_gtf_original <- tibble_ref_gtf_original %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
+
+colnames(tibble_ref_gtf_original) <- c("chr", "start", "end", "width", "strand", "type", "phase", "gene_id", "gene_name", "gene_biotype", "transcript_id", "transcript_name", "transcript_biotype", "exon_number", "exon_id", "protein_id") 
+
+tibble_ref_gtf_original <- tibble_ref_gtf_original %>% mutate_if(is.factor, as.character)
+
+# import dbPTM info
+# Z:/dbPTM_download/extract/allPTM_human.txt
+tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+# import PhosphoSitePlus info
+# Z:/phosphositeplus_phosphosites_human.tab
+tibble_phosphositeplus_allhuman_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_phosphositeplus_allhuman_phosphosites <- read.delim("Z:/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+# change the residue position column
+tibble_phosphositeplus_allhuman_phosphosites[, "modified_residue_position"] <- gsub(x = tibble_phosphositeplus_allhuman_phosphosites$modified_residue_position, pattern = "^([A-Z])([0-9]{1,5})(.*)", replacement = "\\2")
+
+# remove rows where phosphosite is NA
+row.indices_phosphosite.is.na <- which(is.na(tibble_phosphositeplus_allhuman_phosphosites$modified_residue_position))
+
+tibble_phosphositeplus_allhuman_phosphosites <- tibble_phosphositeplus_allhuman_phosphosites[-row.indices_phosphosite.is.na, ]
+
+# RBIND THE PTM TABLES
+tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibble_phosphositeplus_allhuman_phosphosites)
 
 ```
 

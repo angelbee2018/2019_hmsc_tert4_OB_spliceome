@@ -44,6 +44,10 @@ library(data.table)
 library(seqinr)
 # library(Rfast)
 
+library(rtracklayer)
+
+shared_dir <- "/mnt/Tertiary/sharedfolder/"
+
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% 
   as_tibble %>%
@@ -1517,52 +1521,7 @@ write.table(x = tibble_phosphosite_bedfile, file = paste(R_processing_results_di
 
 ```
 
-#### Get statistics on the number new/novel phosphosites
-
-STRATEGY: 
-1. Get ALL the genome-relative positions of BOTH juncs/exons (here) and swissprot (MQtobed) phosphosites. 
-2. Cast dbPTM sites onto genome
-3. Find which are novel.
-
-```{r}
-
-library(regioneR)
-library(rtracklayer)
-library(BSgenome.Hsapiens.UCSC.hg38)
-
-tibble_ref_gtf_original <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
-# tibble_ref_gtf_original <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
-
-tibble_ref_gtf_original <- tibble_ref_gtf_original %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
-
-colnames(tibble_ref_gtf_original) <- c("chr", "start", "end", "width", "strand", "type", "phase", "gene_id", "gene_name", "gene_biotype", "transcript_id", "transcript_name", "transcript_biotype", "exon_number", "exon_id", "protein_id") 
-
-tibble_ref_gtf_original <- tibble_ref_gtf_original %>% mutate_if(is.factor, as.character)
-
-# import dbPTM info
-# Z:/dbPTM_download/extract/allPTM_human.txt
-tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-
-# import PhosphoSitePlus info
-# Z:/phosphositeplus_phosphosites_human.tab
-tibble_phosphositeplus_allhuman_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_phosphositeplus_allhuman_phosphosites <- read.delim("Z:/phosphositeplus_phosphosites_human.tab", col.names = c("gene_name", "protein_name", "uniprotkb_entry", "chr_locus", "modified_residue_position", "SITE_GRP_ID", "organism", "MW.kD", "domain", "site_7AA_either.side", "LT_LIT", "MS_LIT", "MS_CST", "CST_CAT"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
-
-# change the residue position column
-tibble_phosphositeplus_allhuman_phosphosites[, "modified_residue_position"] <- gsub(x = tibble_phosphositeplus_allhuman_phosphosites$modified_residue_position, pattern = "^([A-Z])([0-9]{1,5})(.*)", replacement = "\\2")
-
-# remove rows where phosphosite is NA
-row.indices_phosphosite.is.na <- which(is.na(tibble_phosphositeplus_allhuman_phosphosites$modified_residue_position))
-
-tibble_phosphositeplus_allhuman_phosphosites <- tibble_phosphositeplus_allhuman_phosphosites[-row.indices_phosphosite.is.na, ]
-
-# RBIND THE PTM TABLES
-tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibble_phosphositeplus_allhuman_phosphosites)
-
-```
-
-### export a tibble of all genome-relative coords for evaluation of phosphosites in differential regions
+#### export a tibble of all genome-relative coords for evaluation of phosphosites in differential regions
 
 ```{r}
 
@@ -1716,10 +1675,255 @@ list_genome.relative.positions_exons_only <- future_imap(.x = tibble_exon_peptid
 }, .progress = TRUE, .options = future_options(globals = c("tibble", "str_detect", "tibble_exon_peptides_only", "tibble_detailed_3FT_summary_PSIsigma", "first", "last")))
 
 # rbind and tibblise
-tibble_genome.relative.positions <- splice(list_genome.relative.positions_junctions_only, list_genome.relative.positions_exons_only) %>% rbindlist %>% as_tibble
+tibble_genome.relative.positions_phosphosites <- splice(list_genome.relative.positions_junctions_only, list_genome.relative.positions_exons_only) %>% rbindlist %>% as_tibble
 
 # write table.
-write.table(x = tibble_genome.relative.positions, file = paste(R_processing_results_dir, "genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+write.table(x = tibble_genome.relative.positions_phosphosites, file = paste(R_processing_results_dir, "genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+```
+
+#### Get statistics on the number new/novel phosphosites
+
+THE PROBLEM: we need some way to detect phosphosites in JUM differential regions
+
+STRATEGY: 
+1. Get ALL the genome-relative positions of BOTH juncs/exons (here) and swissprot (MQtobed) phosphosites. 
+2. Intersect with the differential junction and exon positions to find all phosphosites in splice regions
+3. Cast dbPTM sites onto genome
+4. Find which are not in dbPTM - novel phosphosites
+
+##### IMPORT NECESSARY FILES
+
+```{r}
+
+# get ENSP to uniprotkb_entry mapping
+load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
+# get all the genome-relative positions of CDS nucleotides for every ENSP id
+load(file = paste(shared_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tibble", sep = ""))
+
+# import dbPTM info
+# Z:/dbPTM_download/extract/allPTM_human.txt
+tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+
+# import reference-matched JUM and PSI-Sigma differential positions (from junc/exon ontology)
+# JUM ###
+tibble_JUM_junction_ontology_supp_info <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/table_junction_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble %>% dplyr::mutate("chr" = gsub(x = AS_event_ID, pattern = "^([^_]+).*", replacement = "\\1"))
+# PSI-Sigma ###
+tibble_PSIsigma_exon_ontology_supp_info <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/table_exon_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble %>% dplyr::mutate("chr" = gsub(x = event_region_coords, pattern = "^([^\\:]+).*", replacement = "\\1"))
+
+# MQtobed - phosphosites 
+tibble_MQtobed_2020_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/2020_phosphoproteome_swissprot_phosphosite_coverage_supp_info.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+```
+
+##### Cast dbPTM sites onto the genome
+
+```{r}
+
+# convert uniprotkb_entry into ENSP
+tibble_dbPTM_allhuman_annotations_with_ENSP <- dplyr::left_join(tibble_dbPTM_allhuman_annotations, tibble_ENSP_to_uniprotkb, by = "uniprotkb_entry") %>% 
+  dplyr::filter(is.na(ensembl_peptide_id) != TRUE) %>% type_convert
+
+# cast onto genome.
+tibble_dbPTM_allhuman_annotations <- tibble_dbPTM_allhuman_annotations_with_ENSP %>% 
+  add_column("CDS_relative_coords_start" = ((3*.$modified_residue_position) - 2), "CDS_relative_coords_end" = (3*.$modified_residue_position)) %>% 
+  dplyr::mutate("vec_all_CDS_relative_positions" = purrr::map2(.x = `CDS_relative_coords_start`, .y = `CDS_relative_coords_end`, .f = ~.x:.y)) %>%
+  dplyr::left_join(., tibble_ENSP_to_genome_relative_CDS_positions %>% dplyr::rename("ensembl_peptide_id" = "protein_id"), by = "ensembl_peptide_id") %>%
+  # some ENSP ids from interpro are not in ensembl.
+  dplyr::filter(is.na(chr) != TRUE) 
+
+# split by chr to parallel loop more efficiently
+list_dbPTM_allhuman_annotations <- tibble_dbPTM_allhuman_annotations %>%
+  dplyr::group_split(PTM_type, chr, CDS_relative_coords_start %% 13) 
+
+plan(list(tweak(multiprocess, workers = 30),
+          tweak(multiprocess, workers = 10)))
+
+# plan(multiprocess)
+# options(mc.cores = 144)
+
+# retrieve genome-relative coords
+list_dbPTM_allhuman_annotations_cast_onto_genome_by_chr <- furrr::future_map(
+  .x = list_dbPTM_allhuman_annotations, 
+  .f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- list_dbPTM_allhuman_annotations[[50]]
+    ###########
+    
+    a1 %>%
+      dplyr::mutate("vec_all_genome_relative_coords_of_item" = purrr::map2(
+        .x = a1$vec_all_CDS_relative_positions, 
+        .y = a1$vec_all_parent_ENSP_CDS_positions_sorted, 
+        .f = ~.y %>% unlist %>% .[.x])) %>% 
+      dplyr::mutate("nucleotide_width" = purrr::map(.x = .$vec_all_genome_relative_coords_of_item, .f = ~length(.x)) %>% unlist) %>%
+      return
+
+  }, .progress = TRUE )
+
+tibble_dbPTM_allhuman_annotations_cast_onto_genome <- list_dbPTM_allhuman_annotations_cast_onto_genome_by_chr %>% rbindlist %>% as_tibble
+
+# drop the columns of all ENSP positions. we dont need them anymore.
+tibble_dbPTM_allhuman_annotations_cast_onto_genome <- tibble_dbPTM_allhuman_annotations_cast_onto_genome %>% dplyr::select(-vec_all_parent_ENSP_CDS_positions_sorted, -`CDS_relative_coords_start%%13`)
+
+# save(tibble_dbPTM_allhuman_annotations_cast_onto_genome,
+     # file = paste(R_processing_results_dir, "tibble_dbPTM_allhuman_annotations_cast_onto_genome.tibble", sep = ""))
+
+load(file = paste(R_processing_results_dir, "tibble_dbPTM_allhuman_annotations_cast_onto_genome.tibble", sep = ""))
+
+# create a list of vectors describing all unique genomic positions
+list_dbPTM_allhuman_phosphosites_genome_relative_positions <- tibble_dbPTM_allhuman_annotations_cast_onto_genome %>%
+  dplyr::filter(PTM_type == "Phosphorylation") %>%
+  dplyr::group_split(chr) %>%
+  set_names(nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist) %>%
+  purrr::map(~.x$vec_all_genome_relative_coords_of_item %>% unlist %>% unique %>% sort)
+
+```
+
+##### Intersect the phosphosites with differential positions
+
+```{r}
+
+# get list of purely differential positions from BOTH tools (by chromosome)
+list_all_genome_relative_differentially_spliced_regions <- dplyr::bind_rows(
+  tibble_JUM_junction_ontology_supp_info[, c("chr", "vector_genomic_coords_of_all_differential_exon_positions")],
+  tibble_PSIsigma_exon_ontology_supp_info[, c("chr", "vector_genomic_coords_of_all_differential_exon_positions")]) %>%
+  dplyr::group_split(chr) %>%
+  set_names(nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist) %>% 
+  purrr::map(~.x$vector_genomic_coords_of_all_differential_exon_positions %>% strsplit(split = ",") %>% unlist %>% type.convert %>% unique %>% sort)
+
+# list-ify the junc/exons and swissprot phosphosite tables by chr
+## junc.exons
+list_junc.exons_phosphosite_positions_by_chr <- tibble_genome.relative.positions_phosphosites %>%
+  dplyr::group_split(chrom) %>%
+  set_names(nm = purrr::map(.x = ., .f = ~.x$chrom %>% unique) %>% unlist)
+## swissprot
+list_swissprot_phosphosite_positions_by_chr <- tibble_MQtobed_2020_phosphosites %>%
+  dplyr::group_split(chr) %>%
+  set_names(nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist)
+
+plan(list(tweak(multiprocess, workers = 30),
+          tweak(multiprocess, workers = 2)))
+
+# intersect for each element of the junc/exons or swissprot phosphosites tibbles
+# add logical info. as a new column
+## NOTE: logical = TRUE, if there is overlap i.e. phosphosite lies in differential region.
+### junc.exons
+list_tibble_junc.exons_phosphosites_intersect_diffspliced_regions <- furrr::future_map2(
+  .x = list_junc.exons_phosphosite_positions_by_chr,
+  .y = list_all_genome_relative_differentially_spliced_regions[names(list_junc.exons_phosphosite_positions_by_chr)],
+  .f = function(a1, a2) {
+    
+    furrr::future_map(.x = a1 %>% array_tree,
+                      .f = function(b1) {
+                        
+                        vector_genome_relative_coords_of_phosphosite <- b1$genome_relative_positions_phosphosite %>% strsplit(split = ",") %>% unlist %>% type.convert
+                        
+                        logical_intersects_or_not <- intersect(a2, vector_genome_relative_coords_of_phosphosite) %>% length > 0
+                        
+                        return(b1 %>% as_tibble %>% add_column("intersects_differential_region" = logical_intersects_or_not))
+                        
+                      } ) %>%
+      rbindlist %>% as_tibble %>%
+      return
+      
+  }, .progress = TRUE )
+              
+### swissprot                                                                          
+list_tibble_swissprot_phosphosites_intersect_diffspliced_regions <- furrr::future_map2(
+  .x = list_swissprot_phosphosite_positions_by_chr,
+  .y = list_all_genome_relative_differentially_spliced_regions[names(list_swissprot_phosphosite_positions_by_chr)],
+  .f = function(a1, a2) {
+    
+    furrr::future_map(.x = a1 %>% array_tree,
+                      .f = function(b1) {
+                        
+                        vector_genome_relative_coords_of_phosphosite <- b1$all_genomic_positions_of_feature %>% strsplit(split = ",") %>% unlist %>% type.convert
+                        
+                        logical_intersects_or_not <- intersect(a2, vector_genome_relative_coords_of_phosphosite) %>% length > 0
+                        
+                        return(b1 %>% as_tibble %>% add_column("intersects_differential_region" = logical_intersects_or_not))
+                        
+                      } ) %>%
+      rbindlist %>% as_tibble %>%
+      return
+    
+  }, .progress = TRUE )
+
+```
+
+##### Intersect with dbPTM
+
+```{r}
+
+### junc.exons
+list_tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM <- furrr::future_map2(
+  .x = list_tibble_junc.exons_phosphosites_intersect_diffspliced_regions,
+  .y = list_dbPTM_allhuman_phosphosites_genome_relative_positions[names(list_tibble_junc.exons_phosphosites_intersect_diffspliced_regions)],
+  .f = function(a1, a2) {
+    
+    furrr::future_map(.x = a1 %>% array_tree,
+                      .f = function(b1) {
+                        
+                        vector_genome_relative_coords_of_phosphosite <- b1$genome_relative_positions_phosphosite %>% strsplit(split = ",") %>% unlist %>% type.convert
+                        
+                        logical_intersects_or_not <- intersect(a2, vector_genome_relative_coords_of_phosphosite) %>% length > 0
+                        
+                        return(b1 %>% as_tibble %>% add_column("intersects_dbPTM_phosphosite" = logical_intersects_or_not))
+                        
+                      } ) %>%
+      rbindlist %>% as_tibble %>%
+      return
+      
+  }, .progress = TRUE )
+
+### swissprot                                                                          
+list_tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM <- furrr::future_map2(
+  .x = list_tibble_swissprot_phosphosites_intersect_diffspliced_regions,
+  .y = list_dbPTM_allhuman_phosphosites_genome_relative_positions[names(list_tibble_swissprot_phosphosites_intersect_diffspliced_regions)],
+  .f = function(a1, a2) {
+    
+    furrr::future_map(.x = a1 %>% array_tree,
+                      .f = function(b1) {
+                        
+                        vector_genome_relative_coords_of_phosphosite <- b1$all_genomic_positions_of_feature %>% strsplit(split = ",") %>% unlist %>% type.convert
+                        
+                        logical_intersects_or_not <- intersect(a2, vector_genome_relative_coords_of_phosphosite) %>% length > 0
+                        
+                        return(b1 %>% as_tibble %>% add_column("intersects_dbPTM_phosphosite" = logical_intersects_or_not))
+                        
+                      } ) %>%
+      rbindlist %>% as_tibble %>%
+      return
+    
+  }, .progress = TRUE )
+
+# rbind and tibblise
+tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM <- list_tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM %>% rbindlist %>% as_tibble
+
+tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM <- list_tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM %>% rbindlist %>% as_tibble
+
+```
+
+##### Finally we can print the statistics on the number of known/novel
+
+```{r}
+
+# combine swissprot and junc.exons tibble and take unique phosphosites only
+tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique <- dplyr::bind_rows(
+  tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM[, c("chrom", "genome_relative_positions_phosphosite", "intersects_differential_region", "intersects_dbPTM_phosphosite")] %>% dplyr::rename("chr" = "chrom", "all_genomic_positions_of_feature" = "genome_relative_positions_phosphosite"),
+  tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM[, c("chr", "all_genomic_positions_of_feature", "intersects_differential_region", "intersects_dbPTM_phosphosite")]
+) %>%
+  dplyr::distinct(chr, all_genomic_positions_of_feature, .keep_all = TRUE)
+
+# count numbers
+cat("number of phosphosites in differentially spliced regions: ", (tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_differential_region == TRUE) %>% which %>% length)
+
+cat("number of novel phosphosites overall: ", (tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_dbPTM_phosphosite == TRUE) %>% which %>% length)
+
+cat("number of NOVEL phosphosites in differentially spliced regions: ", (tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_differential_region == TRUE &
+                                                                           tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_dbPTM_phosphosite == TRUE) %>% which %>% length)
 
 ```
 

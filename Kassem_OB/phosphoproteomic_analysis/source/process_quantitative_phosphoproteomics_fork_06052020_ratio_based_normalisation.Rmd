@@ -15,7 +15,7 @@ library(tidyverse)
 # library(gtools)
 # library(extrafont)
 # loadfonts(device="win")
-windowsFonts("Helvetica" = windowsFont("Helvetica"))
+# windowsFonts("Helvetica" = windowsFont("Helvetica"))
 # library(Laurae)
 
 library(furrr)
@@ -48,10 +48,11 @@ library(seqinr)
 library(gtools)
 # library(Rfast)
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+# shared_dir <- "Y:/sharedfolder/"
+shared_dir <- "/mnt/Tertiary/sharedfolder/"
 
-R_processing_results_dir <- paste("Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
+R_processing_results_dir <- paste("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
+# R_processing_results_dir <- paste("Y:/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
 
 if(! dir.exists(R_processing_results_dir) ) {
      dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -331,10 +332,12 @@ average_replicates_by_column <- function(table, design_factor, min_replicates) {
 
 ```{r}
 
-list_maxquant_run_dirs <- list("junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons/txt/",
-                               "sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons/txt/",
-                               # "con_sp.hsa.canonical.isoforms_junc.exons" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons/txt/",
-                               "con_sp.hsa.canonical.isoforms_trembl" = "Z:/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_trembl/txt/"
+list_maxquant_run_dirs <- list("junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons_deskside/txt/",
+                               "sp.hsa.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons_deskside/txt/",
+                               # "con_sp.hsa.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_junc.exons/txt/",
+                               
+                               "con_sp.hsa.canonical.isoforms" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/txt/",
+                               "con_sp.hsa.canonical.isoforms_trembl" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_trembl/txt/"
                                )
                                
 list_output.table_categories <- list("modification_specific_peptides" = "modificationSpecificPeptides.txt", 
@@ -358,7 +361,7 @@ list_imported_maxquant_tibbles <- list_imported_maxquant_tibbles %>% purrr::map(
 
 # global processing of tables
 
-## shuffle tables
+## wrangle tables
 
 ```{r}
 
@@ -401,7 +404,7 @@ save(list_imported_maxquant_tibbles_processed, file = paste(R_processing_results
 
 ```{r include=FALSE}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -443,9 +446,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
     
   } )
   
-})
-
-# , .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse"))
+}, .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse")))
 
 ```
 
@@ -453,7 +454,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
 
 ```{r include=FALSE}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -498,7 +499,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
     
     } )
   
-  })
+  }, .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse")))
 
 ```
 
@@ -506,7 +507,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
 
 ```{r warning=FALSE, include=FALSE}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -574,7 +575,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
     
   } )
   
-} )
+}, .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse")))
 
 ```
 
@@ -582,7 +583,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
 
 ```{r warning=FALSE, include=FALSE}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -665,7 +666,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
     
   } )
   
-})
+}, .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse", "tibble")))
 
 ```
 
@@ -673,7 +674,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
 
 ```{r warning=FALSE, include=FALSE}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -756,7 +757,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
     
   } )
   
-})
+}, .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse", "tibble")))
 
 ```
 
@@ -764,7 +765,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
 
 ```{r include=FALSE}
 
-future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -843,7 +844,9 @@ future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
     
   } )
   
-}, .progress = TRUE)
+} )
+
+# , .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse", "tibble"))
 
 ```
 
@@ -851,7 +854,7 @@ future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
 
 ```{r include=FALSE}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -931,7 +934,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
   
   } )
   
-} )
+}, .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse", "tibble")) )
   
 ```
 
@@ -939,7 +942,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
 
 ```{r include=FALSE}
 
-purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_imported_maxquant_tibbles_processed[[1]]
@@ -1020,7 +1023,7 @@ purrr::map2(.x = list_imported_maxquant_tibbles_processed, .y = list_of_nested_t
     
   } )
   
-} )
+}, .progress = TRUE , .options = future_options(globals = c("ggplot2", "tidyverse", "tibble")))
 
 ```
 
@@ -1111,7 +1114,7 @@ list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles <- purrr::m
 } )
   
 # plot missingness and PCA
-purrr::map2(.x = list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles, .y = list_of_nested_table_names, .f = function(.x, .y) {
+future_map2(.x = list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles, .y = list_of_nested_table_names, .f = function(.x, .y) {
   
   # DEBUG ###
   # .x <- list_of_peptide_phosphopeptide_proteingroups_intensity_matrixtibbles[[1]]
@@ -1149,7 +1152,7 @@ purrr::map2(.x = list_of_peptide_phosphopeptide_proteingroups_intensity_matrixti
     
   } )
     
-})
+}, progress = TRUE)
   
 
 ```
@@ -1447,7 +1450,7 @@ NOTE: EigenMS input values MUST be log2 transformed and not zero - not even pote
 # or it can be logical FALSE, indicating no sweep required.
 h.c_sweep <- 2
 
-list_of_eigenMS_results <- purrr::pmap(.l = list(
+list_of_eigenMS_results <- furrr::future_pmap(.l = list(
   "L1" = list_of_peptide_phosphopeptide_proteingroups_normalised_ratio_matrixtibbles,
   "L2" = list_imported_maxquant_tibbles_processed,
   "L3" = list_of_nested_table_names,
@@ -1790,13 +1793,11 @@ list_of_eigenMS_results <- purrr::pmap(.l = list(
     
     return(L2_list_of_tibbles)
     
-  })
+  }, .progress = TRUE, .options = future_options(globals = c("plotRLE", "plotMDS", "ProteoMM", "zero_to_NA", "transform_non.na_to_log2", "R_processing_results_dir")) )
 
-# , .progress = TRUE, .options = future_options(globals = c("plotRLE", "plotMDS", "ProteoMM", "zero_to_NA", "transform_non.na_to_log2", "R_processing_results_dir"))
+names(list_of_eigenMS_results) <- names(list_of_nested_table_names)
 
 save(list_of_eigenMS_results, file = paste(R_processing_results_dir, "list_of_eigenMS_results.Rlist", sep = ""))
-
-plan(multiprocess)
 
 # also create a version of the list without the h.c and PI metadata.
 list_of_eigenMS_results_tibble.only <- purrr::map(.x = list_of_eigenMS_results, 
@@ -1894,7 +1895,7 @@ future_pmap(.l = list(
         ## run Normalyzer
         normalyzer(jobName = paste(names[[1]], "_", names[[2]], sep = ""),
                    experimentObj = sumExpObj,
-                   outputDir = paste("Z:/", sep = ""))
+                   outputDir = paste("/mnt/Tertiary/sharedfolder/", sep = ""))
         
       } )
     
@@ -2143,9 +2144,9 @@ library(DreamAI)
 filter_less_than_x_na_for_all_timepoints <- function(unfiltered_tibble, variable_levels, maximum_na_per_row) {
   
   # DEBUG ###
-  # unfiltered_tibble <- list_of_eigenMS_results$sp.hsa.canonical.isoforms_junc.exons$peptides$result_table
+  # unfiltered_tibble <- b1$result_table
   # variable_levels <- c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud")
-  # maximum_na_per_row <- 2
+  # maximum_na_per_row <- 1
   ###########
   
   # list-ify by ratio
@@ -2159,11 +2160,11 @@ filter_less_than_x_na_for_all_timepoints <- function(unfiltered_tibble, variable
   ## map the list of ratio-subsetted tibbles to calculate the maximum number of NA. 
   ## DROP ROWS WITH 2 OR MORE NaN
   list_tibble_subset_by_ratio_with_NaN_count <- purrr::map(.x = list_tibble_subset_by_ratio, 
-                                                           .f = ~.x %>% future_apply(MARGIN = 1, FUN = function(X) {which(is.na(X) == TRUE) %>% length %>% return}))
+                                                           .f = ~.x %>% apply(MARGIN = 1, FUN = function(X) {which(is.na(X) == TRUE) %>% length %>% return}))
   
   tibble_tibble_subset_by_ratio_with_NaN_count <- list_tibble_subset_by_ratio_with_NaN_count %>% as_tibble
   
-  vector_maximum_NaN_count <- tibble_tibble_subset_by_ratio_with_NaN_count %>% future_apply(MARGIN = 1, FUN = function(X) {max(X) %>% return})
+  vector_maximum_NaN_count <- tibble_tibble_subset_by_ratio_with_NaN_count %>% apply(MARGIN = 1, FUN = function(X) {max(X) %>% return})
   
   vector_row_indices_with_less_than_2_NaN <- which(vector_maximum_NaN_count <= maximum_na_per_row)
   
@@ -2234,26 +2235,21 @@ therefore 67% observed is the threshold in order to impute items with at least 2
 maximum_na_observations_per_timepoint <- 1
 # minimum_na_observations_per_timepoint <- 1
 
-list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints <- purrr::map2(.x = list_of_eigenMS_results, .y = names(list_of_eigenMS_results), .f = function(.x, .y) {
+list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints <- future_map2(.x = list_of_eigenMS_results, .y = names(list_of_eigenMS_results), .f = function(a1, a2) {
   
   # DEBUG ###
-  # .x <- list_of_eigenMS_results
-  # .y <- names(list_of_eigenMS_results)
+  # a1 <- list_of_eigenMS_results[[1]]
+  # a2 <- names(list_of_eigenMS_results) %>% .[[1]]
   ###########
-  
-  a1 <- .x
-  a2 <- .y
   
   cat("now processing", a2, "at level 1\n")
   
-  L2_list <- purrr::map2(.x = a1, .y = names(a1), .f = function(.x, .y) {
+  L2_list <- purrr::map2(.x = a1, .y = names(a1), .f = function(b1, b2) {
       
       # DEBUG ###
-      
+      # b1 <- a1[[1]]
+      # b2 <- names(a1) %>% .[[1]]
       ###########
-    
-      b1 <- .x
-      b2 <- .y
     
       cat("now processing", b2, "at level 2\n")
       
@@ -2266,7 +2262,7 @@ list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints <- purrr::map2(.x
   
   return(L2_list)
   
-} )
+}, .progress = TRUE, .options = future_options(globals = c("filter_less_than_x_na_for_all_timepoints", "dplyr")) )
 
 ```
 
@@ -2322,36 +2318,33 @@ list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints <- purrr::map2(
 
 ```{r warning=FALSE}
 
+plan(list(tweak(multiprocess, workers = 8),
+          tweak(multiprocess, workers = 8)))
+
 if(! dir.exists(paste(R_processing_results_dir, "DreamAI_results/", sep = "")) ) {
   dir.create(paste(R_processing_results_dir, "DreamAI_results/", sep = ""), recursive = TRUE)}
 
-list_of_eigenMS_results_DreamAI_imputed_sp <- purrr::map2(.x = list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints["sp.hsa.canonical.isoforms_junc.exons"], 
-                                                          .y = names(list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints["sp.hsa.canonical.isoforms_junc.exons"]), 
-                                                          .f = function(.x, .y) {
+list_of_eigenMS_results_DreamAI_imputed_sp <- future_map2(.x = list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints[c("sp.hsa.canonical.isoforms_junc.exons", "con_sp.hsa.canonical.isoforms", "con_sp.hsa.canonical.isoforms_trembl")], 
+                                                          .y = names(list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints[c("sp.hsa.canonical.isoforms_junc.exons", "con_sp.hsa.canonical.isoforms", "con_sp.hsa.canonical.isoforms_trembl")]), 
+                                                          .f = function(a1, a2) {
                                                             
                                                             # DEBUG ###
-                                                            # .x <- list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints
-                                                            # .y <- names(list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints)
+                                                            # a1 <- list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints$sp.hsa.canonical.isoforms_junc.exons
+                                                            # a2 <- names(list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints["sp.hsa.canonical.isoforms_junc.exons"])
                                                             ###########
-                                                            
-                                                            a1 <- .x
-                                                            a2 <- .y
                                                             
                                                             cat("now processing", a2, "at level 1\n")
                                                             
-                                                            L2_list <- purrr::map2(.x = a1[c("phosphosites", "protein_groups")], .y = names(a1[c("phosphosites", "protein_groups")]), .f = function(.x, .y) {
+                                                            L2_list <- future_map2(.x = a1, .y = names(a1), .f = function(b1, b2) {
                                                               
                                                               # DEBUG ###
-                                                              # b1 <- list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints[["sp.hsa.canonical.isoforms_junc.exons"]][["protein_groups"]]$result_table %>% dplyr::select(-id)
-                                                              # b2 <- names(list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints[["sp.hsa.canonical.isoforms_junc.exons"]]["phosphosites"])
+                                                              # b1 <- a1[[1]]
+                                                              # b2 <- names(a1) %>% .[[1]]
                                                               ###########
-                                                              
-                                                              b1 <- .x$result_table %>% dplyr::select(-id)
-                                                              b2 <- .y
                                                               
                                                               cat("now processing", b2, "at level 2\n")
                                                               
-                                                              list_imputed_dataframe <- DreamAI(b1 %>% as.matrix, k = 10, maxiter_MF = 10, ntree = 100,
+                                                              list_imputed_dataframe <- DreamAI(b1$result_table %>% dplyr::select(-id) %>% as.matrix, k = 10, maxiter_MF = 10, ntree = 100,
                                                                               maxnodes = 144, maxiter_ADMIN = 30, tol = 10^(-2),
                                                                               gamma_ADMIN = NA, gamma = 50, CV = FALSE,
                                                                               fillmethod = "row_mean", maxiter_RegImpute = 10,
@@ -2371,15 +2364,17 @@ list_of_eigenMS_results_DreamAI_imputed_sp <- purrr::map2(.x = list_of_eigenMS_r
                                                                                                    save_dir = paste("./", sep = ""),
                                                                                                    save_name = paste("norm.eigenMS_dreamai.imp_", a2, "_", b2, sep = ""))
                                                               
-                                                              imputed_tibble <- imputed_dataframe %>% as_tibble %>% add_column("id" = .x$id, .before = 1)
+                                                              imputed_tibble <- imputed_dataframe %>% as_tibble %>% add_column("id" = b1$result_table$id, .before = 1)
                                                               
-                                                              return(imputed_dataframe)
+                                                              return(imputed_tibble)
                                                               
-                                                            } )
+                                                            }, .progress = TRUE, .options = future_options(globals = c("DreamAI", "dplyr", "plot_PCA_for_timepoint_and_replicate", "tibble", "impute.knn", "R_processing_results_dir", "ggplot2", "ggplot", "vector_replicate_names")) )
                                                             
                                                             return(L2_list)
                                                             
-                                                          } )
+                                                          }, .progress = TRUE, .options = future_options(globals = c("DreamAI", "dplyr", "plot_PCA_for_timepoint_and_replicate", "tibble", "impute.knn", "R_processing_results_dir", "ggplot2", "ggplot", "vector_replicate_names")) )
+
+save.image(file = paste(R_processing_results_dir, "02102020_windows_dreamAI.Rdata"))
 
 ```
 
@@ -2389,28 +2384,29 @@ list_of_eigenMS_results_DreamAI_imputed_sp <- purrr::map2(.x = list_of_eigenMS_r
 
 list_of_eigenMS_results_imputed.incomplete_sp_raw <- 
   list_of_eigenMS_results_DreamAI_imputed_sp <- purrr::pmap(.l = list(
-    "a1" = list_of_eigenMS_results_DreamAI_imputed_sp["sp.hsa.canonical.isoforms_junc.exons"],
-    "a2" = list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints["sp.hsa.canonical.isoforms_junc.exons"],
-    "a3" = names(list_of_eigenMS_results_DreamAI_imputed_sp["sp.hsa.canonical.isoforms_junc.exons"])
+    "a1" = list_of_eigenMS_results_DreamAI_imputed_sp,
+    "a2" = list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints[names(list_of_eigenMS_results_DreamAI_imputed_sp)],
+    "a3" = names(list_of_eigenMS_results_DreamAI_imputed_sp)
   ), .f = function(a1, a2, a3) {
     
     # DEBUG ###
-    # a1 <- list_of_eigenMS_results_DreamAI_imputed_sp[["sp.hsa.canonical.isoforms_junc.exons"]]
-    # a2 <- list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints[["sp.hsa.canonical.isoforms_junc.exons"]]
-    # a3 <- names(list_of_eigenMS_results_DreamAI_imputed_sp["sp.hsa.canonical.isoforms_junc.exons"])
+    # a1 <- list_of_eigenMS_results_DreamAI_imputed_sp[[1]]
+    # a2 <- list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints[names(list_of_eigenMS_results_DreamAI_imputed_sp)] %>% .[[1]]
+    # a3 <- names(list_of_eigenMS_results_DreamAI_imputed_sp) %>% .[[1]]
     ###########
     
     cat("now processing", a3, "at level 1\n")
     
     L2_list <- purrr::pmap(.l = list(
-      "b1" = a1[c("phosphosites", "protein_groups")],
-      "b2" = a2[c("phosphosites", "protein_groups")],
-      "b3" = names(a1[c("phosphosites", "protein_groups")])
+      "b1" = a1,
+      "b2" = a2,
+      "b3" = names(a1)
     ), .f = function(b1, b2, b3) {
       
       # DEBUG ###
-      # b1 <- list_of_eigenMS_results_DreamAI_imputed_sp[["sp.hsa.canonical.isoforms_junc.exons"]][["phosphosites"]]
-      # b2 <- list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints[["sp.hsa.canonical.isoforms_junc.exons"]][["phosphosites"]]
+      # b1 <- a1[[1]]
+      # b2 <- a2[[1]]
+      # b3 <- names(a1) %>% .[[1]]
       ###########
       
       cat("now joining", b3, "at level 2\n")
@@ -2438,7 +2434,7 @@ list_of_eigenMS_results_imputed.incomplete_raw <- splice(list_of_eigenMS_results
 
 ```{r warning=FALSE}
 
-list_of_eigenMS_results_quantitative_cleaned <- purrr::pmap(
+suppressWarnings(suppressMessages(list_of_eigenMS_results_quantitative_cleaned <- purrr::pmap(
   .l = list("a1" = list_of_eigenMS_results_imputed.incomplete_raw,
             "a2" = list_imported_maxquant_tibbles_processed[names(list_of_eigenMS_results_imputed.incomplete_raw)],
             "a3" = names(list_of_eigenMS_results_imputed.incomplete_raw)),
@@ -2526,7 +2522,7 @@ list_of_eigenMS_results_quantitative_cleaned <- purrr::pmap(
       unfiltered_tibble = tibble_phosphosites_subtracted_by_protein.groups, 
       variable_levels = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"), 
       max_na_per_replicates_x = max_na_per_replicates_x.value,
-      minimum_number_of_timepoints_considered_y = minimum_number_of_timepoints_considered_y.value) %>% suppressMessages
+      minimum_number_of_timepoints_considered_y = minimum_number_of_timepoints_considered_y.value)
     
       list <- splice(a1[-grep(x = names(a1), pattern = "phosphosites")],
                       "phosphosites" = tibble_phosphosites_normalised_filtered
@@ -2536,7 +2532,7 @@ list_of_eigenMS_results_quantitative_cleaned <- purrr::pmap(
     
   }
   
-)
+)))
 
 ```
 
@@ -2761,7 +2757,7 @@ list_eigenMS_limma_results_geneset <- purrr::pmap(
                   
                   # subset the Gene.names and Fasta.headers columns
                   tibble_raw_gene_names <- tibble_differential_item_info[, colnames(tibble_differential_item_info) %in% c("Gene.names", "Fasta.headers")] %>%
-                    dplyr::mutate_all(.funs = function(x) {return(gsub(x = x, pattern = ".*GN=([^ ]+).*{0,1}", replacement = "\\1"))} ) %>% unlist
+                    dplyr::mutate_all(.funs = function(x) {return(gsub(x = x, pattern = "([^\\ ]+).*{0,1}", replacement = "\\1"))} ) %>% unlist
                   # remove blanks
                   indices_blank_elements <- which(tibble_raw_gene_names == "")
                   if (indices_blank_elements %>% length != 0) {
@@ -2776,7 +2772,8 @@ list_eigenMS_limma_results_geneset <- purrr::pmap(
                   
                   return(tibble_split_gene_names)
                   
-                } ) %>% return
+                } ) %>% purrr::discard(.p = ~.x %>% length == 0) %>% 
+      return
     
   } )
 
@@ -2799,7 +2796,9 @@ list_eigenMS_limma_results_geneset <- purrr::pmap(
 
 ## Create catDB instance (takes a while but needs to be done only once)
 # note: you had to save the GO annotation file to disk in the previous steps above
-catdb <- makeCATdb(myfile = paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+# catdb <- makeCATdb(myfile = paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
+
+load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 
 ```
 
@@ -2808,8 +2807,8 @@ catdb <- makeCATdb(myfile = paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM
 ```{r}
 
 list_GOhyper_enrichment <- purrr::pmap(.l = list(
-  "a1" = list_eigenMS_limma_results_geneset["sp.hsa.canonical.isoforms_junc.exons"],
-  "a2" = names(list_eigenMS_limma_results_geneset["sp.hsa.canonical.isoforms_junc.exons"])), .f = function(a1, a2) {
+  "a1" = list_eigenMS_limma_results_geneset,
+  "a2" = names(list_eigenMS_limma_results_geneset)), .f = function(a1, a2) {
     
     # DEBUG ###
     # a1 <- list_of_eigenMS_limma_results[["sp.hsa.canonical.isoforms_junc.exons"]]

@@ -24,6 +24,7 @@ library(genefilter)
 
 library(ggplot2)
 library(ggpattern)
+library(plotly)
 
 library(kohonen)
 library(genefilter)
@@ -53,7 +54,6 @@ library(PFAM.db)
 # library(data.table)
 # library(Rfast)
 
-# shared_dir <- "Z:/"
 shared_dir <- "/mnt/Tertiary/sharedfolder/"
 
 # results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/multiomic_synthesis/results/"
@@ -618,9 +618,25 @@ tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("/mnt/Tertiary/sharedfolder/
 
 # tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# fill in the missing sub_junc_coor for cassette and IR events
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "sub_junction_start_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\4") %>% type.convert
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "sub_junction_end_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\5") %>% type.convert
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "intron_retention", "sub_junction_start_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "intron_retention", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\3") %>% type.convert
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "intron_retention", "sub_junction_end_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "intron_retention", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\4") %>% type.convert
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::mutate("AS_event_chr" = gsub(x = AS_event_ID, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_(.*)$", replacement = "\\1"))
 
 # tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7855_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7913_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+# fill in the missing sub_junc_coor for cassette and IR events
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "cassette_exon_events", "sub_junction_start_coor"] <- gsub(x = tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\4") %>% type.convert
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "cassette_exon_events", "sub_junction_end_coor"] <- gsub(x = tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\5") %>% type.convert
+
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "intron_retention", "sub_junction_start_coor"] <- gsub(x = tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "intron_retention", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\3") %>% type.convert
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "intron_retention", "sub_junction_end_coor"] <- gsub(x = tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na$splicemode == "intron_retention", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\4") %>% type.convert
+
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na <- tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na %>% dplyr::mutate("AS_event_chr" = gsub(x = AS_event_ID, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_(.*)$", replacement = "\\1"))
 
 # tibble_JUM_all_junctions_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_all_JUM_results_13137_VSRs_with_na_annotated.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_JUM_all_junctions_with_na <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_all_JUM_results_13137_VSRs_with_na_annotated.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
@@ -938,6 +954,7 @@ tibble_ebi_gwas_catalog_deduped <- dplyr::bind_rows(tibble_ebi_gwas_catalog_dedu
 
 # list-ify by chromosome
 list_tibble_ebi_gwas_catalog_by_chr <- tibble_ebi_gwas_catalog_deduped %>% 
+  dplyr::mutate_at(.vars = "CHR_ID", .funs = trimws) %>%
   dplyr::group_split(CHR_ID) %>%
   set_names(nm = purrr::map(.x = ., .f = ~.x$`CHR_ID` %>% unique) %>% unlist)
 
@@ -1363,16 +1380,120 @@ write.table(x = vector_differential_genes_anysig_with_na, file = paste(results_d
   
 ```
 
+
+#### explore the kinases 
+
+```{r}
+
+vector_all_kinase_genes <- long_tibble_GO_test_anysig_with_na_top.hits[long_tibble_GO_test_anysig_with_na_top.hits$Term == "protein kinase activity", "SampleKeys"] %>% unlist %>% strsplit(split = " ") %>% unlist
+
+# convert to ENSG
+vector_all_kinase_ENSG <- getBM(attributes = "ensembl_gene_id", filters = "external_gene_name", values = vector_all_kinase_genes, mart = ensembl_mart) %>% unlist
+
+# subset JUM and PSI-Sigma tibbles by kinase genes
+tibble_JUM_differential_kinase_only <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene %in% vector_all_kinase_genes, ]
+
+tibble_JUM_differential_kinase_only %>% dplyr::group_by(splicemode) %>% dplyr::summarise(n())
+
+tibble_PSIsigma_differential_kinase_only <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names %in% vector_all_kinase_genes, ]
+
+tibble_PSIsigma_differential_kinase_only %>% dplyr::distinct(database_ID, event_region_coords, diff_exon_coords, .keep_all = TRUE) %>% dplyr::group_by(splicemode) %>% dplyr::summarise(n())
+
+# look at exon/junction ontology
+
+tibble_JUM_junction_ontology_transcripts_kinase_only <- tibble_JUM_junction_ontology_transcripts[tibble_JUM_junction_ontology_transcripts$Gene %in% vector_all_kinase_genes, ] %>% split_delimited_columns_in_table(target_colname = "transcript_features", split = ",") %>% dplyr::group_by(transcript_features) %>% dplyr::summarise(n())
+tibble_JUM_junction_ontology_biomart_kinase_only <- tibble_JUM_junction_ontology_biomart[tibble_JUM_junction_ontology_biomart$Gene %in% vector_all_kinase_genes, ] %>% dplyr::left_join(., tibble_non_family_interpro_entries[, c("Accession", "Name")] %>% dplyr::rename("interpro" = "Accession")) %>% dplyr::group_by(Gene) %>% dplyr::summarise("any_mobidblite" = mobidblite %>% is.na %>% all == FALSE, "any_seg" = mobidblite %>% is.na %>% all == FALSE, "any_interpro" = interpro %in% tibble_non_family_interpro_entries$Accession %>% any, "kinase_domain")
+
+tibble_JUM_junction_ontology_biomart[tibble_JUM_junction_ontology_biomart$Gene %in% vector_all_kinase_genes, ] %>% dplyr::left_join(., tibble_non_family_interpro_entries[, c("Accession", "Name")] %>% dplyr::rename("interpro" = "Accession")) %>% dplyr::distinct(AS_event_ID, Name) %>% dplyr::group_by(Name) %>% dplyr::summarise(n())
+
+
+
+tibble_JUM_junction_ontology_PTMs_kinase_only <- tibble_JUM_junction_ontology_PTMs[tibble_JUM_junction_ontology_PTMs$Gene %in% vector_all_kinase_genes, ] %>% dplyr::group_by(PTM_type) %>% dplyr::summarise(n())
+
+tibble_PSIsigma_exon_ontology_transcripts_kinase_only <- tibble_PSIsigma_exon_ontology_transcripts[tibble_PSIsigma_exon_ontology_transcripts$matched_gene_names %in% vector_all_kinase_genes, ] %>% split_delimited_columns_in_table(target_colname = "tibble_overlapping_parent_transcript_features", split = ",") %>% dplyr::group_by(tibble_overlapping_parent_transcript_features) %>% dplyr::summarise(n())
+tibble_PSIsigma_exon_ontology_biomart_kinase_only <- tibble_PSIsigma_exon_ontology_biomart[tibble_PSIsigma_exon_ontology_biomart$matched_gene_names %in% vector_all_kinase_genes, ] %>% dplyr::left_join(., tibble_non_family_interpro_entries[, c("Accession", "Name")] %>% dplyr::rename("interpro" = "Accession")) %>% dplyr::group_by(matched_gene_names) %>% dplyr::summarise("any_mobidblite" = mobidblite %>% is.na %>% all == FALSE, "any_seg" = mobidblite %>% is.na %>% all == FALSE, "any_interpro" = interpro %in% tibble_non_family_interpro_entries$Accession %>% any)
+
+
+tibble_PSIsigma_exon_ontology_biomart[tibble_PSIsigma_exon_ontology_biomart$matched_gene_names %in% vector_all_kinase_genes, ] %>% dplyr::left_join(., tibble_non_family_interpro_entries[, c("Accession", "Name")] %>% dplyr::rename("interpro" = "Accession")) %>% dplyr::distinct(event_region_coords, diff_exon_coords, Name) %>% dplyr::group_by(Name) %>% dplyr::summarise(n())
+
+
+tibble_PSIsigma_exon_ontology_PTMs_kinase_only <- tibble_PSIsigma_exon_ontology_PTMs[tibble_PSIsigma_exon_ontology_PTMs$matched_gene_names %in% vector_all_kinase_genes, ] %>% dplyr::group_by(PTM_type) %>% dplyr::summarise(n())
+
+tibble_RNAi_RSA_results <- read.delim(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/MSC.to.OB_kinase.siRNA.screen/analysis_RSA/results/R_processing/RSA_results_summary.txt", header = TRUE, row.names = NULL, stringsAsFactors = FALSE, sep = "\t") %>% as_tibble
+
+# match the RNAi dataset to the kinases identified as differentially spliced
+tibble_RNAi_results_diffspliced <- tibble_RNAi_RSA_results[tibble_RNAi_RSA_results$ensembl_gene_id %in% vector_all_kinase_ENSG, ] %>% dplyr::mutate("avg_bothscreens" = (`avg_screen_1` + `avg_screen_2`)/2)
+
+# PVALUE vs. expression PLOT
+# plot the negative regulators
+ggplot_rnai_negregs <- ggplot(data = tibble_RNAi_results_diffspliced, aes(x = `avg_bothscreens`, y = -`logP_negregs_both.screens`, ggplotlylabel = Gene, colour = (logP_negregs_screen.1 < log10(0.05) | logP_negregs_screen.2 < log10(0.05)), shape = (logP_negregs_screen.1 < log10(0.05) & logP_negregs_screen.2 < log10(0.05)), alpha = (logP_negregs_screen.1 < log10(0.05) & logP_negregs_screen.2 < log10(0.05)))) +
+  geom_point() +
+  scale_colour_manual(name = "anysig", limits = c(TRUE, FALSE), breaks = c(TRUE, FALSE), values = c("red", "grey75")) +
+  scale_shape_manual(name = "bothsig", limits = c(TRUE, FALSE), breaks = c(TRUE, FALSE), values = c(16, 1)) +
+  scale_alpha_manual(name = "bothsig", limits = c(TRUE, FALSE), breaks = c(TRUE, FALSE), values = c(1, 0.33)) +
+  ggtitle("negregs") +
+  # scale_x_continuous(breaks = seq(0.6, 1.8, 0.2), limits = c(0.6, 1.8)) +
+  xlab("Knockdown fold change in ALP") +
+  xlim(c(0.75, 1.75)) +
+  ylab("-log10P") +
+  ylim(c(0, 4.5)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica"), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggplot_rnai_negregs + 
+  ggsave(filename = paste(results_dir, "RNAi_diffspliced_pvalue_vs_expression_scatterplot_negregs.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 3.5, units = "cm") +
+  ggsave(filename = paste(results_dir, "RNAi_diffspliced_pvalue_vs_expression_scatterplot_negregs.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 3.5, units = "cm")
+
+ggplotly(ggplot_rnai_negregs, tooltip = "ggplotlylabel") %>% htmlwidgets::saveWidget(widget = ., file = paste(results_dir, "RNAi_diffspliced_pvalue_vs_expression_scatterplot_negregs.html", sep = ""), selfcontained = FALSE)
+
+# plot the positive regulators
+ggplot_rnai_posregs <- ggplot(data = tibble_RNAi_results_diffspliced, aes(x = `avg_bothscreens`, y = -`logP_posregs_both.screens`, ggplotlylabel = Gene, colour = (logP_posregs_screen.1 < log10(0.05) | logP_posregs_screen.2 < log10(0.05)), shape = (logP_posregs_screen.1 < log10(0.05) & logP_posregs_screen.2 < log10(0.05)), alpha = (logP_posregs_screen.1 < log10(0.05) & logP_posregs_screen.2 < log10(0.05)))) +
+  geom_point() +
+  scale_colour_manual(name = "anysig", limits = c(TRUE, FALSE), breaks = c(TRUE, FALSE), values = c("blue", "grey75")) +
+  scale_shape_manual(name = "bothsig", limits = c(TRUE, FALSE), breaks = c(TRUE, FALSE), values = c(16, 1)) +
+  scale_alpha_manual(name = "bothsig", limits = c(TRUE, FALSE), breaks = c(TRUE, FALSE), values = c(1, 0.33)) +
+  ggtitle("posregs") +
+  # scale_x_continuous(breaks = seq(0.7, 1.7, 0.3), limits = c(0.7, 1.7)) +
+  xlab("Knockdown fold change in ALP") +
+  xlim(c(0.75, 1.75)) +
+  ylab("-log10P") +
+  ylim(c(0, 4.5)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica"), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggplot_rnai_posregs +
+  ggsave(filename = paste(results_dir, "RNAi_diffspliced_pvalue_vs_expression_scatterplot_posregs.pdf", sep = ""), device = "pdf", dpi = 600, width = 10, height = 3.5, units = "cm") +
+  ggsave(filename = paste(results_dir, "RNAi_diffspliced_pvalue_vs_expression_scatterplot_posregs.svg", sep = ""), device = "svg", dpi = 600, width = 10, height = 3.5, units = "cm")
+
+ggplotly(ggplot_rnai_posregs, tooltip = "ggplotlylabel") %>% htmlwidgets::saveWidget(widget = ., file = paste(results_dir, "RNAi_diffspliced_pvalue_vs_expression_scatterplot_posregs.html", sep = ""), selfcontained = FALSE)
+
+options(mc.cores = 144)
+
+# permtest for negregs significance
+permtest <- future_map(.x = 1:100000, .f = function(a1) {
+  
+  set.seed(a1)
+  
+  tibble_RNAi_RSA_results[sample(1:nrow(tibble_RNAi_RSA_results), size = 59), "logP_negregs_both.screens"] %>% unlist %>% 
+    return
+  
+}, .progress = TRUE )
+
+rand_avg <- mean(permtest %>% unlist)
+rand_stdev <- sd(permtest %>% unlist)
+
+```
+
 ## plot the interpro and PTM results from JUM and PSI-Sigma together 
 
 ### interpro
 
 ```{r}
 
-tibble_combined_biomart_RNAlevel <- dplyr::full_join(tibble_JUM_junction_ontology_biomart_plots, tibble_PSIsigma_exon_ontology_biomart_plots, by = c("interpro_id", "interpro_description", "interpro_identifier")) %>% # arrange in descending order of geometric mean
+tibble_combined_interpro_RNAlevel <- dplyr::full_join(tibble_JUM_junction_ontology_biomart_plots, tibble_PSIsigma_exon_ontology_biomart_plots, by = c("interpro_id", "interpro_description", "interpro_identifier")) %>% # arrange in descending order of geometric mean
   dplyr::arrange(purrr::map2(.x = .$tally_JUM, .y = .$tally_PSIsigma, .f = ~exp(mean(log(c(.x, .y)), na.rm = TRUE))) %>% unlist) %>%
   na.omit %>%
-  tail(n = 10) %>%
+  tail(n = 15) %>%
   # reorder factors for correct plotting order
   dplyr::mutate_at(.vars = c("interpro_id", "interpro_description", "interpro_identifier"), .funs = as_factor) %>%
   # melt for simultaneous plot
@@ -1380,7 +1501,7 @@ tibble_combined_biomart_RNAlevel <- dplyr::full_join(tibble_JUM_junction_ontolog
   as_tibble %>%
   dplyr::mutate_at(.vars = "tool", .funs = function(x) {column <- factor(x = x, levels = c("tally_PSIsigma", "tally_JUM")); return(column)} )
 
-ggplot(data = tibble_combined_biomart_RNAlevel, aes(x = `interpro_description`, y = tally, fill = tool)) +
+ggplot(data = tibble_combined_interpro_RNAlevel, aes(x = `interpro_description`, y = tally, fill = tool)) +
   geom_bar(stat = "identity", position = "dodge", size = 0.2, colour = "black") +
   scale_fill_manual(name = "Tool", 
                     breaks = c("tally_JUM", "tally_PSIsigma"), 
@@ -1390,15 +1511,15 @@ ggplot(data = tibble_combined_biomart_RNAlevel, aes(x = `interpro_description`, 
   geom_text(stat = "identity", aes(label = tally), position = position_dodge(width = 1), hjust = -0.1) +
   # geom_text(stat = "identity", aes(y = tally + 10 + ((floor(tally %>% log10) + 1) * 12.5), label = significant %>% (function(x) {y <- x; y[y == TRUE] <- "*"; y[y == FALSE] <- ""; return(y) } )) , position = position_dodge(width = 1), vjust = 0.8, size = 8, colour = "forestgreen") +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 25)) +
-  ylim(c(0, tibble_combined_biomart_RNAlevel$tally %>% max * 1.3)) +
+  ylim(c(0, tibble_combined_interpro_RNAlevel$tally %>% max * 1.3)) +
   ggtitle("Top 10 interpro domains, JUM and PSI-Sigma, differential") +
   xlab("Interpro domain") +
   ylab("Number of VSRs/exons") +
   coord_flip() +
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
+  ggsave(filename = paste(results_dir, "tibble_combined_interpro_RNAlevel_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 15, units = "cm") +
+  ggsave(filename = paste(results_dir, "tibble_combined_interpro_RNAlevel_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 15, units = "cm")
 
 ```
 
@@ -1444,6 +1565,17 @@ ggplot(data = tibble_combined_PTMs_RNAlevel, aes(x = `PTM_type`, y = tally, fill
 # join the PTM results onto the differential tables
 tibble_JUM_differential_PTM_ontology_with_info <- dplyr::left_join(tibble_JUM_junction_ontology_PTMs, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na, by = c("AS_event_ID", "splicemode")) %>% dplyr::distinct(AS_event_ID, splicemode, .keep_all = TRUE)
 tibble_PSIsigma_differential_PTM_ontology_with_info <- dplyr::left_join(tibble_PSIsigma_exon_ontology_PTMs, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na, by = c("diff_exon_coords", "splicemode")) %>% dplyr::distinct(diff_exon_coords, splicemode, .keep_all = TRUE)
+
+```
+
+### investigate dbPTM distribution of phosphosities vs. ubsites
+
+```{r}
+
+plot(density(tibble_dbPTM_allhuman_annotations %>% dplyr::filter(PTM_type == "Phosphorylation") %>% .$modified_residue_position))
+
+# retrieve protein length annotations from ensembl
+tibble_uniprotkb_to_protein_length <- getBM(filters = "uniprot_gn_id", values = tibble_dbPTM_allhuman_annotations$uniprotkb_entry, attributes = "cds_length", mart = ensembl_mart)
 
 ```
 
@@ -2881,7 +3013,7 @@ ggplot(tibble_PTM_tally_filtered_by_proteome_PSIsigma, aes(x = reorder(PTM_type,
 
 ### interpro
 
-tibble_combined_biomart_RNAlevel_filtered_by_proteome <- dplyr::full_join(tibble_interpro_id_tally_per_ASeventID %>% dplyr::rename("tally_JUM" = "tally", "genes_JUM" = "genes"), 
+tibble_combined_interpro_RNAlevel_filtered_by_proteome <- dplyr::full_join(tibble_interpro_id_tally_per_ASeventID %>% dplyr::rename("tally_JUM" = "tally", "genes_JUM" = "genes"), 
                                                                           tibble_interpro_id_tally_per_diff_exon_coords %>% dplyr::rename("tally_PSIsigma" = "tally", "genes_PSIsigma" = "genes"), 
                                                                           by = c("interpro_id", "interpro_description", "interpro_identifier")) %>% # arrange in descending order of geometric mean
   dplyr::arrange(purrr::map2(.x = .$tally_JUM, .y = .$tally_PSIsigma, .f = ~exp(mean(log(c(.x, .y)), na.rm = TRUE))) %>% unlist) %>%
@@ -2894,7 +3026,7 @@ tibble_combined_biomart_RNAlevel_filtered_by_proteome <- dplyr::full_join(tibble
   as_tibble %>%
   dplyr::mutate_at(.vars = "tool", .funs = function(x) {column <- factor(x = x, levels = c("tally_PSIsigma", "tally_JUM")); return(column)} )
 
-ggplot(data = tibble_combined_biomart_RNAlevel_filtered_by_proteome, aes(x = `interpro_description`, y = tally, fill = tool)) +
+ggplot(data = tibble_combined_interpro_RNAlevel_filtered_by_proteome, aes(x = `interpro_description`, y = tally, fill = tool)) +
   geom_bar(stat = "identity", position = "dodge", size = 0.2, colour = "black") +
   scale_fill_manual(name = "Tool", 
                     breaks = c("tally_JUM", "tally_PSIsigma"), 
@@ -2904,15 +3036,15 @@ ggplot(data = tibble_combined_biomart_RNAlevel_filtered_by_proteome, aes(x = `in
   geom_text(stat = "identity", aes(label = tally), position = position_dodge(width = 1), hjust = -0.1) +
   # geom_text(stat = "identity", aes(y = tally + 10 + ((floor(tally %>% log10) + 1) * 12.5), label = significant %>% (function(x) {y <- x; y[y == TRUE] <- "*"; y[y == FALSE] <- ""; return(y) } )) , position = position_dodge(width = 1), vjust = 0.8, size = 8, colour = "forestgreen") +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 25)) +
-  ylim(c(0, tibble_combined_biomart_RNAlevel_filtered_by_proteome$tally %>% max * 1.2)) +
+  ylim(c(0, tibble_combined_interpro_RNAlevel_filtered_by_proteome$tally %>% max * 1.2)) +
   ggtitle("Top 10 interpro domains, JUM and PSI-Sigma (proteome-filtered), differential") +
   xlab("Interpro domain") +
   ylab("Number of VSRs/exons") +
   coord_flip() +
   theme_bw() +
   theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_filtered_by_proteome_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
-  ggsave(filename = paste(results_dir, "tibble_combined_biomart_RNAlevel_filtered_by_proteome_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
+  ggsave(filename = paste(results_dir, "tibble_combined_interpro_RNAlevel_filtered_by_proteome_without_bootstrap_significance.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
+  ggsave(filename = paste(results_dir, "tibble_combined_interpro_RNAlevel_filtered_by_proteome_without_bootstrap_significance.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
 
 ### PTMs
 tibble_combined_PTMs_RNAlevel_filtered_by_proteome <- dplyr::full_join(tibble_PTM_filtered_by_proteome_JUM_tally %>% dplyr::rename("tally_JUM" = "tally"), 
@@ -4240,8 +4372,8 @@ list_granges_biomart_regions_exome_relative <- future_map(
 # as_tibble %>%
 # na.omit
 
-# save(tibble_ENSP_to_uniprotkb, file = paste(shared_dir, "tibble_uniprot_to_ENSP_mapping_table.tibble", paste = ""))
-load(file = paste(shared_dir, "tibble_uniprot_to_ENSP_mapping_table.tibble", paste = ""))
+# save(tibble_ENSP_to_uniprotkb, file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
+load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
 
 # convert uniprotkb_entry into ENSP
 tibble_dbPTM_allhuman_annotations_with_ENSP <- dplyr::left_join(tibble_dbPTM_allhuman_annotations, tibble_ENSP_to_uniprotkb, by = "uniprotkb_entry") %>% 
@@ -4852,7 +4984,6 @@ tibble_psisigma_differential_snps_summary_by_trait <- tibble_psisigma_differenti
 tibble_psisigma_differential_snps_summary_by_context <- tibble_psisigma_differential_all_overlapping_snps_filtered %>% dplyr::distinct(CHR_ID, CHR_POS, .keep_all = TRUE) %>% dplyr::group_by(`CONTEXT`) %>% dplyr::summarise("context_tally_PSIsigma_differential" = n()) %>% dplyr::arrange(desc(context_tally_PSIsigma_differential))
 
 ```
-
 
 ##### psi-sigma constitutive
 
@@ -5672,6 +5803,138 @@ ggplot(data = long_tibble_combined_overlap_and_significance_contexts, aes(x = `C
   theme(axis.text.x = element_text(hjust = 1, colour = "black", angle = 45), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), axis.title.y = element_text(margin = margin(r = 20)), text = element_text(family = "Helvetica")) +
   ggsave(filename = paste(results_dir, "tally_SNPs_contexts_combined_JUM_PSIsigma.pdf", sep = ""), device = "pdf", dpi = 600, width = 16, height = 16, units = "cm") +
   ggsave(filename = paste(results_dir, "tally_SNPs_contexts_combined_JUM_PSIsigma.svg", sep = ""), device = "svg", dpi = 600, width = 16, height = 16, units = "cm")
+
+```
+
+
+### Plot distances from junc/exon boundaries to SNPs
+
+STRATEGY: 
+1. loop thru ALL SNPs
+2. find nearest flanking upstream/downstream boundary, append to table.
+3. compute distance which is SNP - boundary.
+
+junc boundaries: sub_junc_coor for differential/const.
+exon boundaries: all diff or all const
+
+```{r}
+
+# subset by chr for more efficient looping
+list_JUM_junc_diff_subset_by_chr <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[, c("AS_event_chr", "sub_junction_start_coor", "sub_junction_end_coor")] %>% dplyr::add_row("AS_event_chr" = "Y", "sub_junction_start_coor" = NA, "sub_junction_end_coor" = NA) %>% dplyr::group_split(AS_event_chr) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$AS_event_chr %>% unique) %>% unlist)
+list_JUM_junc_const_subset_by_chr <- tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[, c("AS_event_chr", "sub_junction_start_coor", "sub_junction_end_coor")] %>% dplyr::group_split(AS_event_chr) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$AS_event_chr %>% unique) %>% unlist)
+
+list_PSIsigma_exon_diff_subset_by_chr <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[, c("chr", "diff_exon_start", "diff_exon_end")] %>% dplyr::group_split(chr) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist)
+list_PSIsigma_exon_const_subset_by_chr <- tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na[, c("chr", "diff_exon_start", "diff_exon_end")] %>% dplyr::group_split(chr) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist)
+
+plan(list(tweak(multiprocess, workers = 30),
+          tweak(multiprocess, workers = 4))
+)
+
+list_gwas_catalog_with_junc.exon_boundary_info <- furrr::future_pmap(
+  .l = list("a1" = list_tibble_ebi_gwas_catalog_by_chr,
+            "a2" = list_JUM_junc_diff_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)],
+            "a3" = list_JUM_junc_const_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)],
+            "a4" = list_PSIsigma_exon_diff_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)],
+            "a5" = list_PSIsigma_exon_const_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)]),
+  .f = function(a1, a2, a3, a4, a5) {
+    
+    # DEBUG ###
+    # a1 <- list_tibble_ebi_gwas_catalog_by_chr[[1]]
+    # a2 <- list_JUM_junc_diff_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)] %>% .[[1]]
+    # a3 <- list_JUM_junc_const_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)] %>% .[[1]]
+    # a4 <- list_PSIsigma_exon_diff_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)] %>% .[[1]]
+    # a5 <- list_PSIsigma_exon_const_subset_by_chr[names(list_tibble_ebi_gwas_catalog_by_chr)] %>% .[[1]]
+    ###########
+    
+    # get all the junc/exon start/end's
+        vector_sub_junc_diff_starts <- a2$sub_junction_start_coor
+        vector_sub_junc_diff_ends <- a2$sub_junction_end_coor
+        
+        vector_sub_junc_const_starts <- a3$sub_junction_start_coor
+        vector_sub_junc_const_ends <- a3$sub_junction_end_coor
+        
+        vector_exon_diff_starts <- a4$diff_exon_start
+        vector_exon_diff_ends <- a4$diff_exon_end
+        
+        vector_exon_const_starts <- a5$diff_exon_start
+        vector_exon_const_ends <- a5$diff_exon_end
+    
+    furrr::future_map(
+      .x = a1 %>% array_tree,
+      .f = function(b1) {
+        
+        # DEBUG ###
+        # b1 <- a1 %>% array_tree %>% .[[1]]
+        ###########
+        
+        # find nearest match to all junc/exon boundaries
+        purrr::splice(
+          b1, 
+          "nearest_JUM.junc.diff_start" = vector_sub_junc_diff_starts[which(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_diff_starts) == min(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_diff_starts)))] %>% unique,
+          "nearest_JUM.junc.diff_end" = vector_sub_junc_diff_ends[which(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_diff_ends) == min(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_diff_ends)))] %>% unique,
+          
+          "nearest_JUM.junc.const_start" = vector_sub_junc_const_starts[which(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_const_starts) == min(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_const_starts)))] %>% unique,
+          "nearest_JUM.junc.const_end" = vector_sub_junc_const_ends[which(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_const_ends) == min(abs((b1$CHR_POS %>% type.convert) - vector_sub_junc_const_ends)))] %>% unique,
+          
+          "nearest_PSIsigma.exon.diff_start" = vector_exon_diff_starts[which(abs((b1$CHR_POS %>% type.convert) - vector_exon_diff_starts) == min(abs((b1$CHR_POS %>% type.convert) - vector_exon_diff_starts)))] %>% unique,
+          "nearest_PSIsigma.exon.diff_end" = vector_exon_diff_ends[which(abs((b1$CHR_POS %>% type.convert) - vector_exon_diff_ends) == min(abs((b1$CHR_POS %>% type.convert) - vector_exon_diff_ends)))] %>% unique,
+          
+          "nearest_PSIsigma.exon.const_start" = vector_exon_const_starts[which(abs((b1$CHR_POS %>% type.convert) - vector_exon_const_starts) == min(abs((b1$CHR_POS %>% type.convert) - vector_exon_const_starts)))] %>% unique,
+          "nearest_PSIsigma.exon.const_end" = vector_exon_const_ends[which(abs((b1$CHR_POS %>% type.convert) - vector_exon_const_ends) == min(abs((b1$CHR_POS %>% type.convert) - vector_exon_const_ends)))] %>% unique
+        ) %>% 
+          # ... and also the differences.
+          # should be SNP - boundary so that the SNP distances from boundary can be read from 5' to 3'.
+          purrr::splice(
+            "difference_JUM.junc.diff_start" = (b1$CHR_POS %>% type.convert) - .$nearest_JUM.junc.diff_start,
+            "difference_JUM.junc.diff_end" = (b1$CHR_POS %>% type.convert) - .$nearest_JUM.junc.diff_end,
+            
+            "difference_JUM.junc.const_start" = (b1$CHR_POS %>% type.convert) - .$nearest_JUM.junc.const_start,
+            "difference_JUM.junc.const_end" = (b1$CHR_POS %>% type.convert) - .$nearest_JUM.junc.const_end,
+            
+            "difference_PSIsigma.exon.diff_start" = (b1$CHR_POS %>% type.convert) - .$nearest_PSIsigma.exon.diff_start,
+            "difference_PSIsigma.exon.diff_end" = (b1$CHR_POS %>% type.convert) - .$nearest_PSIsigma.exon.diff_end,
+            
+            "difference_PSIsigma.exon.const_start" = (b1$CHR_POS %>% type.convert) - .$nearest_PSIsigma.exon.const_start,
+            "difference_PSIsigma.exon.const_end" = (b1$CHR_POS %>% type.convert) - .$nearest_PSIsigma.exon.const_end
+          ) %>% 
+          flatten %>%
+          as_tibble %>%
+          return
+        
+      }, .progress = TRUE ) %>% # L2
+      return
+    
+  }, .progress = TRUE)
+
+# rbind and tibblise
+tibble_gwas_catalog_with_junc.exon_boundary_info <- list_gwas_catalog_with_junc.exon_boundary_info %>% flatten %>% rbindlist(fill = TRUE) %>% as_tibble
+
+# plot
+
+difference_JUM.junc.diff_start
+difference_JUM.junc.diff_end
+difference_JUM.junc.const_start
+difference_JUM.junc.const_end
+difference_PSIsigma.exon.diff_start
+difference_PSIsigma.exon.diff_end
+difference_PSIsigma.exon.const_start
+difference_PSIsigma.exon.const_end 
+
+vector_differences_to_plot <- tibble_gwas_catalog_with_junc.exon_boundary_info[tibble_gwas_catalog_with_junc.exon_boundary_info$`DISEASE/TRAIT` %in% levels(long_tibble_combined_overlap_traits$`DISEASE/TRAIT`), ] %>% 
+  dplyr::distinct(CHR_ID, CHR_POS, .keep_all = TRUE) %>% 
+  # .[grep(x = .$`INITIAL SAMPLE SIZE`, pattern = "europ", ignore.case = TRUE), ] %>% 
+  .$difference_JUM.junc.diff_end %>% 
+  na.omit
+
+vector_differences_to_plot <- vector_differences_to_plot[vector_differences_to_plot < 400 & vector_differences_to_plot > -400]
+
+plot(
+  density(vector_differences_to_plot, bw = 3, freq = TRUE),
+  ylab = "Frequency"
+)
+
+ggplot(tibble("vector_differences_to_plot" = vector_differences_to_plot)) +
+  geom_histogram(aes(x = `vector_differences_to_plot`), binwidth = 10) 
 
 ```
 

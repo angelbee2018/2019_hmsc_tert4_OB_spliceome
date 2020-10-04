@@ -4839,10 +4839,12 @@ list_of_tibbles_biomart_domain_annotation <- list_of_tibbles_biomart_domain_anno
 
 ```{r}
 
-tibble_ENSP_to_uniprotkb <- biomaRt::getBM(attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% setNames(c("ensembl_peptide_id", "uniprotkb_entry")) %>% 
-  type_convert %>% 
-  as_tibble %>%
-  na.omit
+# tibble_ENSP_to_uniprotkb <- biomaRt::getBM(attributes = c("ensembl_peptide_id", "uniprotsptrembl"), mart = ensembl_mart) %>% setNames(c("ensembl_peptide_id", "uniprotkb_entry")) %>% 
+#   type_convert %>% 
+#   as_tibble %>%
+#   na.omit
+
+load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
 
 ```
 
@@ -5252,7 +5254,7 @@ list_protein_relative_differential_coords <- future_imap(.x = list_genome_relati
 
 # MATCH THE DIFFERENTIAL TRANSCRIPT-RELATIVE COORDS TO THE ENSEMBL GTF
 # MATCH THE DIFFERENTIAL PROTEIN-RELATIVE COORDS TO THE FETCHED BIOMART LIST AS WELL AS THE PTMS
-list_matched_annotation <- future_map(.x = list_protein_relative_differential_coords, .f = function(a1) {
+suppressMessages(list_matched_annotation <- future_map(.x = list_protein_relative_differential_coords, .f = function(a1) {
   
   # WARNING!! FIX THIS WHEN NAMING THE FUNCTION!
   # list_of_tibbles_biomart_domain_annotation <<- list_of_tibbles_biomart_domain_annotation
@@ -5352,7 +5354,7 @@ list_matched_annotation <- future_map(.x = list_protein_relative_differential_co
     "PTMs" = list_PTM_annotations %>% rbindlist(fill = TRUE) %>% as_tibble %>% list
   ))
   
-}, .progress = TRUE, .options = future_options(globals = c("rbindlist", "list_of_tibbles_biomart_domain_annotation", "tibble_ENSP_to_uniprotkb", "tibble_PTM_combined", "tibble_ref_gtf_original", "as_tibble")))
+}, .progress = TRUE, .options = future_options(globals = c("rbindlist", "list_of_tibbles_biomart_domain_annotation", "tibble_ENSP_to_uniprotkb", "tibble_PTM_combined", "tibble_ref_gtf_original", "as_tibble"))))
 
 # save the raw list
 save(list_matched_annotation, file = paste(R_processing_results_dir, "list_matched_annotation.Rlist", sep = ""))

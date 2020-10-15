@@ -1,0 +1,53 @@
+data_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/"
+
+SRA_download_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/SRA/"
+
+SRA_acc_list_path="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/SRA_acc_list.txt"
+
+raw_fastq_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/raw_fastq/"
+
+fastqc_reports_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/fastqc_reports/"
+
+clean_fastq_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/clean_fastq/"
+
+list_of_GSM_accessions="GSM2863648 GSM2863649 GSM2863650 GSM2863651 GSM2863652 GSM2863653 GSM2863654 GSM2863655 GSM2863656 GSM2863657 GSM2863658 GSM2863659 GSM2863660 GSM2863661 GSM2863662 GSM2863663 GSM2863664 GSM2863665 GSM2863666 GSM2863667 GSM2863668 GSM2863669 GSM2863670 GSM2863671"
+
+cd $SRA_download_dir
+
+# download from SRA
+for accession in $(cat $SRA_acc_list_path); do wget $(srapath $accession); done
+
+# validate integrity
+for srafile in $(ls $SRA_download_dir); do vdb-validate $srafile; done
+
+# fasterq dump
+for srafile in $(ls $SRA_download_dir); do fasterq-dump $srafile -O $raw_fastq_dir -e 2& done
+
+##### run the R script here to rename the fastq files #####
+
+# rename fastq files
+cd $raw_fastq_dir
+IFS=$'\n' 
+
+for entry in $(cat $data_dir"SRR_to_timeseries_info.txt"); do echo $(ls *$(echo $entry | awk '{print $1}')*) $(echo $entry | awk '{print $3}')".fastq" ; done
+
+# fastqc 
+for fastqfile in $(ls $raw_fastq_dir*.fastq); do fastqc $fastqfile --outdir=$fastqc_reports_dir& done
+
+# trim adaptors 
+cd $raw_fastq_dir
+for fastqfile in $(ls *.fastq); do cp $fastqfile $clean_fastq_dir$fastqfile& done
+
+cd $clean_fastq_dir
+
+for fastqfile in $(ls *.fastq); do cutadapt -a TGGAATTCTCGGGTGCCAAGG -e 0.05 -j 4 --minimum-length 15 --maximum-length 33 -o $(echo $fastqfile | sed 's/\.fastq/_cutadapt.fastq/g') $fastqfile& done
+
+# trimmmomatic doesn't trim as much as cutadapt does
+# trimmomatic SE -threads 64 -phred33 -trimlog test.log -summary test_summary.txt BM_MSC_to_OB_10d_r1.fastq BM_MSC_to_OB_10d_r1_trimmomatic.fastq ILLUMINACLIP:smallseq_threeprime_adaptors.fa:0:30:10
+
+# repeat fastqc
+for fastqfile in $(ls *_cutadapt.fastq); do fastqc $fastqfile --outdir=$fastqc_reports_dir& done
+
+
+
+

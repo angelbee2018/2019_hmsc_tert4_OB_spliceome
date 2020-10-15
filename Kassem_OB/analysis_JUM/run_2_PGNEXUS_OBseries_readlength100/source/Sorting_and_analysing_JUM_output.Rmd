@@ -2290,7 +2290,7 @@ all the genes
 # OB series
 
 ggplot() +
-  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_PSI_value, group = sub_LSV_ID), alpha = 0.33) +
+  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_PSI_value, group = paste(AS_event_ID, sub_LSV_ID)), alpha = 0.33) +
   geom_line(data = long_tibble_of_final_SOM_summary_5_by_5_OBseries_average.line, aes(x = timepoint, y = avg_PSI_value, group = cluster), colour = "white", size = 1) +
   scale_colour_manual(values = c("black")) +
   facet_grid(quotient_facet.y ~ remainder_facet.x) +
@@ -3081,7 +3081,7 @@ list_of_tibbles_biomart_domain_annotation <- list_of_tibbles_biomart_domain_anno
 # read table
 # tibble_ENSP_to_uniprotkb <- read.delim(paste(shared_dir, "tibble_ENSP_to_uniprotkb_38.98.txt", sep = ""), row.names = NULL, header = TRUE, sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
-load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
+tibble_ENSP_to_uniprotkb <- read.delim(file = paste(shared_dir, "table_ENSP_to_uniprot_entry_mapping_38.98.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL) %>% as_tibble
 
 ```
 
@@ -3328,7 +3328,7 @@ list_genome_relative_differential_coords <- future_imap(.x = list_ref_entries_ma
   # .x <- list_ref_entries_matched_to_constituent_junctions[[8]]
   ###########
   
-  cat("\nnow processing: ", .y)
+  # cat("\nnow processing: ", .y)
   
   ref_gtf_table <<- tibble_ref_gtf_original
   input_list <- .x
@@ -3446,7 +3446,7 @@ suppressMessages(
     # .x <- list_transcript_and_protein_relative_differential_coords[[1]]
     ###########
     
-    cat("\nnow processing: ", .y)
+    # cat("\nnow processing: ", .y)
     
     input_list <- .x
     
@@ -3706,7 +3706,7 @@ message("total number of unique LSVs overlapping a tmhmm domain: ", length(which
 
 ```{r}
 
-tibble_PTM_tally <- tibble_final_PTM_annotation %>% dplyr::distinct(AS_event_ID, splicemode, PTM_type) %>% dplyr::group_by(PTM_type) %>% dplyr::summarise("tally" = n())
+tibble_PTM_tally <- tibble_final_PTM_annotation %>% dplyr::distinct(AS_event_ID, splicemode, modified_residue_position, PTM_type) %>% dplyr::group_by(PTM_type) %>% dplyr::summarise("tally" = n())
 
 # plot
 ggplot(tibble_PTM_tally, aes(x = reorder(PTM_type, -tally), y = tally)) +

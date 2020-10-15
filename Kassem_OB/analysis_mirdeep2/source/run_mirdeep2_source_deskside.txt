@@ -1,0 +1,50 @@
+data_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/"
+
+clean_fastq_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/data/clean_fastq/"
+
+bowtie_index_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/bowtie_index/"
+
+mirdeep_results_dir="/mnt/Helium_8TB_1/aarhus_smallseq_timeseries_mirna_BM_MSC_to_OB_GSE107279/mirdeep2_results/"
+
+raw_genome_fasta_by_chr_dir="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+
+raw_genome_fasta_single_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/Homo_sapiens.GRCh38.dna.primary_assembly_nowhitespace.fa"
+
+mirbase_human_hairpin_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/mirbase_22.1/hairpin_human_nowhitespace.fa"
+mirbase_human_mature_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/mirbase_22.1/mature_human_nowhitespace.fa"
+mirbase_other_mature_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/mirbase_22.1/mature_nowhitespace.fa"
+silva_LSU_human_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/silva_138.1/SILVA_138.1_LSURef_NR99_tax_silva_trunc_human_nowhitespace.fasta"
+silva_SSU_human_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/silva_138.1/SILVA_138.1_SSURef_NR99_tax_silva_trunc_human_nowhitespace.fasta"
+frnadb_human_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/frnadb_oct_2020/frnadb_human_nowhitespace.fasta"
+
+# START QUANTITATIVE ANALYSIS ###
+
+# mirdeep2
+mkdir $mirdeep_results_dir
+
+## firstly, index the genome using bowtie-build
+mkdir $bowtie_index_dir
+bowtie-build --seed 4 --threads 72 $(ls $raw_genome_fasta_by_chr_dir*".fa" | paste -sd, -) $bowtie_index_dir"bowtie_index_hg38"
+
+## mapping to generate .arf file
+for fastqfile in $(ls *_cutadapt.fastq); do (mapper.pl $fastqfile -e -h -j -m -v -p $bowtie_index_dir"bowtie_index_hg38" -s $(echo $mirdeep_results_dir$fastqfile | sed 's/\.fastq/\_reads_collapsed.fa/g') -t $(echo $mirdeep_results_dir$fastqfile | sed 's/\.fastq/\.arf/g'))& done
+
+## run mirdeep2
+#for fastqfile in $(ls *_cutadapt.fastq); do miRDeep2.pl $(echo $mirdeep_results_dir$fastqfile | sed 's/\.fastq/\_reads_collapsed.fa/g') $raw_genome_fasta_single_path $(echo $mirdeep_results_dir$fastqfile | sed 's/\.fastq/\.arf/g') $mirbase_human_mature_path $mirbase_other_mature_path $mirbase_human_hairpin_path -t hsa 2> $(echo $mirdeep_results_dir$fastqfile | sed 's/\.fastq/\_mirdeep2_output.log/g'); done
+
+### use GNU parallel
+parallel --link -j 300 --round-robin -N 1 'mkdir {1}; cd {1}; miRDeep2.pl {2} {3} {4} {5} {6} {7} -t hsa 2>&1 | tee {8}' \
+::: $(ls *_cutadapt.fastq | sed "s|\(.*\)\_cutadapt\.fastq|$mirdeep_results_dir\1\/|g") \
+::: $(ls *_cutadapt.fastq | sed "s|\(.*\)\.fastq|$mirdeep_results_dir\1\_reads_collapsed\.fa|g") \
+::: $raw_genome_fasta_single_path \
+::: $(ls *_cutadapt.fastq | sed "s|\(.*\)\.fastq|$mirdeep_results_dir\1\.arf|g") \
+::: $mirbase_human_mature_path \
+::: $mirbase_other_mature_path \
+::: $mirbase_human_hairpin_path \
+::: $(ls *_cutadapt.fastq | sed "s|\(.*\)\_cutadapt\.fastq|$mirdeep_results_dir\1\/\1\_cutadapt\_mirdeep2_output.log|g")
+
+
+
+
+
+

@@ -24,6 +24,7 @@ cat("number of arguments specified:", length(args))
 
 library(tidyverse)
 library(furrr)
+options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
 library(rtracklayer)
 library(data.table)
 library(optparse)
@@ -89,7 +90,7 @@ input_args <- input_arg_info %>% parse_args
 # track_colour <- "255,0,0"
 # output_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/"
 # output_name <- "debug_swissprot_bedfile_generator_peptides"
-# ncores <- "8x4"
+# ncores <- "16x2"
 # save_workspace_when_done <- "NO"
 
 ###############
@@ -501,14 +502,35 @@ if (save_workspace_when_done == "DEBUG") {
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
 }
 
+# since there is a many-to-one uniprotkb to ENSP id mapping, we have to prune elements which have transcript-relative positions that lie outside of the mapped transcript length
+list_added_genome_relative_coords_of_feature <- tibble_added_genome_relative_coords_of_feature %>% dplyr::group_split(chr) %>% purrr::reduce(bind_rows) %>% array_tree
+
+# test for validity
+vector_logical_invalid_transcript_start_end <- furrr::future_map(
+  .x = tibble_added_genome_relative_coords_of_feature %>% dplyr::group_split(chr) %>% purrr::map(~.x %>% purrr::array_tree()), 
+  .f = function(a1) {
+    
+    furrr::future_map(
+      .x = a1, 
+      .f = function(b1) {
+        
+        (b1$transcript_relative_start %>% type.convert > b1$vector_stranded_genome_relative_nt_positions_of_transcript %>% strsplit(split = ",") %>% unlist %>% length) | (b1$transcript_relative_end %>% type.convert > b1$vector_stranded_genome_relative_nt_positions_of_transcript %>% strsplit(split = ",") %>% unlist %>% length) %>% return
+        
+      } ) %>% unlist %>% return
+    
+  } , .progress = TRUE) %>% unlist
+
+# prune 
+list_added_genome_relative_coords_of_feature_pruned <- list_added_genome_relative_coords_of_feature[vector_logical_invalid_transcript_start_end == FALSE]
+
 # convert to bedfile
-list_feature_bedfile <- future_imap(.x = tibble_added_genome_relative_coords_of_feature %>% array_tree, .f = function(a1, a2) {
+list_feature_bedfile <- future_imap(.x = list_added_genome_relative_coords_of_feature_pruned, .f = function(a1, a2) {
   
   # DEBUG ###
-  # a1 <- tibble_added_genome_relative_coords_of_feature %>% array_tree %>% .[[3]]
+  # a1 <- list_added_genome_relative_coords_of_feature_pruned[[108]]
   ###########
   
-  # cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+  # cat("\nnow processing:", a2, "/", length(tibble_added_genome_relative_coords_of_feature %>% array_tree))
   
   # vectorise the genome-relative feature positions
   vector_genome_relative_feature_positions <- a1$all_genomic_positions_of_feature %>% strsplit(split = ",") %>% unlist %>% type.convert %>% sort

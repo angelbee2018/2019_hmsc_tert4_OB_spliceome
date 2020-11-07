@@ -2867,6 +2867,9 @@ load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 
 ```{r}
 
+# just testing to see if certain splicemodes affect certain genes
+# vector_differential_genes_anysig_with_na <- wide_tibble_of_psisigma_results_allcomparisons_differential[grep(x = wide_tibble_of_psisigma_results_allcomparisons_differential$splicemode, pattern = "IR"), ] %>% .$matched_gene_names %>% unique
+
 # create vector of differential genes
 vector_differential_genes_anysig_with_na <- wide_tibble_of_psisigma_results_allcomparisons_differential$matched_gene_names %>% unique
 
@@ -4391,7 +4394,7 @@ df <- long_tibble_of_psisigma_DEXSeq_results_first.last.reference %>% modify_at(
 
 df[is.na(df)] = FALSE
 
-upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "intersect")
+upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "distinct")
 
 print(set_size(upset_combs))
 
@@ -4455,7 +4458,7 @@ df <- tibble_constitutive_LIV_info_first.last.reference %>% modify_at(., .at = "
 
 df[is.na(df)] = FALSE
 
-upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "intersect")
+upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "distinct")
 
 print(set_size(upset_combs))
 
@@ -4521,7 +4524,7 @@ df <- wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV_first
 
 df[is.na(df)] = FALSE
 
-upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "intersect")
+upset_combs <- data.frame(df %>% dplyr::select(., -event_region_coords, -diff_exon_coords), row.names = paste(df$event_region_coords, df$diff_exon_coords, sep = "_")) %>% make_comb_mat(mode = "distinct")
 
 print(set_size(upset_combs))
 
@@ -4867,7 +4870,7 @@ tibble_ref_gtf_original <- tibble_ref_gtf_original %>% mutate_if(is.factor, as.c
 
 # import dbPTM info
 # Z:/dbPTM_download/extract/allPTM_human.txt
-tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human_filtered.txt", check.names = FALSE, na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 # dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
 # import PhosphoSitePlus info
@@ -5334,8 +5337,8 @@ suppressMessages(list_matched_annotation <- future_map(.x = list_protein_relativ
     .y = names(a1$protein_relative_differential_coords), .f = function(b1, b2) {
       
       # DEBUG ###
-      # .x <- input_list$CDS_relative_differential_coords %>% .[[6]]
-      # .y <- names(input_list$CDS_relative_differential_coords) %>% .[6]
+      # b1 <- a1$protein_relative_differential_coords %>% .[[1]]
+      # b2 <- names(a1$protein_relative_differential_coords) %>% .[1]
       ###########
       
       tibble_uniprotkb_entries_from_ENSP <- tibble_ENSP_to_uniprotkb[tibble_ENSP_to_uniprotkb$ensembl_peptide_id == b2, ]
@@ -5437,6 +5440,129 @@ message("percent of differential regions overlapping a stop codon: ", 100 * grep
 message("percent of differential regions matched to a 3' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "three_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 message("percent of differential regions matched to a 5' UTR region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "five_prime_utr") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
 message("percent of differential regions matched to a CDS region: ", 100 * grep(x = tibble_final_transcript_feature_annotation$tibble_overlapping_parent_transcript_features, pattern = "CDS") %>% length/(tibble_final_transcript_feature_annotation$diff_exon_coords %>% length))
+
+# create table of transcript-level summary
+tibble_transcript_level_summary_count <- tibble_final_transcript_feature_annotation %>%
+  dplyr::mutate("protein_coding" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "protein_coding"),
+                # "lncRNA" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "lncRNA"),
+                "miRNA" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "miRNA"),
+                
+                "start_codon" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "start_codon"),
+                "stop_codon" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "stop_codon"),
+                "three_prime_utr" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "three_prime_utr"),
+                "five_prime_utr" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "five_prime_utr"),
+                "CDS" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "CDS"))
+tibble_transcript_level_summary_count[, "splicemode"] <- gsub(x = tibble_transcript_level_summary_count$splicemode, pattern = "IR_overlapping_region", replacement = "IR")
+tibble_transcript_level_summary_count[, "splicemode"] <- gsub(x = tibble_transcript_level_summary_count$splicemode, pattern = "TSS\\|", replacement = "")
+
+tibble_transcript_level_summary_count <- tibble_transcript_level_summary_count %>% dplyr::select(-matched_strand, -matched_gene_names, -vector_matched_transcript_ids, -tibble_overlapping_parent_transcript_features, )
+
+# summarise per splicemode for a truth matrix
+# tibble_transcript_level_summary_count <- tibble_transcript_level_summary_count %>% 
+#   dplyr::group_by(splicemode, 
+#                   protein_coding, lncRNA, miRNA, 
+#                   start_codon, stop_codon, three_prime_utr, five_prime_utr, CDS) %>%
+#   dplyr::summarise("tally" = n())
+
+# change splicemode to a logical
+list_transcript_level_summary_count <- tibble_transcript_level_summary_count %>% 
+  dplyr::ungroup() %>% 
+  dplyr::group_split(splicemode) %>%
+  setNames(nm = purrr::map(.x = ., .f = ~.x$splicemode %>% unique) %>% unlist) %>%
+  purrr::map2(
+    .x = .,
+    .y = names(.),
+    .f = function(a1, a2) {
+      
+      tibble_output <- a1
+      
+      tibble_output[, "splicemode"] <- TRUE
+      
+      tibble_output <- tibble_output %>% dplyr::rename(!!a2 := "splicemode")
+      
+      return(tibble_output)
+      
+    } )
+
+# rbind and tibblise
+tibble_transcript_level_summary_count <- list_transcript_level_summary_count %>% rbindlist(fill = TRUE, use.names = TRUE) %>% as_tibble
+
+# fill NA with FALSE
+tibble_transcript_level_summary_count[is.na(tibble_transcript_level_summary_count)] <- FALSE
+
+# upset plot
+message("transcript-level plot by splicemode")
+
+upset_combs <- data.frame(tibble_transcript_level_summary_count, row.names = paste(1:nrow(tibble_transcript_level_summary_count), tibble_transcript_level_summary_count$event_region_coords, tibble_transcript_level_summary_count$diff_exon_coords, sep = "|")) %>% make_comb_mat(mode = "distinct")
+
+print(set_size(upset_combs))
+
+pdf(file = paste(R_processing_results_dir, "upset_plot_transcript_ontology_x_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 4, width = 20)
+
+ht <- ComplexHeatmap::UpSet(upset_combs, 
+                            comb_order = order(-comb_size(upset_combs)), 
+                            left_annotation = rowAnnotation("Set Type" = c(
+                              "A3SS" = "Splicemode",
+                              "protein_coding" = "Transcript type",
+                              # "lncRNA" = "Transcript type",
+                              "miRNA" = "Transcript type",
+                              
+                              "start_codon" = "Transcript region",
+                              "stop_codon" = "Transcript region",
+                              "three_prime_utr" = "Transcript region",
+                              "five_prime_utr" = "Transcript region",
+                              "CDS" = "Transcript region",
+                              
+                              "A5SS" = "Splicemode",
+                              "IR" = "Splicemode",
+                              "MES" = "Splicemode",
+                              "MXS" = "Splicemode",
+                              "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                              col = list("Set Type" = c("Transcript type" = "tomato1", "Transcript region" = "sandybrown", "Splicemode" = "red4"))
+                            ),
+                            row_labels =  c("A3SS", "Protein coding", "miRNA", "Start codon", "Stop codon", "3' UTR", "5' UTR", "CDS", "A5SS", "IR", "MES", "MXS", "SES")
+)
+
+ro <- row_order(ht)
+sz <- set_size(upset_combs)
+
+ht <- draw(ComplexHeatmap::UpSet(upset_combs, 
+                                 comb_order = order(-comb_size(upset_combs)), 
+                                 left_annotation = rowAnnotation("Set Type" = c(
+                                   "A3SS" = "Splicemode",
+                                   "protein_coding" = "Transcript type",
+                                   # "lncRNA" = "Transcript type",
+                                   "miRNA" = "Transcript type",
+                                   
+                                   "start_codon" = "Transcript region",
+                                   "stop_codon" = "Transcript region",
+                                   "three_prime_utr" = "Transcript region",
+                                   "five_prime_utr" = "Transcript region",
+                                   "CDS" = "Transcript region",
+                                   
+                                   "A5SS" = "Splicemode",
+                                   "IR" = "Splicemode",
+                                   "MES" = "Splicemode",
+                                   "MXS" = "Splicemode",
+                                   "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
+                                   col = list("Set Type" = c("Transcript type" = "tomato1", "Transcript region" = "sandybrown", "Splicemode" = "red4"))
+                                 ),
+                                 row_labels =  c("A3SS", "Protein coding", "miRNA", "Start codon", "Stop codon", "3' UTR", "5' UTR", "CDS", "A5SS", "IR", "MES", "MXS", "SES")
+) +
+  rowAnnotation(labels = anno_text(sz, which = "row", just = c("left", "centre"), gp = gpar(fontsize = 9)), 
+                width = max(grobWidth(textGrob(sz))))
+)
+
+co <- column_order(ht)
+cs <- comb_size(upset_combs)
+
+decorate_annotation("Intersection\nsize", {
+  grid.text(cs[co], x = seq_along(cs), y = unit(cs[co], "native") + unit(2, "pt"), 
+            default.units = "native", just = c("left", "centre"), gp = gpar(fontsize = 9), rot = 90)
+  
+} )
+
+dev.off()
 
 # PROTEIN-LEVEL ###
 # vector_unique_interpro_ids <- intersect(tibble_final_biomart_annotation$interpro %>% na.omit %>% unique, tibble_non_family_interpro_entries$Accession)

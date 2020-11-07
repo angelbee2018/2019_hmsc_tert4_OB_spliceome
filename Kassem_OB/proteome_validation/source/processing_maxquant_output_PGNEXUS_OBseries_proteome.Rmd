@@ -1697,7 +1697,9 @@ STRATEGY:
 ```{r}
 
 # get ENSP to uniprotkb_entry mapping
-load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
+# load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
+tibble_ENSP_to_uniprotkb <- read.delim(file = paste(shared_dir, "table_ENSP_to_uniprot_entry_mapping_38.98.txt", sep = ""), check.names = FALSE, stringsAsFactors = FALSE, sep = "\t") %>% as_tibble
+
 # get all the genome-relative positions of CDS nucleotides for every ENSP id
 load(file = paste(shared_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tibble", sep = ""))
 
@@ -1713,7 +1715,7 @@ tibble_JUM_junction_ontology_supp_info <- read.delim("/mnt/Tertiary/sharedfolder
 tibble_PSIsigma_exon_ontology_supp_info <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/table_exon_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble %>% dplyr::mutate("chr" = gsub(x = event_region_coords, pattern = "^([^\\:]+).*", replacement = "\\1"))
 
 # MQtobed - phosphosites 
-tibble_MQtobed_2020_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/2020_phosphoproteome_swissprot_phosphosite_coverage_supp_info.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_MQtobed_2020_phosphosites <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_IGV/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_phosphosite_coverage_supp_info.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 ```
 

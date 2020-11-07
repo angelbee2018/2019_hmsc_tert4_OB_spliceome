@@ -48,11 +48,11 @@ library(seqinr)
 library(gtools)
 # library(Rfast)
 
-# shared_dir <- "Y:/sharedfolder/"
+# shared_dir <- "Z:/sharedfolder/"
 shared_dir <- "/mnt/Tertiary/sharedfolder/"
 
 R_processing_results_dir <- paste("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
-# R_processing_results_dir <- paste("Y:/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
+# R_processing_results_dir <- paste("Z:/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
 
 if(! dir.exists(R_processing_results_dir) ) {
      dir.create(R_processing_results_dir, recursive = TRUE)}
@@ -2262,7 +2262,7 @@ list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints <- future_map2(.x
   
   return(L2_list)
   
-}, .progress = TRUE, .options = future_options(globals = c("filter_less_than_x_na_for_all_timepoints", "dplyr")) )
+}, .progress = TRUE, .options = future_options(globals = c("filter_less_than_x_na_for_all_timepoints", "dplyr", "as_tibble", "maximum_na_observations_per_timepoint")) )
 
 ```
 
@@ -2318,13 +2318,15 @@ list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints <- purrr::map2(
 
 ```{r warning=FALSE}
 
-plan(list(tweak(multiprocess, workers = 8),
-          tweak(multiprocess, workers = 8)))
+# plan(list(tweak(multiprocess, workers = 8),
+          # tweak(multiprocess, workers = 8)))
+
+plan(multiprocess)
 
 if(! dir.exists(paste(R_processing_results_dir, "DreamAI_results/", sep = "")) ) {
   dir.create(paste(R_processing_results_dir, "DreamAI_results/", sep = ""), recursive = TRUE)}
 
-list_of_eigenMS_results_DreamAI_imputed_sp <- future_map2(.x = list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints[c("sp.hsa.canonical.isoforms_junc.exons", "con_sp.hsa.canonical.isoforms", "con_sp.hsa.canonical.isoforms_trembl")], 
+list_of_eigenMS_results_DreamAI_imputed_sp <- purrr::map2(.x = list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints[c("sp.hsa.canonical.isoforms_junc.exons", "con_sp.hsa.canonical.isoforms", "con_sp.hsa.canonical.isoforms_trembl")], 
                                                           .y = names(list_of_eigenMS_results_filtered_less_than_1_na_all_timepoints[c("sp.hsa.canonical.isoforms_junc.exons", "con_sp.hsa.canonical.isoforms", "con_sp.hsa.canonical.isoforms_trembl")]), 
                                                           .f = function(a1, a2) {
                                                             
@@ -2335,7 +2337,7 @@ list_of_eigenMS_results_DreamAI_imputed_sp <- future_map2(.x = list_of_eigenMS_r
                                                             
                                                             cat("now processing", a2, "at level 1\n")
                                                             
-                                                            L2_list <- future_map2(.x = a1, .y = names(a1), .f = function(b1, b2) {
+                                                            L2_list <- purrr::map2(.x = a1, .y = names(a1), .f = function(b1, b2) {
                                                               
                                                               # DEBUG ###
                                                               # b1 <- a1[[1]]
@@ -2344,7 +2346,7 @@ list_of_eigenMS_results_DreamAI_imputed_sp <- future_map2(.x = list_of_eigenMS_r
                                                               
                                                               cat("now processing", b2, "at level 2\n")
                                                               
-                                                              list_imputed_dataframe <- DreamAI(b1$result_table %>% dplyr::select(-id) %>% as.matrix, k = 10, maxiter_MF = 10, ntree = 100,
+                                                              list_imputed_dataframe <- DreamAI::DreamAI(b1$result_table %>% dplyr::select(-id) %>% as.matrix, k = 10, maxiter_MF = 10, ntree = 100,
                                                                               maxnodes = 144, maxiter_ADMIN = 30, tol = 10^(-2),
                                                                               gamma_ADMIN = NA, gamma = 50, CV = FALSE,
                                                                               fillmethod = "row_mean", maxiter_RegImpute = 10,
@@ -2368,13 +2370,15 @@ list_of_eigenMS_results_DreamAI_imputed_sp <- future_map2(.x = list_of_eigenMS_r
                                                               
                                                               return(imputed_tibble)
                                                               
-                                                            }, .progress = TRUE, .options = future_options(globals = c("DreamAI", "dplyr", "plot_PCA_for_timepoint_and_replicate", "tibble", "impute.knn", "R_processing_results_dir", "ggplot2", "ggplot", "vector_replicate_names")) )
+                                                            })
                                                             
                                                             return(L2_list)
                                                             
-                                                          }, .progress = TRUE, .options = future_options(globals = c("DreamAI", "dplyr", "plot_PCA_for_timepoint_and_replicate", "tibble", "impute.knn", "R_processing_results_dir", "ggplot2", "ggplot", "vector_replicate_names")) )
+                                                          })
 
-save.image(file = paste(R_processing_results_dir, "02102020_windows_dreamAI.Rdata"))
+# , .progress = TRUE, .options = future_options(globals = c("DreamAI", "KNN", "MissForest", "ADMIN", "Brinn", "SpectroFM", "RegImpute", "R_processing_results_dir", "plot_PCA_for_timepoint_and_replicate", "vector_replicate_names", "as_tibble", "add_column", "impute.KNN"))
+
+save.image(file = paste(R_processing_results_dir, "02112020_windows_dreamAI.Rdata"))
 
 ```
 
@@ -2554,17 +2558,26 @@ list_of_eigenMS_results_quantitative_cleaned <- list_of_eigenMS_results_quantita
 
 ```
 
+### create ud = 1 timepoint
+
+```{r}
+
+list_of_eigenMS_results_quantitative_cleaned <- list_of_eigenMS_results_quantitative_cleaned %>% purrr::map_depth(.depth = 2, .f = ~.x %>% add_column("ud_vs_ud|IB" = 0, "ud_vs_ud|IB2" = 0, "ud_vs_ud|KR" = 0))
+
+```
+
 ### create design matrix and pairwise contrasts
 
 ```{r}
 
 # i manually set this to prevent silent error if i were to do the alternative (which would be extracting the colnames straight from one element from the list.)
-ratio_colnames <- c("1h_vs_ud|IB", "1d_vs_ud|IB", "30m_vs_ud|IB", "6h_vs_ud|IB", "1h_vs_ud|IB2", "1d_vs_ud|IB2", "30m_vs_ud|IB2", "6h_vs_ud|IB2", "1h_vs_ud|KR", "1d_vs_ud|KR", "30m_vs_ud|KR", "6h_vs_ud|KR")
+ratio_colnames <- c("1h_vs_ud|IB", "1d_vs_ud|IB", "30m_vs_ud|IB", "6h_vs_ud|IB", "1h_vs_ud|IB2", "1d_vs_ud|IB2", "30m_vs_ud|IB2", "6h_vs_ud|IB2", "1h_vs_ud|KR", "1d_vs_ud|KR", "30m_vs_ud|KR", "6h_vs_ud|KR",
+                    "ud_vs_ud|IB", "ud_vs_ud|IB2", "ud_vs_ud|KR")
 
 ratio_names <- gsub(x = ratio_colnames, 
                     pattern = "(.*)\\|(.*)", 
                     replacement = "\\1") %>% 
-  factor(x = ., levels = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"))
+  factor(x = ., levels = c("ud_vs_ud", "30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"))
 
 # replicate_names <- gsub(x = ratio_colnames, 
 #                     pattern = "(.*)\\|(.*)", 
@@ -2581,13 +2594,19 @@ limma_design_matrix <- model.matrix(~ 0 + ratio_names)
 # vector_pairwise_ratio_combos_edited <- paste(tibble_pairwise_ratio_combos$V1, " - ", tibble_pairwise_ratio_combos$V2, sep = "")
 
 # make pairwise contrasts
-pairwise_contrasts <- makeContrasts("ratio_names1h_vs_ud - ratio_names30m_vs_ud", 
-                                    "ratio_names6h_vs_ud - ratio_names30m_vs_ud", 
-                                    "ratio_names1d_vs_ud - ratio_names30m_vs_ud",
-                                    "ratio_names6h_vs_ud - ratio_names1h_vs_ud", 
-                                    "ratio_names1d_vs_ud - ratio_names1h_vs_ud", 
-                                    "ratio_names1d_vs_ud - ratio_names6h_vs_ud", 
-                                    levels = limma_design_matrix)
+pairwise_contrasts <- makeContrasts(
+  "ratio_names30m_vs_ud - ratio_namesud_vs_ud",
+  "ratio_names1h_vs_ud - ratio_namesud_vs_ud",
+  "ratio_names6h_vs_ud - ratio_namesud_vs_ud",
+  "ratio_names1d_vs_ud - ratio_namesud_vs_ud",
+  
+  "ratio_names1h_vs_ud - ratio_names30m_vs_ud", 
+  "ratio_names6h_vs_ud - ratio_names30m_vs_ud", 
+  "ratio_names1d_vs_ud - ratio_names30m_vs_ud",
+  "ratio_names6h_vs_ud - ratio_names1h_vs_ud", 
+  "ratio_names1d_vs_ud - ratio_names1h_vs_ud", 
+  "ratio_names1d_vs_ud - ratio_names6h_vs_ud",
+  levels = limma_design_matrix)
 # 
 # colnames(pairwise_contrasts) <- gsub(x = colnames(pairwise_contrasts), pattern = "ratio_names", replacement = "")
 # rownames(pairwise_contrasts) <- gsub(x = rownames(pairwise_contrasts), pattern = "ratio_names", replacement = "")
@@ -2669,7 +2688,7 @@ list_of_eigenMS_limma_results <- purrr::map2(.x = list_of_eigenMS_results_quanti
     
     # PLOTS #####
     ## p-value distribution
-    pdf(file = paste("./qualityplot_limma_pvalue_distribution_missing.obs.per.ratio_", a2, "_", b2, ".txt", sep = ""))
+    pdf(file = paste("./qualityplot_limma_pvalue_distribution_missing.obs.per.ratio_", a2, "_", b2, ".pdf", sep = ""))
     plot(density(toptable$P.Value %>% na.omit), main = "LIMMA p-value distribution")
     dev.off()
     
@@ -2715,6 +2734,115 @@ list_of_eigenMS_limma_results <- purrr::map2(.x = list_of_eigenMS_results_quanti
 
 ```
 
+## DE using t-test
+
+We will check if this works better than limma because there's a chance that the noise made it unsuitable for limma
+
+```{r}
+
+# cryptic function to select columns and t-test each row 
+# return the p.value only
+do_t.test_per_row_of_table <- function(table, column_regexpr_1, column_regexpr_2, no_more_than_x_na = 1) {
+  
+  # DEBUG ###
+  # table <- list_of_eigenMS_results_filtered_less_than_1_na_for_2_timepoints %>% purrr::map(.f = ~purrr::map(.x = .x, .f = ~.x$result_table)) %>% .[[1]] %>% .[[1]] %>% add_column("ud_vs_ud|IB" = 0, "ud_vs_ud|IB2" = 0, "ud_vs_ud|KR" = 0)
+  # column_regexpr_1 <- "30m"
+  # column_regexpr_2 <- "ud_vs_ud"
+  # no_more_than_x_na <- 1
+  ###########
+  
+  cat("column_regexpr_1: ", column_regexpr_1, "\ncolumn_regexpr_2: ", column_regexpr_2, "\n")
+  
+  purrr::pmap(
+    .l = list(
+      "a1" = table %>% dplyr::select(contains(column_regexpr_1)) %>% purrr::array_tree(margin = 1),
+      "a2" = table %>% dplyr::select(contains(column_regexpr_2)) %>% purrr::array_tree(margin = 1),
+      "a3" = 1:length(table %>% dplyr::select(contains(column_regexpr_1)) %>% purrr::array_tree(margin = 1))
+    ), 
+    .f = function(a1, a2, a3) {
+      
+      # DEBUG ###
+      # a1 <- table %>% dplyr::select(contains(column_regexpr_1)) %>% purrr::array_tree(margin = 1) %>% .[[1]]
+      # a2 <- table %>% dplyr::select(contains(column_regexpr_2)) %>% purrr::array_tree(margin = 1) %>% .[[1]]
+      # a3 <- 1:length(table %>% dplyr::select(contains(column_regexpr_1)) %>% purrr::array_tree(margin = 1)) %>% .[[1]]
+      ###########
+      
+      # cat(a3, "\n")
+      
+      if (which(is.na(a1) | is.nan(a1)) %>% length > 1 | which(is.na(a2) | is.nan(a1)) %>% length > 1) {
+        result <- NA
+      } else {
+        
+        result <- t.test(a1 %>% na.omit, a2 %>% na.omit) %>% .$p.value
+        
+      }
+      
+      return(result)
+      
+    } ) %>% unlist %>% return
+  
+}
+
+list_of_eigenMS_t.test_results <- list_of_eigenMS_results_quantitative_cleaned %>%
+  purrr::modify_at(.at = "junc.exons", .f = ~.x[c("peptides", "protein_groups")]) %>% 
+  purrr::map_depth(.depth = 2, .f = ~.x %>% 
+                     add_column(
+                       "pvalue_30m_vs_ud_minus_ud_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "30m", column_regexpr_2 = "ud_vs_ud", no_more_than_x_na = 1),
+                       "pvalue_1h_vs_ud_minus_ud_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "1h", column_regexpr_2 = "ud_vs_ud", no_more_than_x_na = 1),
+                       "pvalue_6h_vs_ud_minus_ud_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "6h", column_regexpr_2 = "ud_vs_ud", no_more_than_x_na = 1),
+                       "pvalue_1d_vs_ud_minus_ud_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "1d", column_regexpr_2 = "ud_vs_ud", no_more_than_x_na = 1),
+                       "pvalue_1h_vs_ud_minus_30m_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "1h", column_regexpr_2 = "30m", no_more_than_x_na = 1), 
+                       "pvalue_6h_vs_ud_minus_30m_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "6h", column_regexpr_2 = "30m", no_more_than_x_na = 1), 
+                       "pvalue_1d_vs_ud_minus_30m_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "1d", column_regexpr_2 = "30m", no_more_than_x_na = 1),
+                       "pvalue_6h_vs_ud_minus_1h_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "6h", column_regexpr_2 = "1h", no_more_than_x_na = 1), 
+                       "pvalue_1d_vs_ud_minus_1h_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "1d", column_regexpr_2 = "1h", no_more_than_x_na = 1), 
+                       "pvalue_1d_vs_ud_minus_6h_vs_ud" = do_t.test_per_row_of_table(table = .x, column_regexpr_1 = "1d", column_regexpr_2 = "6h", no_more_than_x_na = 1),
+                       
+                       "FC_30m_vs_ud_over_ud_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("30m")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("ud_vs_ud")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist,
+                       "FC_1h_vs_ud_over_ud_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("1h")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("ud_vs_ud")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist,
+                       "FC_6h_vs_ud_over_ud_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("6h")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("ud_vs_ud")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist,
+                       "FC_1d_vs_ud_over_ud_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("1d")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("ud_vs_ud")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist,
+                       "FC_1h_vs_ud_over_30m_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("1h")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("30m")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist, 
+                       "FC_6h_vs_ud_over_30m_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("6h")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("30m")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist, 
+                       "FC_1d_vs_ud_over_30m_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("1d")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("30m")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist,
+                       "FC_6h_vs_ud_over_1h_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("6h")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("1h")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist, 
+                       "FC_1d_vs_ud_over_1h_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("1d")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("1h")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist, 
+                       "FC_1d_vs_ud_over_6h_vs_ud" = purrr::map2(.x = .x %>% dplyr::select(contains("1d")) %>% array_tree(margin = 1), .y = .x %>% dplyr::select(contains("6h")) %>% array_tree(margin = 1), .f = function(c1, c2) {if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {return(mean(2^(c1 %>% na.omit %>% type.convert))/mean(2^(c2 %>% na.omit %>% type.convert)))} else {return(NA)}}) %>% unlist
+                       ) )
+
+# purrr::pmap(.l = list("c1" = test %>% dplyr::select(contains("30m")) %>% array_tree(margin = 1), 
+#                       "c2" = test %>% dplyr::select(contains("ud_vs_ud")) %>% array_tree(margin = 1), 
+#                       "c3" = 1:length(test %>% dplyr::select(contains("30m")) %>% array_tree(margin = 1))
+# ),
+# .f = function(c1, c2, c3) {
+#   
+#   cat(c3, "\n")
+#   
+#   if (is.na(c1) %>% which %>% length <= 2 & is.na(c1) %>% which %>% length <= 2) {
+#     return(mean(2^(.x %>% na.omit %>% type.convert))/mean(2^(.y %>% na.omit %>% type.convert)))
+#   } else {
+#     return(NA)
+#   }
+#   
+# } )
+
+list_of_eigenMS_t.test_results_significant <- purrr::map_depth(
+  .x = list_of_eigenMS_t.test_results,
+  .depth = 2, 
+  .f = function(b1) {
+    
+    # DEBUG ###
+    # b1 <- list_of_eigenMS_t.test_results$`con_sp.hsa.canonical.isoforms`$protein_groups %>% .[7, ]
+    ###########
+    
+    vector_logical_significant_rowwise <- purrr::map2(.x = b1 %>% dplyr::select(contains("pvalue")) %>% array_tree(margin = 1), .y = b1 %>% dplyr::select(contains("FC_")) %>% array_tree(margin = 1), .f = ~any(.x %>% na.omit < pvalue_cutoff) & any(.y %>% na.omit %>% abs > fold_change_cutoff)) %>% unlist
+    
+    return(b1[which(vector_logical_significant_rowwise == TRUE), ])
+    
+  } )
+
+```
+
 # Gene Set Enrichment Analysis (GSEA)
 
 ## extract gene sets
@@ -2723,10 +2851,10 @@ list_of_eigenMS_limma_results <- purrr::map2(.x = list_of_eigenMS_results_quanti
 
 # first match significant entries to the processed info tables 
 
-list_eigenMS_limma_results_geneset <- purrr::pmap(
-  .l = list("a1" = list_of_eigenMS_limma_results,
-            "a2" = list_imported_maxquant_tibbles_processed,
-            "a3" = names(list_of_eigenMS_limma_results)), 
+list_eigenMS_DE_results_geneset <- purrr::pmap(
+  .l = list("a1" = list_of_eigenMS_t.test_results_significant,
+            "a2" = list_imported_maxquant_tibbles_processed[names(list_of_eigenMS_t.test_results_significant)],
+            "a3" = names(list_of_eigenMS_t.test_results_significant)), 
   .f = function(a1, a2, a3) {
     
     cat("\nnow processing", a3, "at level 1")
@@ -2737,9 +2865,9 @@ list_eigenMS_limma_results_geneset <- purrr::pmap(
                 "b3" = names(a1[c("phosphosites", "protein_groups")])), .f = function(b1, b2, b3) {
                   
                   # DEBUG ###
-                  b1 <- list_of_eigenMS_limma_results[["con_sp.hsa.canonical.isoforms_trembl"]][["phosphosites"]]
-                  b2 <- list_imported_maxquant_tibbles_processed[["con_sp.hsa.canonical.isoforms_trembl"]][["phosphosites"]]
-                  b3 <- list_of_eigenMS_limma_results[["con_sp.hsa.canonical.isoforms_trembl"]]["phosphosites"] %>% names
+                  # b1 <- list_of_eigenMS_limma_results[["con_sp.hsa.canonical.isoforms_trembl"]][["phosphosites"]]
+                  # b2 <- list_imported_maxquant_tibbles_processed[["con_sp.hsa.canonical.isoforms_trembl"]][["phosphosites"]]
+                  # b3 <- list_of_eigenMS_limma_results[["con_sp.hsa.canonical.isoforms_trembl"]]["phosphosites"] %>% names
                   ###########
                   
                   cat("\nnow processing", b3, "at level 2")
@@ -2750,7 +2878,7 @@ list_eigenMS_limma_results_geneset <- purrr::pmap(
                   setwd(paste(R_processing_results_dir, "GSEA/", sep = ""))
                   
                   # extract the MQ ids of the significant items
-                  vec_ids_of_limma_differential_items <- b1$tibble_sig_items$id
+                  vec_ids_of_limma_differential_items <- b1$id
                   
                   # use ids to extract the entries from the full normalised table
                   tibble_differential_item_info <- b2[which(b2$id %in% vec_ids_of_limma_differential_items), ]
@@ -2807,8 +2935,8 @@ load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 ```{r}
 
 list_GOhyper_enrichment <- purrr::pmap(.l = list(
-  "a1" = list_eigenMS_limma_results_geneset,
-  "a2" = names(list_eigenMS_limma_results_geneset)), .f = function(a1, a2) {
+  "a1" = list_eigenMS_DE_results_geneset,
+  "a2" = names(list_eigenMS_DE_results_geneset)), .f = function(a1, a2) {
     
     # DEBUG ###
     # a1 <- list_of_eigenMS_limma_results[["sp.hsa.canonical.isoforms_junc.exons"]]
@@ -2903,47 +3031,44 @@ list_GOhyper_enrichment <- purrr::map2(.x = list_imported_maxquant_tibbles_proce
 
 ```{r}
 
-list_of_significant_items_averaged <- purrr::map2(.x = list_of_eigenMS_limma_results, .y = names(list_of_eigenMS_limma_results), .f = function(.x, .y) {
-  
-  # DEBUG ###
-  # .x <- list_of_eigenMS_limma_results[[1]]
-  # .y <- names(list_of_eigenMS_limma_results) %>% .[[1]]
-  ###########
-  
-  a1 <- .x
-  a2 <- .y
-  
-  cat("now processing", a2, "at level 1\n")
-  
-  L2_list <- purrr::map2(.x = a1, .y = names(a1), .f = function(.x, .y) {
+list_of_significant_items_averaged <- purrr::map2(
+  .x = list_of_eigenMS_t.test_results_significant, 
+  .y = names(list_of_eigenMS_t.test_results_significant), 
+  .f = function(a1, a2) {
     
     # DEBUG ###
-    # .x <- a1[[2]]
-    # .y <- names(a1) %>% .[[2]]
+    # .x <- list_of_eigenMS_t.test_results_significant[[1]]
+    # .y <- names(list_of_eigenMS_t.test_results_significant) %>% .[[1]]
     ###########
     
-    b1 <- .x
-    b2 <- .y
+    cat("now processing", a2, "at level 1\n")
     
-    cat("now processing", b2, "at level 2\n")
+    L2_list <- purrr::map2(.x = a1, .y = names(a1), .f = function(b1, b2) {
+      
+      # DEBUG ###
+      # b1 <- list_of_eigenMS_t.test_results_significant$con_sp.hsa.canonical.isoforms$peptides
+      # b2 <-list_of_eigenMS_t.test_results_significant$con_sp.hsa.canonical.isoforms %>% .["peptides"] %>% names
+      ###########
+      
+      cat("now processing", b2, "at level 2\n")
+      
+      raw_tibble <- b1 %>% .[, 1:16]
+      
+      design_factor_info <- factor(x = gsub(x = colnames(raw_tibble %>% dplyr::select(-id)), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE), levels = c("ud_vs_ud", "30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"))
+      
+      tibble_average_values <- average_replicates_by_column(table = raw_tibble %>% dplyr::select(-id), design_factor = design_factor_info, min_replicates = 1) %>%
+        add_column("id" = raw_tibble$id, .before = 1) %>%
+        # only keep complete time series for the clustering
+        na.omit 
+      # %>%
+      #   # add the MSC column cause we took ratios
+      #   add_column("mean|ud_vs_ud" = 1, .after = 1)
+      
+      return(tibble_average_values)
+      
+    } ) %>% return
     
-    raw_tibble <- b1$tibble_sig_items %>% .[, 1:13]
-    
-    design_factor_info <- factor(x = gsub(x = colnames(raw_tibble %>% dplyr::select(-id)), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE), levels = c("30m_vs_ud", "1h_vs_ud", "6h_vs_ud", "1d_vs_ud"))
-    
-    tibble_average_values <- average_replicates_by_column(table = raw_tibble %>% dplyr::select(-id), design_factor = design_factor_info, min_replicates = 1) %>%
-      add_column("id" = raw_tibble$id, .before = 1) %>%
-      # only keep complete time series for the clustering
-      na.omit %>%
-      # add the MSC column cause we took ratios
-      add_column("mean|ud_vs_ud" = 1, .after = 1)
-    
-    return(tibble_average_values)
-    
-    
-  } ) %>% return
-  
-} )
+  } )
 
 ```
 
@@ -2973,167 +3098,172 @@ list_seeds_and_dimensions_to_loop <- purrr::map2(.x = xdim_range_combinedexpr, .
 
 ```{r}
 
+# plan(list(tweak(multiprocess, workers = 4),
+#           tweak(multiprocess, workers = 4),
+#           tweak(multiprocess, workers = 16)))
+
+# peptides have a few tens of thousands of entries which we won't process
+list_of_significant_items_averaged <- list_of_significant_items_averaged %>% purrr::map(~.x[c("phosphosites", "protein_groups")])
+
 plan(multiprocess)
+
+options(mc.cores = 16)
 
 # note: this loop returns just the scaled MQ ratios.
 # it also plots the consensus metrix and export the edge tables for ClusterONE to crunch. :)
-list_scaled_MQ_ratios <- purrr::map2(.x = list_of_significant_items_averaged["sp.hsa.canonical.isoforms_junc.exons"], 
-            .y = names(list_of_significant_items_averaged["sp.hsa.canonical.isoforms_junc.exons"]), .f = function(.x, .y) {
-              
-              # DEBUG ###
-              # .x <- list_of_significant_items_averaged[["sp.hsa.canonical.isoforms_junc.exons"]]
-              # .y <- names(list_of_significant_items_averaged["sp.hsa.canonical.isoforms_junc.exons"])
-              ###########
-              
-              a1 <- .x
-              a2 <- .y
-              
-              cat("\nnow processing", a2, "at level 1")
-              
-              purrr::map2(.x = a1, .y = names(a1), .f = function(.x, .y) {
-                
-                # DEBUG ###
-                # .x <- a1[[1]]
-                # .y <- names(a1) %>% .[[1]]
-                ###########
-                
-                b1 <- .x
-                b2 <- .y
-                
-                cat("\nnow processing", b2, "at level 2")
-                
-                if(! dir.exists(paste(R_processing_results_dir, "kinase_substrate_analysis/", sep = "")) ) {
-                  dir.create(paste(R_processing_results_dir, "kinase_substrate_analysis/", sep = ""), recursive = TRUE)}
-                
-                setwd(paste(R_processing_results_dir, "kinase_substrate_analysis/", sep = ""))
-                
-                tibble_scaled <- b1 %>% dplyr::select(-id) %>% genescale(m = ., axis = 1, method = "Z") %>% as_tibble
-                
-                # return(cbind(b1[, "id"], tibble_scaled) %>% as_tibble)
-                
-                # EXECUTE CONSENSUS SOM 
-                wide_table_som_sweep_clusters <- future_imap(.x = list_seeds_and_dimensions_to_loop, .f = function(.x, .y) {
-                  
-                  # DEBUG ###
-                  # .x <- list_seeds_and_dimensions_to_loop[[1]]
-                  ###########
-                  
-                  cat("\nprocessing", .y)
-                  
-                  set.seed(.x[[3]])
-                  
-                  som(tibble_scaled %>% as.matrix, grid = somgrid(xdim = .x[[1]], ydim = .x[[2]], topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE, dist.fcts = "sumofsquares") %>% .[["unit.classif"]] %>% tibble::enframe(., name = NULL)
-                  
-                }, .progress = TRUE, .options = future_options(globals = c("tibble_scaled", "dplyr", "som")) ) %>% as.data.frame
-                
-                # use "id" column as rownames
-                rownames(wide_table_som_sweep_clusters) <- b1$id
-                
-                # pairwise test between all items for every sweep to see if they were co-occurring
-                list_matchtest_som_sweep_byisoform <- purrr::map(wide_table_som_sweep_clusters %>% array_tree, ~unlist(.x)) %>% 
-                  future_map(.f = ~apply(X = wide_table_som_sweep_clusters, MARGIN = 1, FUN = function(X){.x == X}), .progress = TRUE, .options = future_options(globals = c("apply", "wide_table_som_sweep_clusters")))
-                
-                # calculate percentage consensus pairwise between any two items.
-                list_percentage_consensus_per_item <- future_map(list_matchtest_som_sweep_byisoform, ~apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("apply", "wide_table_som_sweep_clusters", "as_tibble", "dplyr")))
-                
-                # rbind to obtain consensus matrix
-                matrix_consensus_matrix <- list_percentage_consensus_per_item %>% rbindlist %>% as.matrix
-                rownames(matrix_consensus_matrix) <- b1$id
-                
-                # re-order the consensus matrix
-                matrix_consensus_matrix_dist_result <- matrix_consensus_matrix %>% Rfast::Dist(method = "euclidean") %>% as.dist
-                matrix_consensus_matrix_hclust_result <- fastcluster::hclust(matrix_consensus_matrix_dist_result, method = "ward.D2")
-                matrix_consensus_matrix_dendrogram <- as.dendrogram(matrix_consensus_matrix_hclust_result)
-                # take rowmeans: cols/rows should get darker as you move right/down
-                matrix_consensus_matrix_rowmeans <- rowMeans(matrix_consensus_matrix, na.rm = T)
-                # matrix_consensus_matrix_PCA_loadings_byrow <- prcomp(matrix_consensus_matrix) %>% .[["rotation"]] %>% .[, 1]
-                # matrix_consensus_matrix_singular_vectors_byrow <- apply(matrix_consensus_matrix, 1 , FUN = function(X) {svd(X) %>% .$d})
-                
-                matrix_consensus_matrix_dendrogram_reordered <- reorder(matrix_consensus_matrix_dendrogram, matrix_consensus_matrix_rowmeans)
-                
-                ggdendrogram(matrix_consensus_matrix_dendrogram_reordered) +
-                  xlab(b2) +
-                  theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
-                  ggsave(filename = paste("./dendrogram_som_consensus_matrix_", a2, "_", b2, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
-                
-                # retrieve the order of rows from the dendrogram
-                matrix_consensus_matrix_dendrogram_reordered_order <- matrix_consensus_matrix_dendrogram_reordered %>% unlist
-                # implement reorder
-                tibble_consensus_matrix_reordered <- matrix_consensus_matrix[matrix_consensus_matrix_dendrogram_reordered_order, matrix_consensus_matrix_dendrogram_reordered_order] %>% as_tibble(rownames = "id")
-                
-                # write the consensus matrix table to file
-                write.table(x = tibble_consensus_matrix_reordered, file = paste("./heatmap_som_consensus_matrix_combinedexpr_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-                
-                # melt table for ggplot
-                tibble_consensus_matrix_long <- reshape2::melt(tibble_consensus_matrix_reordered, id = c("id"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_at(.vars = c("id", "variable"), as.character)
-                
-                ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
-                  geom_tile(aes(x = id, y = variable)) +
-                  ggtitle(paste("Consensus matrix for kinase substrate analysis\nOB phosphoproteome", a2, "\n", b2, sep = "")) +
-                  scale_x_discrete(breaks = tibble_consensus_matrix_reordered$id, labels = tibble_consensus_matrix_reordered$id, limits = tibble_consensus_matrix_reordered$id) +
-                  scale_y_discrete(breaks = tibble_consensus_matrix_reordered$id, labels = tibble_consensus_matrix_reordered$id, limits = tibble_consensus_matrix_reordered$id) +
-                  scale_fill_gradientn(colours = c("lightblue2", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
-                  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.25, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
-                  ggsave(filename = paste("./heatmap_som_consensus_matrix_combinedexpr_", a2, "_", b2, ".tiff", sep = ""), device = "tiff", dpi = 600, width = 30, height = 25, units = "cm", limitsize = FALSE)
-                
-                # write.table(x = tibble_consensus_matrix_combinedexpr_long, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-                
-                # CLUSTER DETERMINATION #####
-                
-                # loop along the consensus matrix variables
-                list_ids_for_looping <- tibble_consensus_matrix_reordered$id %>% unique %>% array_tree
-                
-                # debugging purposes only 
-                # list_ids_for_looping <- list_ids_for_looping[c(1:50, 1000:1050)]
-                
-                # for every item, retrieve its friends above a specified "mutual_consensus_cutoff"
-                list_cooccurring_items <- future_map(.x = list_ids_for_looping, .f = ~tibble_consensus_matrix_long[tibble_consensus_matrix_long$variable == .x & tibble_consensus_matrix_long$cocluster_percentage >= mutual_consensus_cutoff, "id"], .progress = TRUE, .options = future_options(globals = c("tibble_consensus_matrix_long", "mutual_consensus_cutoff")))
-                
-                names(list_cooccurring_items) <- list_ids_for_looping
-                
-                # take pairwise intersections ###
-                pairwise_comparisons_between_items <- combn(list_ids_for_looping %>% unlist, m = 2) %>% t %>% as_tibble
-                colnames(pairwise_comparisons_between_items) <- c("comparison_1", "comparison_2")
-                
-                # each level 1 element is a comparison of each pairwise intersection
-                vector_comparison_1 <- pairwise_comparisons_between_items$comparison_1
-                vector_comparison_2 <- pairwise_comparisons_between_items$comparison_2
-                
-                # NOTE: EACH L1 ELEMENT OF THE LIST MUST BE A TIBBLE. IF IT ISN'T THE WHOLE THING IS STUFFED.
-                
-                list_itemwise_intersection <- future_map2(.x = vector_comparison_1, .y = vector_comparison_2, .f = ~dplyr::intersect(list_cooccurring_items[[.x]], list_cooccurring_items[[.y]]) %>% nrow, .progress = TRUE, .options = future_options(globals = c("list_cooccurring_items", "dplyr::intersect"))) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_intersection")
-                
-                list_itemwise_setdiff <- future_map2(.x = vector_comparison_1, .y = vector_comparison_2, .f = ~dplyr::setdiff(list_cooccurring_items[[.x]], list_cooccurring_items[[.y]]) %>% nrow, .progress = TRUE, .options = future_options(globals = c("list_cooccurring_items", "dplyr::setdiff"))) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_setdiff")
-                
-                # append the intersection and setdiff metrics onto the tibble of pairwise comparisons. this will be the edge table!!
-                tibble_pairwise_edges_unfiltered <- bind_cols(pairwise_comparisons_between_items %>% as_tibble, list_itemwise_intersection[, 1], list_itemwise_setdiff[, 1])
-                
-                tibble_pairwise_edges_unfiltered <- add_column(tibble_pairwise_edges_unfiltered, "jaccard" = tibble_pairwise_edges_unfiltered$coclustering_intersection/(tibble_pairwise_edges_unfiltered$coclustering_setdiff + tibble_pairwise_edges_unfiltered$coclustering_intersection))
-                
-                write.table(x = tibble_pairwise_edges_unfiltered, file = paste("./consensus_edge_table_anyintersection_consensus0.5_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-                
-                # tibble_pairwise_edges_unfiltered <- read_delim(paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
-                
-                # filter for pairwise neighbours in common > 0
-                tibble_pairwise_edges_filtered <- tibble_pairwise_edges_unfiltered[tibble_pairwise_edges_unfiltered$coclustering_intersection > 0, ]
-                
-                pdf(file = paste("./densityplot_PNC_distribution_", a2, "_", b2, ".pdf", sep = ""), width = 20, height = 15)
-                plot(density(tibble_pairwise_edges_filtered$coclustering_intersection %>% as.numeric), 
-                     main = paste("Density distribution of pairwise neighbours in common", a2, b2, sep = "\n"))
-                dev.off()
-                
-                pdf(file = paste("./densityplot_jaccard_distribution_", a2, "_", b2, ".pdf", sep = ""), width = 20, height = 15)
-                plot(density(tibble_pairwise_edges_filtered$jaccard %>% as.numeric), 
-                     main = paste("Density distribution of jaccard similarity", a2, b2, sep = "\n"))
-                dev.off()
-                
-                write.table(x = tibble_pairwise_edges_filtered, file = paste("./consensus_edge_table_intersection1_consensus0.5_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-                
-                return(cbind(b1[, "id"], tibble_scaled) %>% as_tibble)
-                
-              } ) %>% return
-              
-            } )
+list_scaled_MQ_ratios <- purrr::map2(
+  .x = list_of_significant_items_averaged["con_sp.hsa.canonical.isoforms"], 
+  .y = names(list_of_significant_items_averaged["con_sp.hsa.canonical.isoforms"]), 
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # .x <- list_of_significant_items_averaged[["sp.hsa.canonical.isoforms_junc.exons"]]
+    # .y <- names(list_of_significant_items_averaged["sp.hsa.canonical.isoforms_junc.exons"])
+    ###########
+    
+    cat("\nnow processing", a2, "at level 1")
+    
+    purrr::map2(.x = a1, .y = names(a1), .f = function(b1, b2) {
+      
+      # DEBUG ###
+      # .x <- a1[[1]]
+      # .y <- names(a1) %>% .[[1]]
+      ###########
+      
+      cat("\nnow processing", b2, "at level 2")
+      
+      if(! dir.exists(paste(R_processing_results_dir, "kinase_substrate_analysis/", sep = "")) ) {
+        dir.create(paste(R_processing_results_dir, "kinase_substrate_analysis/", sep = ""), recursive = TRUE)}
+      
+      setwd(paste(R_processing_results_dir, "kinase_substrate_analysis/", sep = ""))
+      
+      tibble_scaled <- b1 %>% dplyr::select(-id) %>% genescale(m = ., axis = 1, method = "Z") %>% as_tibble
+      
+      # return(cbind(b1[, "id"], tibble_scaled) %>% as_tibble)
+      
+      # EXECUTE CONSENSUS SOM 
+      wide_table_som_sweep_clusters <- future_imap(.x = list_seeds_and_dimensions_to_loop, .f = function(.x, .y) {
+        
+        # DEBUG ###
+        # .x <- list_seeds_and_dimensions_to_loop[[1]]
+        ###########
+        
+        cat("\nprocessing", .y)
+        
+        set.seed(.x[[3]])
+        
+        som(tibble_scaled %>% as.matrix, grid = somgrid(xdim = .x[[1]], ydim = .x[[2]], topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE, dist.fcts = "sumofsquares") %>% .[["unit.classif"]] %>% tibble::enframe(., name = NULL)
+        
+      }, .progress = TRUE, .options = future_options(globals = c("tibble_scaled", "dplyr", "som")) ) %>% as.data.frame
+      
+      # use "id" column as rownames
+      rownames(wide_table_som_sweep_clusters) <- b1$id
+      
+      # pairwise test between all items for every sweep to see if they were co-occurring
+      list_matchtest_som_sweep_byisoform <- purrr::map(wide_table_som_sweep_clusters %>% array_tree, ~unlist(.x)) %>% 
+        future_map(.f = ~apply(X = wide_table_som_sweep_clusters, MARGIN = 1, FUN = function(X){.x == X}), .progress = TRUE, .options = future_options(globals = c("apply", "wide_table_som_sweep_clusters")))
+      
+      # calculate percentage consensus pairwise between any two items.
+      list_percentage_consensus_per_item <- future_map(list_matchtest_som_sweep_byisoform, ~apply(X = .x, MARGIN = 2, FUN = function(X){sum(X)/length(X)}) %>% t(.) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("apply", "wide_table_som_sweep_clusters", "as_tibble", "dplyr")))
+      
+      # rbind to obtain consensus matrix
+      matrix_consensus_matrix <- list_percentage_consensus_per_item %>% rbindlist %>% as.matrix
+      rownames(matrix_consensus_matrix) <- b1$id
+      
+      # re-order the consensus matrix
+      matrix_consensus_matrix_dist_result <- matrix_consensus_matrix %>% Rfast::Dist(method = "euclidean") %>% as.dist
+      matrix_consensus_matrix_hclust_result <- fastcluster::hclust(matrix_consensus_matrix_dist_result, method = "ward.D2")
+      matrix_consensus_matrix_dendrogram <- as.dendrogram(matrix_consensus_matrix_hclust_result)
+      # take rowmeans: cols/rows should get darker as you move right/down
+      matrix_consensus_matrix_rowmeans <- rowMeans(matrix_consensus_matrix, na.rm = T)
+      # matrix_consensus_matrix_PCA_loadings_byrow <- prcomp(matrix_consensus_matrix) %>% .[["rotation"]] %>% .[, 1]
+      # matrix_consensus_matrix_singular_vectors_byrow <- apply(matrix_consensus_matrix, 1 , FUN = function(X) {svd(X) %>% .$d})
+      
+      matrix_consensus_matrix_dendrogram_reordered <- reorder(matrix_consensus_matrix_dendrogram, matrix_consensus_matrix_rowmeans)
+      
+      ggdendrogram(matrix_consensus_matrix_dendrogram_reordered) +
+        xlab(b2) +
+        theme(axis.text.x = element_text(size = 2), axis.title.x = element_text(margin = margin(r = 300)), text = element_text(family = "Helvetica")) +
+        ggsave(filename = paste("./dendrogram_som_consensus_matrix_", a2, "_", b2, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 200, height = 150, units = "cm", limitsize = FALSE)
+      
+      # retrieve the order of rows from the dendrogram
+      matrix_consensus_matrix_dendrogram_reordered_order <- matrix_consensus_matrix_dendrogram_reordered %>% unlist
+      # implement reorder
+      tibble_consensus_matrix_reordered <- matrix_consensus_matrix[matrix_consensus_matrix_dendrogram_reordered_order, matrix_consensus_matrix_dendrogram_reordered_order] %>% as_tibble(rownames = "id")
+      
+      # write the consensus matrix table to file
+      write.table(x = tibble_consensus_matrix_reordered, file = paste("./heatmap_som_consensus_matrix_combinedexpr_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+      
+      # melt table for ggplot
+      tibble_consensus_matrix_long <- reshape2::melt(tibble_consensus_matrix_reordered, id = c("id"), value.name = "cocluster_percentage") %>% type_convert %>% as_tibble %>% mutate_at(.vars = c("id", "variable"), as.character)
+      
+      ggplot(tibble_consensus_matrix_long, aes(fill = cocluster_percentage)) +
+        geom_tile(aes(x = id, y = variable)) +
+        ggtitle(paste("Consensus matrix for kinase substrate analysis\nOB phosphoproteome", a2, "\n", b2, sep = "")) +
+        scale_x_discrete(breaks = tibble_consensus_matrix_reordered$id, labels = tibble_consensus_matrix_reordered$id, limits = tibble_consensus_matrix_reordered$id) +
+        scale_y_discrete(breaks = tibble_consensus_matrix_reordered$id, labels = tibble_consensus_matrix_reordered$id, limits = tibble_consensus_matrix_reordered$id) +
+        scale_fill_gradientn(colours = c("lightblue2", "white", "yellow", "red", "black"), values = c(0, 0.25, 0.5, 0.75, 1)) + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.25, lineheight = 0.75, colour = "black"), legend.title.align = 0.5, axis.text.y = element_text(size = 0.25, lineheight = 0.75, colour = "black"), axis.title.x = element_text(margin = margin(r = 300)), axis.title.y = element_text(margin = margin(r = 50)), text = element_text(family = "Helvetica")) +
+        ggsave(filename = paste("./heatmap_som_consensus_matrix_combinedexpr_", a2, "_", b2, ".tiff", sep = ""), device = "tiff", dpi = 600, width = 30, height = 25, units = "cm", limitsize = FALSE)
+      
+      # write.table(x = tibble_consensus_matrix_combinedexpr_long, file = paste(results_directory_figures, "heatmap_som_consensus_matrix_combinedexpr_", nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+      
+      # CLUSTER DETERMINATION #####
+      
+      # loop along the consensus matrix variables
+      list_ids_for_looping <- tibble_consensus_matrix_reordered$id %>% unique %>% array_tree
+      
+      # debugging purposes only 
+      # list_ids_for_looping <- list_ids_for_looping[c(1:50, 1000:1050)]
+      
+      # for every item, retrieve its friends above a specified "mutual_consensus_cutoff"
+      list_cooccurring_items <- future_map(.x = list_ids_for_looping, .f = ~tibble_consensus_matrix_long[tibble_consensus_matrix_long$variable == .x & tibble_consensus_matrix_long$cocluster_percentage >= mutual_consensus_cutoff, "id"], .progress = TRUE, .options = future_options(globals = c("tibble_consensus_matrix_long", "mutual_consensus_cutoff")))
+      
+      names(list_cooccurring_items) <- list_ids_for_looping
+      
+      # take pairwise intersections ###
+      pairwise_comparisons_between_items <- combn(list_ids_for_looping %>% unlist, m = 2) %>% t %>% as_tibble
+      colnames(pairwise_comparisons_between_items) <- c("comparison_1", "comparison_2")
+      
+      # each level 1 element is a comparison of each pairwise intersection
+      vector_comparison_1 <- pairwise_comparisons_between_items$comparison_1
+      vector_comparison_2 <- pairwise_comparisons_between_items$comparison_2
+      
+      # NOTE: EACH L1 ELEMENT OF THE LIST MUST BE A TIBBLE. IF IT ISN'T THE WHOLE THING IS STUFFED.
+      
+      list_itemwise_intersection <- future_map2(.x = vector_comparison_1, .y = vector_comparison_2, .f = ~dplyr::intersect(list_cooccurring_items[[.x]], list_cooccurring_items[[.y]]) %>% nrow, .progress = TRUE, .options = future_options(globals = c("list_cooccurring_items", "dplyr::intersect"))) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_intersection")
+      
+      list_itemwise_setdiff <- future_map2(.x = vector_comparison_1, .y = vector_comparison_2, .f = ~dplyr::setdiff(list_cooccurring_items[[.x]], list_cooccurring_items[[.y]]) %>% nrow, .progress = TRUE, .options = future_options(globals = c("list_cooccurring_items", "dplyr::setdiff"))) %>% unlist %>% as.data.frame %>% as_tibble %>% setNames("coclustering_setdiff")
+      
+      # append the intersection and setdiff metrics onto the tibble of pairwise comparisons. this will be the edge table!!
+      tibble_pairwise_edges_unfiltered <- bind_cols(pairwise_comparisons_between_items %>% as_tibble, list_itemwise_intersection[, 1], list_itemwise_setdiff[, 1])
+      
+      tibble_pairwise_edges_unfiltered <- add_column(tibble_pairwise_edges_unfiltered, "jaccard" = tibble_pairwise_edges_unfiltered$coclustering_intersection/(tibble_pairwise_edges_unfiltered$coclustering_setdiff + tibble_pairwise_edges_unfiltered$coclustering_intersection))
+      
+      write.table(x = tibble_pairwise_edges_unfiltered, file = paste("./consensus_edge_table_anyintersection_consensus0.5_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+      
+      # tibble_pairwise_edges_unfiltered <- read_delim(paste(results_directory_figures, "list_genes_or_isoforms_from_combinedexpr_itemwise_anyintersection_consensus0.5.txt", sep = ""), delim = "\t")
+      
+      # filter for pairwise neighbours in common > 0
+      tibble_pairwise_edges_filtered <- tibble_pairwise_edges_unfiltered[tibble_pairwise_edges_unfiltered$coclustering_intersection > 0, ]
+      
+      pdf(file = paste("./densityplot_PNC_distribution_", a2, "_", b2, ".pdf", sep = ""), width = 20, height = 15)
+      plot(density(tibble_pairwise_edges_filtered$coclustering_intersection %>% as.numeric), 
+           main = paste("Density distribution of pairwise neighbours in common", a2, b2, sep = "\n"))
+      dev.off()
+      
+      pdf(file = paste("./densityplot_jaccard_distribution_", a2, "_", b2, ".pdf", sep = ""), width = 20, height = 15)
+      plot(density(tibble_pairwise_edges_filtered$jaccard %>% as.numeric), 
+           main = paste("Density distribution of jaccard similarity", a2, b2, sep = "\n"))
+      dev.off()
+      
+      write.table(x = tibble_pairwise_edges_filtered, file = paste("./consensus_edge_table_intersection1_consensus0.5_", a2, "_", b2, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+      
+      return(cbind(b1[, "id"], tibble_scaled) %>% as_tibble)
+      
+    } ) %>% return
+    
+  } )
 
 ```
 
@@ -3171,7 +3301,7 @@ list_clustered_MQ_ratios <- purrr::map2(.x = list_scaled_MQ_ratios,
                                             setwd(paste(R_processing_results_dir, "kinase_substrate_analysis/", sep = ""))
                                             
                                             # grep the corresponding cluster table from file
-                                            filename_of_clusterGO_result <- list.files(path = "./", pattern = paste("clusterONE_", a2, "_", b2, ".tab", sep = ""))
+                                            filename_of_clusterGO_result <- list.files(path = "./", pattern = paste("clusterONE_", a2, "_", b2, ".*.tab", sep = ""))
                                             
                                             tibble_cytoscape_result <- read.delim(paste("./", filename_of_clusterGO_result, sep = ""), sep = "\t", header = TRUE, row.names = NULL) %>% setNames(c("cluster", "id")) %>% as_tibble
                                             
@@ -3230,36 +3360,121 @@ list_clustered_MQ_ratios <- purrr::map2(.x = list_scaled_MQ_ratios,
 
 #### GO term and family enrichment 
 
+##### extract gene sets
+
+```{r}
+
+# first match significant entries to the processed info tables 
+
+list_MQ_scaled_tibbles_matched_to_geneset_per_cluster <- purrr::pmap(
+  .l = list("a1" = list_clustered_MQ_ratios,
+            "a2" = list_imported_maxquant_tibbles_processed[names(list_clustered_MQ_ratios)],
+            "a3" = names(list_clustered_MQ_ratios)), 
+  .f = function(a1, a2, a3) {
+    
+    cat("\nnow processing", a3, "at level 1")
+    
+    purrr::pmap(
+      .l = list("b1" = a1[c("phosphosites", "protein_groups")], 
+                "b2" = a2[c("phosphosites", "protein_groups")],
+                "b3" = names(a1[c("phosphosites", "protein_groups")])), .f = function(b1, b2, b3) {
+                  
+                  # DEBUG ###
+                  # b1 <- list_clustered_MQ_ratios[["con_sp.hsa.canonical.isoforms"]][["phosphosites"]]
+                  # b2 <- list_imported_maxquant_tibbles_processed[["con_sp.hsa.canonical.isoforms"]][["phosphosites"]]
+                  # b3 <- list_clustered_MQ_ratios[["con_sp.hsa.canonical.isoforms"]]["phosphosites"] %>% names
+                  ###########
+                  
+                  cat("\nnow processing", b3, "at level 2")
+                  
+                  if(! dir.exists(paste(R_processing_results_dir, "GSEA/", sep = "")) ) {
+                    dir.create(paste(R_processing_results_dir, "GSEA/", sep = ""), recursive = TRUE)}
+                  
+                  setwd(paste(R_processing_results_dir, "GSEA/", sep = ""))
+                  
+                  # table join by id
+                  tibble_scaled_ratios_joined_to_information <- dplyr::left_join(b1 %>% dplyr::mutate_at(.vars = "id", .funs = function(x) {gsub(x = x, pattern = "(.*)_.*", replacement = "\\1") %>% type.convert %>% return} ), b2[, c("id", "Gene.names", "Fasta.headers")], by = "id") %>%
+                    dplyr::mutate_at(.vars = c("Fasta.headers"), .funs = function(x) {return(gsub(x = x, pattern = "^([^\\ ]+).*{0,1}", replacement = "\\1"))} ) 
+                  
+                  return(tibble_scaled_ratios_joined_to_information)
+                  
+                } ) %>% purrr::discard(.p = ~.x %>% length == 0) %>% 
+      return
+    
+  } )
+
+```
+
 ##### GO term
 
 ```{r}
 
-# OB series #####
+load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 
-list_of_timeseries_logCPM_PSI_genes_by_consensus_cluster_all <- purrr::map(.x = list_combinedexpr_logCPM_PSI_scaled_clustered
-                                                          , .f = ~.x$Gene %>% as.vector %>% unique)
-
-list_of_timeseries_logCPM_PSI_genes_by_consensus_cluster_diffsplicedonly <- purrr::map(.x = list_combinedexpr_logCPM_PSI_scaled_clustered
-                                                          , .f = ~.x[.x$splicemode != "RNASeq", "Gene"] %>% unlist %>% as.vector %>% unique)
-
-number_of_consensus_combinedexpr_clusters <- wide_table_combinedexpr_logCPM_PSI_scaled_clustered$cluster %>% unique %>% length
+plan(list(tweak(multiprocess, workers = 2),
+          tweak(multiprocess, workers = 2),
+          tweak(multiprocess, workers = 30),
+          tweak(multiprocess, workers = 3)))
 
 # let's try to do all enrichment at once using purrr
+list_gohyper_enrichment_per_cluster <- future_map2(
+  .x = list_MQ_scaled_tibbles_matched_to_geneset_per_cluster,
+  .y = names(list_MQ_scaled_tibbles_matched_to_geneset_per_cluster),
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- list_MQ_scaled_tibbles_matched_to_geneset_per_cluster[[1]]
+    # a2 <- names(list_MQ_scaled_tibbles_matched_to_geneset_per_cluster) %>% .[[1]]
+    ###########
+    
+    future_map2(
+      .x = a1,
+      .y = names(a1),
+      .f = function(b1, b2) {
+        
+        # DEBUG ###
+        # b1 <- a1[[1]]
+        # b2 <- names(a1) %>% .[[1]]
+        ###########
+        
+        # group_split by cluster
+        list_scaled_ratios_by_cluster <- b1 %>% 
+          dplyr::group_split(cluster) %>%
+          set_names(nm = purrr::map(.x = ., .f = ~.x$cluster %>% unique) %>% unlist)
+        
+        future_map2(
+          .x = list_scaled_ratios_by_cluster,
+          .y = names(list_scaled_ratios_by_cluster),
+          .f = function(c1, c2) {
+            
+            # DEBUG ###
+            # c1 <- list_scaled_ratios_by_cluster[[1]]
+            # c2 <- names(list_scaled_ratios_by_cluster) %>% .[[1]]
+            ###########
+            
+            future_map(
+              .x = list("BP" = "BP", 
+                        "MF" = "MF", 
+                        "CC" = "CC"),
+              .f = function(d1) {
+                
+                # DEBUG ###
+                # d1 <- "BP"
+                ###########
+                
+                # extract geneset
+                vector_geneset <- c1[, c("Gene.names", "Fasta.headers")] %>% unlist %>% strsplit(split = ";") %>% unlist %>% unique
+                
+                tibble_gohyper_enrichment <- GOHyperGAll(catdb = catdb, gocat = d1, Nannot = 2, sample = vector_geneset) %>% GOHyperGAll_benjamini_correction
+                
+              }, .options = future_options(globals = c("GOHyperGAll", "GOHyperGAll_benjamini_correction", "catdb", "rbindlist", "as_tibble", "add_column")) ) %>% rbindlist %>% as_tibble %>% add_column("cluster" = c2) %>% return # L4: GO categories
+            
+          }, .options = future_options(globals = c("GOHyperGAll", "GOHyperGAll_benjamini_correction", "catdb", "rbindlist", "as_tibble", "add_column")) ) %>% rbindlist %>% as_tibble %>% add_column("data_type" = b2) %>% return # L3: each consensus cluster
+        
+      }, .options = future_options(globals = c("GOHyperGAll", "GOHyperGAll_benjamini_correction", "catdb", "rbindlist", "as_tibble", "add_column")) ) %>% rbindlist %>% as_tibble %>% add_column("dbrun" = a2) %>% return # L2: phosphosites/protein_groups
+    
+  }, .progress = TRUE, .options = future_options(globals = c("GOHyperGAll", "GOHyperGAll_benjamini_correction", "catdb", "rbindlist", "as_tibble", "add_column")) ) # L1: con/sp/canonical/junc.exons
 
-list_of_combinations_of_consensus_combinedexpr_genes_and_GOterms <- cross2(.x = list_of_timeseries_logCPM_PSI_genes_by_consensus_cluster_diffsplicedonly, .y = list("MF", "BP", "CC"))
-
-# note: each element will be [[1]]: gene set, [[2]]: GO term to query
-
-list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables <- purrr::map(.x = list_of_combinations_of_consensus_combinedexpr_genes_and_GOterms, .f = ~GOHyperGAll(catdb = catdb, gocat = .x[[2]], Nannot = 2, sample = .x[[1]]) %>% GOHyperGAll_benjamini_correction)
-
-list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten <- purrr::map(.x = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables, ~.[order(.$Padj, decreasing = FALSE), ] %>% head(n = 10))
-
-list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten <- purrr::map2(.x = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten, .y = 1:number_of_consensus_combinedexpr_clusters %>% rep(., times = 3) %>% as.list, .f = ~cbind(.x, "cluster" = .y) %>% as_tibble)
-
-list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten_2 <- list(
-  "MF" = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten[1:number_of_consensus_combinedexpr_clusters] %>% purrr::reduce(bind_rows), 
-  "BP" = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten[(number_of_consensus_combinedexpr_clusters + 1):(number_of_consensus_combinedexpr_clusters*2)] %>% purrr::reduce(bind_rows),
-  "CC" = list_of_OBseries_consensus_combinedexpr_hyperGOresult_allGO_clusterwise_tables_topten[((2*number_of_consensus_combinedexpr_clusters) + 1):(number_of_consensus_combinedexpr_clusters*3)] %>% purrr::reduce(bind_rows)) %>% purrr::map(~type_convert(.x))
 
 # cheeky ggplot
 
@@ -3313,3 +3528,123 @@ ggplot(wide_table_of_OBseries_consensus_combinedexpr_familyenrichment_clusterwis
 write.table(x = wide_table_of_OBseries_consensus_combinedexpr_familyenrichment_clusterwise_tables_topten, file = paste(results_directory_figures, "som_consensus_matrix_combinedexpr_", number_of_consensus_combinedexpr_clusters, "_clusters_",  nrow(PSI_levels_timeseries_OB_wide), "_junctions_OBseries_any_", p_or_q_value, qpvalue_cutoff, "_dPSI_greaterthan_", dPSI_cutoff, "_sweep_from_", min(xdim_range_combinedexpr), "x", min(ydim_range_combinedexpr), "_to_", max(xdim_range_combinedexpr), "x", max(ydim_range_combinedexpr), "_families.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
+
+# Export only the MSC, 6h and 1d timepoints for multiomic clustering
+
+## re-do significance filtering with only MSC, 6h and 1d
+
+```{r}
+
+list_of_eigenMS_t.test_results_significant_MSC_6h_1d <- purrr::map_depth(
+  .x = list_of_eigenMS_t.test_results,
+  .depth = 2, 
+  .f = function(b1) {
+    
+    # DEBUG ###
+    # b1 <- list_of_eigenMS_t.test_results$`con_sp.hsa.canonical.isoforms`$peptides
+    ###########
+    
+    vector_logical_significant_rowwise <- purrr::map2(
+      .x = b1 %>% dplyr::select(-contains("30m"), -contains("1h")) %>% dplyr::select(contains("pvalue")) %>% array_tree(margin = 1), 
+      .y = b1 %>% dplyr::select(-contains("30m"), -contains("1h")) %>% dplyr::select(contains("logFC")) %>% array_tree(margin = 1), 
+      .f = ~any(.x %>% na.omit < pvalue_cutoff & .y %>% na.omit %>% abs > log2(fold_change_cutoff))) %>% unlist
+    
+    return(b1[which(vector_logical_significant_rowwise == TRUE), ] %>% dplyr::select(-contains("30m"), -contains("1h")))
+    
+  } )
+
+```
+
+## average the ratios for each timepoint
+
+```{r}
+
+list_of_significant_items_averaged_MSC_6h_1d <- purrr::map2(
+  .x = list_of_eigenMS_t.test_results_significant_MSC_6h_1d, 
+  .y = names(list_of_eigenMS_t.test_results_significant_MSC_6h_1d), 
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # .x <- list_of_eigenMS_t.test_results_significant_MSC_6h_1d[[1]]
+    # .y <- names(list_of_eigenMS_t.test_results_significant_MSC_6h_1d) %>% .[[1]]
+    ###########
+    
+    cat("now processing", a2, "at level 1\n")
+    
+    L2_list <- purrr::map2(.x = a1, .y = names(a1), .f = function(b1, b2) {
+      
+      # DEBUG ###
+      # b1 <- list_of_eigenMS_t.test_results_significant_MSC_6h_1d$con_sp.hsa.canonical.isoforms$peptides
+      # b2 <-list_of_eigenMS_t.test_results_significant_MSC_6h_1d$con_sp.hsa.canonical.isoforms %>% .["peptides"] %>% names
+      ###########
+      
+      cat("now processing", b2, "at level 2\n")
+      
+      raw_tibble <- b1 %>% .[, 1:16]
+      
+      design_factor_info <- factor(x = gsub(x = colnames(raw_tibble %>% dplyr::select(-id)), pattern = "^([^\\|]+).*", replacement = "\\1", perl = TRUE), levels = c("ud_vs_ud", "6h_vs_ud", "1d_vs_ud"))
+      
+      tibble_average_values <- average_replicates_by_column(table = raw_tibble %>% dplyr::select(-id), design_factor = design_factor_info, min_replicates = 1) %>%
+        add_column("id" = raw_tibble$id, .before = 1) %>%
+        # only keep complete time series for the clustering
+        na.omit 
+      # %>%
+      #   # add the MSC column cause we took ratios
+      #   add_column("mean|ud_vs_ud" = 1, .after = 1)
+      
+      return(tibble_average_values)
+      
+    } ) %>% return
+    
+  } )
+
+```
+
+## match the scaled ratios to the original information 
+
+```{r}
+
+# first match significant entries to the processed info tables 
+
+list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d <- purrr::pmap(
+  .l = list("a1" = list_of_significant_items_averaged_MSC_6h_1d,
+            "a2" = list_imported_maxquant_tibbles_processed[names(list_of_significant_items_averaged_MSC_6h_1d)],
+            "a3" = names(list_of_significant_items_averaged_MSC_6h_1d)), 
+  .f = function(a1, a2, a3) {
+    
+    cat("\nnow processing", a3, "at level 1")
+    
+    purrr::pmap(
+      .l = list("b1" = a1[c("phosphosites", "protein_groups")], 
+                "b2" = a2[c("phosphosites", "protein_groups")],
+                "b3" = names(a1[c("phosphosites", "protein_groups")])), .f = function(b1, b2, b3) {
+                  
+                  # DEBUG ###
+                  # b1 <- list_clustered_MQ_ratios[["con_sp.hsa.canonical.isoforms"]][["phosphosites"]]
+                  # b2 <- list_imported_maxquant_tibbles_processed[["con_sp.hsa.canonical.isoforms"]][["phosphosites"]]
+                  # b3 <- list_clustered_MQ_ratios[["con_sp.hsa.canonical.isoforms"]]["phosphosites"] %>% names
+                  ###########
+                  
+                  cat("\nnow processing", b3, "at level 2")
+                  
+                  if(! dir.exists(paste(R_processing_results_dir, "GSEA/", sep = "")) ) {
+                    dir.create(paste(R_processing_results_dir, "GSEA/", sep = ""), recursive = TRUE)}
+                  
+                  setwd(paste(R_processing_results_dir, "GSEA/", sep = ""))
+                  
+                  # table join by id
+                  tibble_scaled_ratios_joined_to_information <- dplyr::left_join(b1 %>% dplyr::mutate_at(.vars = "id", .funs = function(x) {gsub(x = x, pattern = "(.*)_.*", replacement = "\\1") %>% type.convert %>% return} ), b2, by = "id") %>%
+                    dplyr::mutate_at(.vars = c("Fasta.headers"), .funs = function(x) {return(gsub(x = x, pattern = "^([^\\ ]+).*{0,1}", replacement = "\\1"))} ) %>% 
+                    dplyr::rename("MSC" = "mean|ud_vs_ud", "6h" = "mean|6h_vs_ud", "1d" = "mean|1d_vs_ud")
+                  
+                  return(tibble_scaled_ratios_joined_to_information)
+                  
+                } ) %>% purrr::discard(.p = ~.x %>% length == 0) %>% 
+      return
+    
+  } )
+
+save(list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d, file = paste(R_processing_results_dir, "list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d.Rlist", sep = ""))
+
+```
+

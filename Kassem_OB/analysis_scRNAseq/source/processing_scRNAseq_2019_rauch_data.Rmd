@@ -56,9 +56,9 @@ library(tidyverse)
 OBseries_timepoints <- c("BM_MSC_to_OB_ud", "BM_MSC_to_OB_7d")
 
 # shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "Z:/"
+shared_dir <- "/mnt/Tertiary/sharedfolder/"
 
-R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/"
+R_processing_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/"
 # R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/"
 
 sierra_output_dir <- paste(R_processing_results_dir, "sierra/", sep = "")
@@ -72,16 +72,16 @@ if(! dir.exists(seurat_output_dir) ) {
      dir.create(seurat_output_dir, recursive = TRUE)}
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-# tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
+# tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
+# tibble_recon_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
-hg38.98_ensembl_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38_cellranger.gtf"
+hg38.98_ensembl_gtf_path <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38_cellranger.gtf"
 # hg38.98_ensembl_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38_cellranger.gtf"
 
-cellranger_output_dir <- "Y:/2019_rauch_data/scRNASeq/cellranger_results/"
+cellranger_output_dir <- "/mnt/4tb_ironwolf/2019_rauch_data/scRNASeq/cellranger_results/"
 # cellranger_output_dir <- "/media/sbi/4tb_ironwolf/2019_rauch_data/scRNASeq/cellranger_results/"
 
 ```
@@ -998,6 +998,15 @@ FeaturePlot(seurat_object_combined_filtered,
   ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_osteoblastic.factors.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
   ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_osteoblastic.factors.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
 
+FeaturePlot(seurat_object_combined_filtered, 
+            features = c("ATXN1", "ITGAV", "CD44", "LEPR", "MMP13", "SFRP4", "CSF1", "TNFSF11", "CDKN1A", "CDKN2B", "CTGF"), 
+            pt.size = 0.05, ncol = 5, reduction = "umap") +
+  # scale_alpha_manual(values = 0.5) +
+  # theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none") +
+  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_bone.lining.cell.markers.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
+  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_bone.lining.cell.markers.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm")
+
 ```
 
 ## Save the Seurat object for use in Sierra
@@ -1484,7 +1493,7 @@ DimPlot(seurat_object_combined_filtered_peak.level_bypass, reduction = "tsne", l
 
 ```{r}
 
-bam_subsets_dir <- paste("Y:/2019_rauch_data/scRNASeq/cellranger_results/split_bam/", sep = "")
+bam_subsets_dir <- paste("/mnt/4tb_ironwolf/2019_rauch_data/scRNASeq/cellranger_results/split_bam/", sep = "")
 
 ```
 

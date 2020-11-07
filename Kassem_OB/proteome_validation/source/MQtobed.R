@@ -89,7 +89,7 @@ input_args <- input_arg_info %>% parse_args
 # reference_gtf_field_name_info <- "protein_id"
 # track_colour <- "255,0,0"
 # output_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/"
-# output_name <- "debug_swissprot_bedfile_generator_peptides"
+# output_name <- "debug_swissprot_bedfile_generator_phosphosites"
 # ncores <- "16x2"
 # save_workspace_when_done <- "NO"
 
@@ -166,11 +166,22 @@ options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
 split_delimited_columns_in_table <- function(input_table, target_colname, split, columns_to_deduplicate = NULL) {
   
   # DEBUG ###
-  # input_table <- test
-  # target_colname <- c("Proteins", "Positions.within.proteins", "Fasta.headers", "Leading.proteins")
+  # input_table <- tibble_maxquant_table %>%
+    # filter for class I phosphosites
+    # remove the reverse hits or table split wont work
+    # dplyr::filter(`Localization prob` >= 0.75 & `PEP` <= 0.01 & Score >= 30 & `Reverse` != "+")
+  # target_colname <- c("Proteins", "Positions within proteins")
   # split = "\\;"
   # columns_to_deduplicate <- c("id")
   ###########
+  
+  # DEBUGGING TOOL ###
+  
+  # which(purrr::map2(.x = input_table$Proteins %>% strsplit(split = "\\;") %>% purrr::map(~.x %>% length) %>% unlist, .y = input_table$`Positions within proteins` %>% strsplit(split = "\\;") %>% purrr::map(~.x %>% length) %>% unlist, .f = ~.x == .y) %>% unlist == FALSE)
+  # input_table$Proteins %>% strsplit(split = "\\;") %>% unlist %>% length
+  # input_table$`Positions within proteins` %>% strsplit(split = "\\;") %>% unlist %>% length
+  
+  ####################
   
   # list-ify the target column
   list_target_column_strsplit_per_element <- input_table[, target_colname] %>% array_tree(margin = 2) %>% purrr::map(~.x %>% unlist %>% strsplit(., split = split))
@@ -210,16 +221,18 @@ split_delimited_columns_in_table <- function(input_table, target_colname, split,
     repetition_numbers_of_duplicates <- vector_split_lengths[which(vector_split_lengths > 1)]
     
     # list-ify the columns to be appended
-    list_deduplicated_columns <- input_table[, columns_to_deduplicate] %>% array_tree(margin = 2) %>% purrr::map(~array_tree(.x))
+    list_deduplicated_columns <- input_table[, columns_to_deduplicate] %>% array_tree(margin = 2)
     
     # map over each column, split the target element and add _[0-9]+
     list_deduplicated_columns_split <- purrr::map(.x = list_deduplicated_columns, .f = function(a1) {
       
+      output_list <- a1
+      
       # map a subset each of the L2 (elements of a column)
-      a1[indices_of_duplicates] <- purrr::map2(.x = a1[indices_of_duplicates], .y = repetition_numbers_of_duplicates, 
+      output_list[indices_of_duplicates] <- purrr::map2(.x = a1[indices_of_duplicates], .y = repetition_numbers_of_duplicates, 
                                                .f = ~rep(.x, times = .y) %>% unlist %>% paste(., 1:.y, sep = "_"))
       
-      return(a1 %>% unlist)
+      return(output_list %>% unlist)
       
     } )
     
@@ -277,7 +290,7 @@ if ((grepl(x = maxquant_file_name, pattern = "Phospho.*Sites.txt", ignore.case =
   tibble_maxquant_table_filtered_and_split <- tibble_maxquant_table %>%
     # filter for class I phosphosites
     # remove the reverse hits or table split wont work
-    dplyr::filter(`Localization prob` >= 0.75 & `PEP` <= 0.01 & Score >= 30 & `Reverse` != "+") %>%
+    dplyr::filter(`Localization prob` >= 0.75 & `PEP` <= 0.01 & Score >= 30 & `Reverse` != "+" & `Proteins` != "") %>%
     # dedupe in preparation for the next step
     split_delimited_columns_in_table(input_table = ., target_colname = c("Proteins", "Positions within proteins"), split = ";", columns_to_deduplicate = "id") %>%
     dplyr::select(Proteins, `Positions within proteins`, contains("probabilities",ignore.case = TRUE), Score) %>%

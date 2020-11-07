@@ -1073,6 +1073,17 @@ list_of_OBseries_DEGs_hyperGOresult_allGO_tables <- purrr::map(.x = c("MF", "BP"
 
 # purrr::map(.x = list_of_OBseries_DEGs_hyperGOresult_allGO_tables, .f = ~print(head(.x, n = 20)))
 
+# rbind and tibblise
+tibble_DEGs_hyperGOresult_allGO_tables <- list_of_OBseries_DEGs_hyperGOresult_allGO_tables %>% rbindlist %>% as_tibble
+
+# write table of all GO categories combined
+write.table(x = tibble_DEGs_hyperGOresult_allGO_tables, file = paste(OBseries_R_processing_results_dir, "table_hypergoresult_allDEGs_allGO.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+# write tables of each separate GO category
+# purrr::map2(.x = list_of_OBseries_DEGs_hyperGOresult_allGO_tables,
+#             .y = list_of_OBseries_DEGs_hyperGOresult_allGO_tables %>% names,
+#             .f = ~write.table(x = .x, file = paste(OBseries_R_processing_results_dir, "table_hypergoresult_allDEGs_", .y, ".txt", sep = "")))
+
 ```
 
 # DRAWING SOMS TO ANALYSE TIME SERIES DATA

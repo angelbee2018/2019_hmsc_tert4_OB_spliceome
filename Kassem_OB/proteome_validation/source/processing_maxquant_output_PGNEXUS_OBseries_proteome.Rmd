@@ -13,7 +13,7 @@ output: html_document
 ```{r}
 
 library(tidyverse)
-# library(gtools)
+library(gtools)
 # library(extrafont)
 # loadfonts(device="win")
 # windowsFonts("Helvetica" = windowsFont("Helvetica"))
@@ -348,14 +348,15 @@ list_maxquant_run_dirs <- list(
   "2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_sp.hsa.canonical.isoforms_junc.exons_deskside/txt/",
   "2020_phosphoproteome_OBseries_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/2020_phosphoproteome_OBseries_junc.exons_deskside/txt/",
   
-  "2012_PGNEXUS_proteome_con.sp.canonical.isoforms" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_con.sp.canonical.isoforms_katana/txt/",
+  "2012_PGNEXUS_proteome_con.sp.canonical.isoforms" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_con_sp.canonical.isoforms_deskside/txt/",
   "2012_PGNEXUS_proteome_con_sp.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_con_sp.canonical.isoforms_junc.exons_deskside/txt/",
   "2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_sp.canonical.isoforms_junc.exons_deskside/txt/",
-  "2012_PGNEXUS_proteome_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_junc.exons_deskside/txt/"
+  "2012_PGNEXUS_proteome_junc.exons" = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/2012_PGNEXUS_proteome_junc.exons_deskside_linux/txt/"
 )
 
 list_output.table_categories <- list("modification_specific_peptides" = "modificationSpecificPeptides.txt", 
                                      "msms" = "msms.txt",
+                                     # "msms_scans" = "msmsScans.txt",
                                      "peptides" = "peptides.txt", 
                                      "protein_groups" = "proteinGroups.txt",
                                      "phosphosites" = "Phospho (STY)Sites.txt")
@@ -365,8 +366,11 @@ list_for_maxquant_table_import <- purrr::map(.x = list_maxquant_run_dirs, .f = ~
 # also create corresponding combinations of names to annotate with
 list_of_nested_table_names <- purrr::map(.x = names(list_maxquant_run_dirs), .f = ~purrr::cross2(.x, names(list_output.table_categories)) %>% set_names(names(list_output.table_categories))) %>% set_names(names(list_maxquant_run_dirs))
 
+plan(list(tweak(multiprocess, workers = 12),
+          tweak(multiprocess, workers = 16)))
+
 # read the tables into the environment
-list_imported_maxquant_tibbles <- purrr::map(.x = list_for_maxquant_table_import, .f = ~future_map(.x = .x, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, header = TRUE, sep = "\t") %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("read.delim", "as_tibble"))))
+list_imported_maxquant_tibbles <- future_map(.x = list_for_maxquant_table_import, .f = ~future_map(.x = .x, .f = ~read.delim(paste(.x[[1]], .x[[2]], sep = ""), stringsAsFactors = FALSE, row.names = NULL, header = TRUE, sep = "\t") %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("read.delim", "as_tibble"))), .progress = TRUE)
 # , .options = future_options(globals = c("as_tibble"))
 
 # rename the lists at L2
@@ -734,7 +738,7 @@ tibble_detailed_3FT_summary_JUM_subset <- tibble_detailed_3FT_summary_JUM[, c("v
 list_tryptic_junc_peptides_matched_to_3FT_summary <- future_imap(.x = tibble_junc.exons_filtered_with.gene.name_split_juncs.only %>% array_tree,
                                                                  .f = function(a1, a2) {
                                                                    
-                                                                   cat("\nnow processing: ", a2)
+                                                                   # cat("\nnow processing: ", a2)
                                                                    
                                                                    list("tryptic_peptide_start" = a1$Start.position,
                                                                         "tryptic_peptide_end" = a1$End.position,
@@ -1184,6 +1188,7 @@ list_peptide_genome_relative_positions <- splice(list_peptide_bedfile_junctions_
 ## subset reference GTF for CDS regions only
 tibble_ref_gtf_CDS_only <- tibble_ref_gtf[tibble_ref_gtf$type == "CDS", ]
 
+plan(multiprocess)
 options(mc.cores = 48)
 
 # NOTE: TRUE if overlaps with any reference CDS. FALSE if not.
@@ -1218,13 +1223,20 @@ cat("\nTHIS IS THE NUMBER OF NOVEL SPLICE PEPTIDES IDENTIFIED")
 cat("\nWe have identified", tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% nrow, "novel peptides in proximity to splice regions")
 
 # we are now going to extract only the final_identifiers which are validating.
-vector_validated_final_identifiers <- c(tibble_PSIsigma_exon_ambiguity_summary[grep(x = tibble_PSIsigma_exon_ambiguity_summary$final_identifier, pattern = "constitutive", ignore.case = TRUE), ] %>% dplyr::filter(ambiguity == "validating") %>% dplyr::distinct(final_identifier) %>% unlist,
+# tibble_PSIsigma_exon_ambiguity_summary[grep(x = tibble_PSIsigma_exon_ambiguity_summary$final_identifier, pattern = "constitutive", ignore.case = TRUE), ] %>%
+vector_validated_final_identifiers <- c(tibble_PSIsigma_exon_ambiguity_summary %>% dplyr::filter(ambiguity == "validating") %>% dplyr::distinct(final_identifier) %>% unlist,
                                         tibble_junction_spanning_peptides_identifier.gene$Leading.razor.protein %>% unlist)
 
 # write novel splice peptides as .bed file
 write.table(x = tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% .[.$name %in% vector_validated_final_identifiers, ], file = paste(R_processing_results_dir, "proteome_coverage_JUM_PSISigma_cons_diff_strawberry_maxquant_novel_validating_peptides.bed", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
 
+# write novel splice peptides as table along with splicemode
+write.table(x = dplyr::left_join(tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% .[.$name %in% vector_validated_final_identifiers, ], tibble_unconfirmed_junc.exons %>% dplyr::rename("name" = "Leading.razor.protein"), by = "name"), file = paste(R_processing_results_dir, "table_brief.info_novel_confirmed_junc.exons.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
 cat("\nHence we have identified", tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% .[.$name %in% vector_validated_final_identifiers, ] %>% nrow, "novel splice junctions/exons, backed by proteome evidence.")
+
+# retrieve the ensembl novel IDs
+vector_ensembl_novel_IDs <- dplyr::left_join(tibble_peptide_bedfile[(list_logical_test_for_CDS_overlap %>% unlist == FALSE) %>% which, ] %>% .[.$name %in% vector_validated_final_identifiers, ], tibble_unconfirmed_junc.exons %>% dplyr::rename("name" = "Leading.razor.protein"), by = "name") %>% .$name %>% unique
 
 # export validated junc.exons info and GO enrichment
 tibble_confirmed_junc.exons <- tibble_unconfirmed_junc.exons[tibble_unconfirmed_junc.exons$Leading.razor.protein %in% vector_validated_final_identifiers, ]
@@ -1241,6 +1253,34 @@ write.table(tibble_hyperGO_confirmed_junc.exons, file = paste(R_processing_resul
 
 # write the geneset
 write.table(tibble_confirmed_junc.exons$gene_name %>% strsplit(split = ",") %>% unlist, file = paste(R_processing_results_dir, "table_geneset_confirmed_junc.exons.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+```
+
+#### plot the frequency of each splicemode in the validated peptide
+
+```{r}
+
+tibble_frequency_of_confirmed_peptides_per_splicemode <- tibble_confirmed_junc.exons %>% 
+  dplyr::mutate_at(.vars = "splicemode", .funs = function(x) {gsub(x = x, pattern = "IR_overlapping_region", replacement = "IR") %>% gsub(x = ., pattern = "TSS\\|", replacement = "")} ) %>%
+  dplyr::mutate("tool" = gsub(x = `Leading.razor.protein`, pattern = "^([^_]+).*", replacement = "\\1")) %>%
+  dplyr::distinct(Leading.razor.protein, tool, .keep_all = TRUE) %>% 
+  dplyr::group_by(splicemode, tool) %>% 
+  dplyr::summarise("splicemode_tally" = n())
+
+ggplot(tibble_frequency_of_confirmed_peptides_per_splicemode, aes(x = reorder(splicemode, -splicemode_tally), y = splicemode_tally)) +
+  facet_wrap(~tool, scales = "free", ncol = 1) +
+  geom_col(mapping = aes(fill = tool)) +
+  geom_text(stat = "identity", nudge_y = 1, aes(label = splicemode_tally), angle = 90, hjust = 0) +
+  ggtitle(paste("Tally of splicemodes for validated splice events")) +
+  xlab("splicemode") +
+  scale_fill_manual(limits = c("JUM", "PSISigma"), breaks = c("JUM", "PSISigma"), values = c("purple3", "firebrick4")) +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Frequency") +
+  ylim(c(0, max(tibble_frequency_of_confirmed_peptides_per_splicemode$splicemode_tally) + 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 14, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 14, units = "cm") 
 
 ```
 
@@ -1282,7 +1322,7 @@ list_bedfile_junctions_only <- future_imap(.x = tibble_junction_peptides_only %>
   # a1 <- tibble_junction_peptides_only[2, ]
   ###########
   
-  cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+  # cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
   
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Proteins %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_JUM$virtual_peptide_sequence, pattern = a1$Sequence %>% gsub(pattern = "_", replacement = "") %>% paste %>% trimws) %>% which) %>% .[1]
@@ -1542,7 +1582,7 @@ list_genome.relative.positions_junctions_only <- future_imap(.x = tibble_junctio
   # a1 <- tibble_junction_peptides_only %>% array_tree %>% .[[103]]
   ###########
   
-  cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
+  # cat("\nnow processing:", a2, "/", length(tibble_junction_peptides_only %>% array_tree))
   
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_JUM$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_JUM$virtual_peptide_sequence, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
@@ -1619,7 +1659,7 @@ list_genome.relative.positions_exons_only <- future_imap(.x = tibble_exon_peptid
   # a1 <- tibble_exon_peptides_only %>% array_tree %>% .[[4]]
   ###########
   
-  cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
+  # cat("\nnow processing:", a2, "/", length(tibble_exon_peptides_only %>% array_tree))
   
   row_index_of_matched_3FT_table <- intersect(str_detect(string = tibble_detailed_3FT_summary_PSIsigma$fasta_header, pattern = a1$Leading.proteins %>% paste %>% trimws) %>% which,
                                               str_detect(string = tibble_detailed_3FT_summary_PSIsigma$virtual_peptide_sequence, pattern = a1$Sequence %>% paste %>% trimws) %>% which) %>% .[1]
@@ -1705,7 +1745,7 @@ load(file = paste(shared_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tibb
 
 # import dbPTM info
 # Z:/dbPTM_download/extract/allPTM_human.txt
-tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human_filtered.txt", na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # tibble_dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
 # import reference-matched JUM and PSI-Sigma differential positions (from junc/exon ontology)
@@ -1739,8 +1779,8 @@ tibble_dbPTM_allhuman_annotations <- tibble_dbPTM_allhuman_annotations_with_ENSP
 list_dbPTM_allhuman_annotations <- tibble_dbPTM_allhuman_annotations %>%
   dplyr::group_split(PTM_type, chr, CDS_relative_coords_start %% 13) 
 
-plan(list(tweak(multiprocess, workers = 30),
-          tweak(multiprocess, workers = 10)))
+plan(multiprocess)
+options(mc.cores = 36)
 
 # plan(multiprocess)
 # options(mc.cores = 144)
@@ -1805,8 +1845,8 @@ list_swissprot_phosphosite_positions_by_chr <- tibble_MQtobed_2020_phosphosites 
   dplyr::group_split(chr) %>%
   set_names(nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist)
 
-plan(list(tweak(multiprocess, workers = 30),
-          tweak(multiprocess, workers = 2)))
+plan(multiprocess)
+options(mc.cores = 36)
 
 # intersect for each element of the junc/exons or swissprot phosphosites tibbles
 # add logical info. as a new column
@@ -1906,6 +1946,11 @@ tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM <- list_t
 
 tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM <- list_tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM %>% rbindlist %>% as_tibble
 
+# add gene names
+tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM_with_gene_name <- dplyr::left_join(tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM, tibble_junc.exons_filtered_with.gene.name %>% dplyr::rename("final_identifier" = "Leading.razor.protein") %>% dplyr::select(final_identifier, gene_name, splicemode) %>% dplyr::distinct())
+
+tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM_with_gene_name <- dplyr::left_join(tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM, tibble_ref_gtf[which(is.na(tibble_ref_gtf$protein_id) == FALSE), c("protein_id", "gene_name")] %>% dplyr::rename("ensembl_peptide_id" = "protein_id"), by = "ensembl_peptide_id")
+
 ```
 
 ##### Finally we can print the statistics on the number of known/novel
@@ -1914,18 +1959,234 @@ tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM <- list_ti
 
 # combine swissprot and junc.exons tibble and take unique phosphosites only
 tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique <- dplyr::bind_rows(
-  tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM[, c("chrom", "genome_relative_positions_phosphosite", "intersects_differential_region", "intersects_dbPTM_phosphosite")] %>% dplyr::rename("chr" = "chrom", "all_genomic_positions_of_feature" = "genome_relative_positions_phosphosite"),
-  tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM[, c("chr", "all_genomic_positions_of_feature", "intersects_differential_region", "intersects_dbPTM_phosphosite")]
+  tibble_junc.exons_phosphosites_intersect_diffspliced_regions_and_dbPTM_with_gene_name[, c("chrom", "genome_relative_positions_phosphosite", "intersects_differential_region", "intersects_dbPTM_phosphosite", "gene_name", "splicemode")] %>% dplyr::rename("chr" = "chrom", "all_genomic_positions_of_feature" = "genome_relative_positions_phosphosite"),
+  tibble_swissprot_phosphosites_intersect_diffspliced_regions_and_dbPTM_with_gene_name[, c("chr", "all_genomic_positions_of_feature", "intersects_differential_region", "intersects_dbPTM_phosphosite", "gene_name")]
 ) %>%
   dplyr::distinct(chr, all_genomic_positions_of_feature, .keep_all = TRUE)
 
 # count numbers
 cat("number of phosphosites in differentially spliced regions: ", (tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_differential_region == TRUE) %>% which %>% length)
 
-cat("number of novel phosphosites overall: ", (tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_dbPTM_phosphosite == TRUE) %>% which %>% length)
+cat("number of novel phosphosites overall: ", (tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_dbPTM_phosphosite == FALSE) %>% which %>% length)
 
 cat("number of NOVEL phosphosites in differentially spliced regions: ", (tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_differential_region == TRUE &
-                                                                           tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_dbPTM_phosphosite == TRUE) %>% which %>% length)
+                                                                           tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_dbPTM_phosphosite == FALSE) %>% which %>% length)
+
+# extract geneset
+geneset_proteins_with_spliced_phosphosites <- tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique[tibble_combined_swissprot_junc.exons_phosphosites_intersection_unique$intersects_differential_region == TRUE,] $gene_name %>% unique %>% mixedsort
+
+# GO enrichment
+tibble_GO_enrichment_proteins_with_spliced_phosphosites <- purrr::map(.x = c("BP", "MF", "CC"), .f = ~GOHyperGAll(catdb = catdb, gocat = .x, sample = geneset_proteins_with_spliced_phosphosites, Nannot = 2) %>% GOHyperGAll_benjamini_correction) %>% rbindlist %>% as_tibble
+
+# write table
+write.table(tibble_GO_enrichment_proteins_with_spliced_phosphosites, file = paste(R_processing_results_dir, "table_GO_enrichment_proteins_with_spliced_phosposites.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+
+```
+
+## check for discrepancies between junc.exons and swissprot only identifications
+
+### find common identifications based on msms scan
+
+Attack plan:
+1. Extract the identifiers of validating peptides
+2. Retrieve the msms data.
+3. Match the raw file and scan no. to the con_sp.canonical.isoforms data
+4. Compare peptide sequences between the junc.exons and con_sp.canonical.isoforms data. Find which ones are different and investigate them individually.
+
+```{r}
+
+# match confirmed junc.exons to the peptide data and msms id
+tibble_confirmed_junc.exons_with_msms_id_info <- dplyr::left_join(tibble_confirmed_junc.exons %>% dplyr::rename("junc.exons_sequence" = "Sequence"), dplyr::bind_rows(list_imported_maxquant_tibbles_processed$`2020_phosphoproteome_OBseries_junc.exons`$peptides %>% .[, c("Leading.razor.protein", "Best.MS.MS", "Score")],
+                                                                                                                list_imported_maxquant_tibbles_processed$`2012_PGNEXUS_proteome_junc.exons`$peptides %>% .[, c("Leading.razor.protein", "Best.MS.MS", "Score")]) %>% dplyr::distinct(), by = "Leading.razor.protein") %>% dplyr::rename("junc.exons_Leading.razor.protein" = "Leading.razor.protein", "junc.exons_score" = "Score", "junc.exons_gene_name" = "gene_name")
+
+# match to con_sp.canonical.isoforms tables
+tibble_confirmed_junc.exons_msms <- dplyr::left_join(tibble_confirmed_junc.exons_with_msms_id_info, dplyr::bind_rows(list_imported_maxquant_tibbles_processed$`2020_phosphoproteome_OBseries_junc.exons`$msms %>% .[, c("Raw.file", "Scan.number", "id")],
+                                                                                                                list_imported_maxquant_tibbles_processed$`2012_PGNEXUS_proteome_junc.exons`$msms %>% .[, c("Raw.file", "Scan.number", "id")]) %>% dplyr::distinct() %>% dplyr::rename("Best.MS.MS" = "id"), by = "Best.MS.MS") %>% dplyr::rename("junc.exons_Best.MS.MS" = "Best.MS.MS")
+
+# match to con_sp.canonical.isoforms msms
+tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms <- dplyr::left_join(tibble_confirmed_junc.exons_msms, dplyr::bind_rows(list_imported_maxquant_tibbles_processed$`2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms`$msms %>% .[, c("Raw.file", "Scan.number", "Sequence", "Score", "Gene.Names")],
+                                                                                                                list_imported_maxquant_tibbles_processed$`2012_PGNEXUS_proteome_con.sp.canonical.isoforms`$msms %>% .[, c("Raw.file", "Scan.number", "Sequence", "Score", "Gene.Names")]) %>% dplyr::distinct() %>% dplyr::rename("sp_sequence" = "Sequence", "sp_score" = "Score", "sp_gene_name" = "Gene.Names"), by = c("Raw.file", "Scan.number"))
+
+# create logical of whether the junc_exons sequence matches the sp sequence
+tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms <- tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms %>% 
+  dplyr::mutate("discrepancy_per_entry" = junc.exons_sequence != sp_sequence) 
+# %>% na.omit
+
+# create a summary of whether any junc.exons peptide has a discrepancy.
+tibble_summary_at_least_one_agreement <- tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms %>% 
+  dplyr::group_by(junc.exons_Leading.razor.protein, junc.exons_sequence) %>%
+  dplyr::summarise(at_least_one_agreement = any(discrepancy_per_entry == FALSE))
+
+# add the at least one agreement information onto the main match table
+tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms <- dplyr::left_join(tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms, tibble_summary_at_least_one_agreement, by = c("junc.exons_Leading.razor.protein", "junc.exons_sequence")) %>% dplyr::distinct(junc.exons_gene_name, junc.exons_Leading.razor.protein, junc.exons_sequence, junc.exons_Best.MS.MS, .keep_all = TRUE)
+
+```
+
+### find common identifications based on bed files
+
+attack plan: 
+1. make a vector of all genome-relative coords for every peptide in junc.exon.
+2. make a vector of all genome-relative coords covered by the 2012 or 2020 data.
+3. loop for at least (x)% overlap
+
+#### import bed files
+
+```{r}
+
+# MQtobed - 2020 BH peptides 
+tibble_MQtobed_2020_peptides_supp_info <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_IGV/results/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms/2020_phosphoproteome_OBseries_con_sp.hsa.canonical.isoforms_peptide_coverage_supp_info.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+# MQtobed - 2012 PGNEXUS peptides 
+tibble_MQtobed_2012_peptides_supp_info <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_IGV/results/2012_PGNEXUS_proteome_con_sp.canonical.isoforms_deskside/2012_PGNEXUS_proteome_con_sp.canonical.isoforms_peptide_coverage_supp_info.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+```
+
+#### create lists of genome-relative coords and test for overlap
+
+```{r}
+
+plan(list(tweak(multiprocess, workers = 32),
+          tweak(multiprocess, workers = 4)))
+
+# make a version of the bedfile tibble with all the differential positions
+
+tibble_bedfile_with_genome_relative_positions <- purrr::splice(
+  list_peptide_bedfile_junctions_only %>% purrr::map(~.x$tibble_block_info %>% add_column("vector_genomic_positions" = .x$vector_genomic_positions %>% paste(collapse = ",")) %>% as_tibble), 
+  list_peptide_bedfile_exons_only %>% purrr::map(~.x$tibble_block_info %>% add_column("vector_genomic_positions" = .x$vector_genomic_positions %>% paste(collapse = ",")) %>% as_tibble)
+  ) %>% rbindlist %>% as_tibble
+
+# add the originating experiment information
+tibble_bedfile_with_genome_relative_positions <- dplyr::left_join(tibble_bedfile_with_genome_relative_positions %>% dplyr::rename("junc.exons_sequence" = "qName"), tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms %>% dplyr::rename("name" = "junc.exons_Leading.razor.protein"), by = c("junc.exons_sequence", "name")) %>% na.omit
+
+# list-ify by chromosome
+list_bedfile_with_genome_relative_positions_by_chr <- tibble_bedfile_with_genome_relative_positions %>% 
+  dplyr::group_split(chrom) %>%
+  set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$chrom %>% unique) %>% unlist) %>%
+  purrr::map(~.x %>% dplyr::distinct(name, Raw.file, junc.exons_Best.MS.MS, Scan.number, vector_genomic_positions))
+
+# do the same for the sp bedfile summaries
+list_MQtobed_2020_peptides_supp_info_by_chr <- tibble_MQtobed_2020_peptides_supp_info%>% 
+  dplyr::group_split(chr) %>%
+  set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist)
+
+list_MQtobed_2012_peptides_supp_info_by_chr <- tibble_MQtobed_2012_peptides_supp_info%>% 
+  dplyr::group_split(chr) %>%
+  set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist)
+
+# for the sp bedfile summaries, pool together all the genome-relative positions
+list_2020_peptides_genome_relative_positions_by_chr <- future_map(.x = list_MQtobed_2020_peptides_supp_info_by_chr, .f = ~.x$vector_stranded_genome_relative_nt_positions_of_transcript %>% strsplit(split = ",") %>% unlist %>% unique %>% type.convert, .progress = TRUE)
+
+list_2012_peptides_genome_relative_positions_by_chr <- future_map(.x = list_MQtobed_2012_peptides_supp_info_by_chr, .f = ~.x$vector_stranded_genome_relative_nt_positions_of_transcript %>% strsplit(split = ",") %>% unlist %>% unique %>% type.convert, .progress = TRUE)
+
+# salvage point ###
+save(list_bedfile_with_genome_relative_positions_by_chr, file = paste(R_processing_results_dir, "list_bedfile_with_genome_relative_positions_by_chr.Rlist", sep = ""))
+save(list_2020_peptides_genome_relative_positions_by_chr, file = paste(R_processing_results_dir, "list_2020_peptides_genome_relative_positions_by_chr.Rlist", sep = ""))
+save(list_2012_peptides_genome_relative_positions_by_chr, file = paste(R_processing_results_dir, "list_2012_peptides_genome_relative_positions_by_chr.Rlist", sep = ""))
+save(tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms, file = paste(R_processing_results_dir, "tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms.Rlist", sep = ""))
+
+plan(list(tweak(multiprocess, workers = 30),
+          tweak(multiprocess, workers = 4)))
+
+tibble_bedfile_with_genome_relative_positions_logical_overlap_with_sp_bed <- future_pmap(
+  .l = list(
+    "a1" = list_bedfile_with_genome_relative_positions_by_chr,
+    "a2" = list_2020_peptides_genome_relative_positions_by_chr[names(list_bedfile_with_genome_relative_positions_by_chr)],
+    "a3" = list_2012_peptides_genome_relative_positions_by_chr[names(list_bedfile_with_genome_relative_positions_by_chr)],
+    "a4" = names(list_bedfile_with_genome_relative_positions_by_chr)
+  ),
+  .f = function(a1, a2, a3, a4) {
+    
+    # DEBUG ###
+    # a1 <- list_bedfile_with_genome_relative_positions_by_chr[[3]]
+    # a2 <- list_2020_peptides_genome_relative_positions_by_chr[names(list_bedfile_with_genome_relative_positions_by_chr)] %>% .[[3]]
+    # a3 <- list_2012_peptides_genome_relative_positions_by_chr[names(list_bedfile_with_genome_relative_positions_by_chr)] %>% .[[3]]
+    # a4 <- names(list_bedfile_with_genome_relative_positions_by_chr) %>% .[[3]]
+    ###########
+    
+    # we are inside each chromosome now.
+    # loop thru each junc.exon entry
+    vector_logical_junc.exon_intersects_reference <- future_imap(
+      .x = a1 %>% array_tree,
+      .f = function(b1, b2) {
+        
+        # DEBUG ###
+        # b1 <- a1 %>% array_tree %>% .[[12]]
+        ###########
+        
+        # cat(b2, "\n")
+        
+        overlap_cutoff <- 0.5
+        
+        vector_junc.exon_genomic_positions <- b1$vector_genomic_positions %>% strsplit(split = ",") %>% unlist %>% unique
+        
+        if (grepl(x = b1$Raw.file, pattern = "KR|IB")) {
+          
+          logical_junc.exon_overlaps_sp <- intersect(vector_junc.exon_genomic_positions, a2) %>% length > length(vector_junc.exon_genomic_positions) * overlap_cutoff
+          
+        } else {
+          
+          logical_junc.exon_overlaps_sp <- intersect(vector_junc.exon_genomic_positions, a3) %>% length > length(vector_junc.exon_genomic_positions) * overlap_cutoff
+          
+        }
+        
+        return(logical_junc.exon_overlaps_sp)
+        
+      }, .progress = TRUE ) %>% unlist
+    
+    return(a1 %>% add_column("logical_overlaps_sp_bed" = vector_logical_junc.exon_intersects_reference))
+    
+  }, .progress = TRUE) %>% rbindlist %>% as_tibble
+
+# summarise
+tibble_bedfile_with_genome_relative_positions_logical_overlap_with_sp_bed_summary <- tibble_bedfile_with_genome_relative_positions_logical_overlap_with_sp_bed %>%
+  dplyr::group_by(name) %>%
+  dplyr::summarise("any_overlap_with_sp" = any(logical_overlaps_sp_bed == TRUE))
+
+# match back to tibble 
+tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_by_msms_and_bed_overlap <- dplyr::left_join(tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_msms, tibble_bedfile_with_genome_relative_positions_logical_overlap_with_sp_bed_summary %>% dplyr::rename("junc.exons_Leading.razor.protein" = "name"))
+
+# add in info about whether it's ensembl novel or not
+tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_and_ensembl_novel <- tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_by_msms_and_bed_overlap %>% 
+  dplyr::mutate("novel_to_ensembl" = purrr::map(.x = tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_by_msms_and_bed_overlap$junc.exons_Leading.razor.protein, 
+                                                .f = ~.x %in% vector_ensembl_novel_IDs))
+
+# retrieve vector of confirmed entries
+vector_confirmed_entries_from_sp <- tibble_confirmed_junc.exons_matched_to_con_sp.canonical.isoforms_and_ensembl_novel %>% dplyr::filter(discrepancy_per_entry == FALSE | at_least_one_agreement == TRUE | any_overlap_with_sp == TRUE | novel_to_ensembl == FALSE | junc.exons_score > sp_score) %>% .$junc.exons_Leading.razor.protein %>% unique
+
+# update confirmed juncs.exons
+tibble_confirmed_junc.exons_checked_against_sp <- tibble_confirmed_junc.exons[tibble_confirmed_junc.exons$Leading.razor.protein %in% vector_confirmed_entries_from_sp, ]
+
+# write table
+write.table(tibble_confirmed_junc.exons_checked_against_sp, file = paste(R_processing_results_dir, "table_brief.info_confirmed_junc.exons_checked_against_sp.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+```
+
+#### RE-DO: plot the frequency of each splicemode in the validated peptide
+
+```{r}
+
+tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp <- tibble_confirmed_junc.exons_checked_against_sp %>% 
+  dplyr::mutate_at(.vars = "splicemode", .funs = function(x) {gsub(x = x, pattern = "IR_overlapping_region", replacement = "IR") %>% gsub(x = ., pattern = "TSS\\|", replacement = "")} ) %>%
+  dplyr::mutate("tool" = gsub(x = `Leading.razor.protein`, pattern = "^([^_]+).*", replacement = "\\1")) %>%
+  dplyr::distinct(Leading.razor.protein, tool, .keep_all = TRUE) %>% 
+  dplyr::group_by(splicemode, tool) %>% 
+  dplyr::summarise("splicemode_tally" = n())
+
+ggplot(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp, aes(x = reorder(splicemode, -splicemode_tally), y = splicemode_tally)) +
+  facet_wrap(~tool, scales = "free", ncol = 1) +
+  geom_col(mapping = aes(fill = tool)) +
+  geom_text(stat = "identity", nudge_y = 1, aes(label = splicemode_tally), angle = 90, hjust = 0) +
+  ggtitle(paste("Tally of splicemodes for validated splice events")) +
+  xlab("splicemode") +
+  scale_fill_manual(limits = c("JUM", "PSISigma"), breaks = c("JUM", "PSISigma"), values = c("purple3", "firebrick4")) +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Frequency") +
+  ylim(c(0, max(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp$splicemode_tally) + 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 14, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 14, units = "cm") 
 
 ```
 

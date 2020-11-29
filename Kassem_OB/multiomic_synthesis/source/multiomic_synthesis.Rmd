@@ -489,7 +489,6 @@ list_of_pfam_gene_family_categories <- list_of_pfam_gene_family_categories %>% p
 
 ```
 
-
 # Import files
 
 ## RNA expression section
@@ -577,6 +576,16 @@ tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi
 
 tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::mutate("AS_event_chr" = gsub(x = AS_event_ID, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_(.*)$", replacement = "\\1"))
 
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_330_differential_VSRs_qvalue0.01_dPSI0.15_with_na_ud.6h.1d_only.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE, na.strings = c("NA", "n/a", "", "na")) %>% as_tibble
+# fill in the missing sub_junc_coor for cassette and IR events
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "cassette_exon_events", "sub_junction_start_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\4") %>% type.convert
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "cassette_exon_events", "sub_junction_end_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\5") %>% type.convert
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "intron_retention", "sub_junction_start_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "intron_retention", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\3") %>% type.convert
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "intron_retention", "sub_junction_end_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only$splicemode == "intron_retention", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\4") %>% type.convert
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only %>% dplyr::mutate("AS_event_chr" = gsub(x = AS_event_ID, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_(.*)$", replacement = "\\1"))
+
 # tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7855_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_7913_constitutive_VSRs_dPSI_OB_diff_qvalue0.01_dPSI0.15_no_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 # fill in the missing sub_junc_coor for cassette and IR events
@@ -600,6 +609,8 @@ tibble_PSIsigma_scaled_PSI_timeseries_wide <- read.delim("/mnt/Tertiary/sharedfo
 
 # tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1854_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1854_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_ud.6h.1d_only <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/wide_table_of_43LIVs_scaled.PSI_OB_diff_MSC_6h_1d.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE, na.strings = c("NA", "n/a", "", "na")) %>% as_tibble
 
 # tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_table_of_all_constitutive_LIV7532_dpsi15_DEXSeq_padj0.01.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_table_of_all_constitutive_LIV7532_dpsi15_DEXSeq_padj0.01.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
@@ -1366,6 +1377,18 @@ list_of_vectors_ago2_iclip_binding_site_genome_coords <- purrr::map(.x = list_ag
 
 ## Proteome section
 
+### Import files
+
+```{r}
+
+# maxquant time-series data for MSC, 6h and 1d.
+# list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d
+load(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d.Rlist")
+
+list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d <- list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d %>% purrr::map_depth(.depth = 2, .f = ~.x %>% type_convert(na = c("NA", "n/a", "", "na")))
+
+```
+
 ### Check the residue of dbPTM annotated phosphosites
 
 We are going to confirm that the TREMBL ids used are correct.
@@ -1380,7 +1403,7 @@ We are going to confirm that the TREMBL ids used are correct.
 # 
 # # import dbPTM info
 # # Z:/dbPTM_download/extract/allPTM_human.txt
-# tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human_filtered.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # 
 # # import the Trembl fasta file
 # tibble_trembl_fasta_allhuman <- seqinr::read.fasta(file = "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/proteome_fasta/uniprot_trembl_humanonly.fasta", forceDNAtolower = FALSE, seqtype = "AA", whole.header = TRUE) %>%
@@ -1538,7 +1561,7 @@ tibble_non_family_interpro_entries <- c("interpro_active.site_entries.tsv", "int
 # tibble_2020.PO4_2012.proteome_valid_junc.exons <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_confirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # tibble_2020.PO4_valid_phosphosites <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/genome.relative.positions_2020_phosphoproteome_phosphosites.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
-tibble_2020.PO4_2012.proteome_valid_junc.exons <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_confirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_2020.PO4_2012.proteome_valid_junc.exons <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_confirmed_junc.exons_checked_against_sp.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_2020.PO4_2012.proteome_unconfirmed_junc.exons <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/table_brief.info_unconfirmed_junc.exons.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 # we have to use all the non-validating PSI-Sigma exons because although they don't validate the RNA exon, they validate any coding regions contained in the differential exon.
@@ -2284,7 +2307,6 @@ ggplot(data = tibble_combined_PTMs_RNAlevel, aes(x = `PTM_type`, y = tally, fill
 
 ```
 
-
 ## Look for coordinate-level overlap between CLIP-Seq sites and differential/constitutive VSRs.
 
 ### set match tolerances
@@ -2396,11 +2418,11 @@ list_overlaps_clipseq_peakfiles_x_jum_psisigma <- furrr::future_map2(
     
     tibble_clipseq_regions <- a1[[1]]
     
-    ## loop thru each matched SNP and look for overlap with CLIP-Seq region within a tolerance range
-    ## list-ify the matched SNP chr and coords.
+    ## loop thru each SF and look for overlap with CLIP-Seq region within a tolerance range
+    ## list-ify the SF chr and coords.
     list_query_VSR_coord_array.tree <- a1[[2]][, c("chr", "start", "end")] %>% array_tree
     
-    ## parallel loop thru each list-ified matched SNP to find whether there is a match with an entry in the CLIP-Seq data.
+    ## parallel loop thru each list-ified SF to find whether there is a match with an entry in the CLIP-Seq data.
     vector_matched_VSR_with_CLIP_seq_logical <- future_map(.x = list_query_VSR_coord_array.tree,
                                                            .f = function(b1) {
                                                              
@@ -2471,6 +2493,9 @@ list_PSIsigma_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table <- lis
 # combine the lists of tibbles
 list_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table <- purrr::map2(.x = list_JUM_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table, .y = list_PSIsigma_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table, .f = ~dplyr::bind_rows(.x, .y))
 
+# do a headcount of the number of targets per cluster
+list_JUM_PSIsigma_combined_diff_targets_per_cluster <- purrr::map(.x = list_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table, .f = ~.x %>% dplyr::group_by(cluster) %>% dplyr::summarise("no_targets_per_cluster" = `id` %>% unique %>% length) %>% dplyr::arrange(desc(no_targets_per_cluster)))
+
 # extract genesets
 list_geneset_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq <- list_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table %>% purrr::map(~.x$gene %>% unique %>% mixedsort)
 
@@ -2482,7 +2507,7 @@ SRSF2 (DE 4) (DS 1, 2, 7): HNRNPA1, HNRNPH1, SRRM2, SRSF1/5
 SRSF3 (DS 2): HNRNP2AB1, SNRNP70, SRRM2, SRSF1/2, TRA2B
 SRSF5 (DS 1): HNRNPH1, SRRM2, SRSF2
 SRSF6 (DS 1, 2, 4, 7): HNRNPA2B1, HNRNPH1, PRPF4B, SFPQ, SRSF1/2/11
-SRSF11 (DS 1, 5, 8, 10, 12): CIRBP, HNRNPA2B1, HNRNPH1, RBM6/25/39, SFPQ, SRRM2, SRSF2, U2AF1L4
+SRSF11 (DS 6, 7, 8, 10, 12): CIRBP, HNRNPA2B1, HNRNPH1, RBM6/25/39, SFPQ, SRRM2, SRSF2, U2AF1L4
 
 HNRNPA1 (DE 4) (DS 4): HNRNPA1, HNRNPA2B1, SRSF6, TRA2A/B
 HNRNPA2B1 (DE 4) (DS 1, 2, 4, 5): HNRNPA1, HNRNPA2B1, HNRNPDL, HNRNPH1, RBM39, SFPQ, SRSF5/6, TRA2A
@@ -2499,6 +2524,8 @@ TRA2A (DS 1, 3, 4, 9): SFPQ, SNRNP70, SRRM2, SRSF1/2, TRA2A/B
 
 SNRPA (DE 4): HNRNPA1, HNRNPA2B1, SNRNP70, SRSF6, TRA2A/B
 
+NOTE: we will have to consider BOTH cluster AND anti-clusters because we can't make any assumptions about the positive/negative regulation of splicing by splicing factors.
+
 ### GO analysis of genes targeted by SF
 
 ```{r}
@@ -2513,19 +2540,19 @@ list_JUM_PSIsigma_combined_diff_coordinate_level_clip_seq_geneset_targets_and_GO
     "a1" = list_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table[!grepl(x = list_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table %>% names, pattern = "(SRSF2 HITS-CLIP GSE111900)|SRSF1 |(SRSF4)|(SRSF7)|(SRSF9)|RBM15")], 
     "a2" = list(
       # "JUM_and_PSIsigma_differential|SRSF1 FLASH GSE118265" = c(2, 3),
-      "JUM_and_PSIsigma_differential|SRSF2 FLASH GSE118265" = c(1, 2, 4, 7),
-      "JUM_and_PSIsigma_differential|SRSF3 FLASH GSE118265" = c(2),
-      "JUM_and_PSIsigma_differential|SRSF5 FLASH GSE118265" = c(1),
+      "JUM_and_PSIsigma_differential|SRSF2 FLASH GSE118265" = c(3, 6),
+      "JUM_and_PSIsigma_differential|SRSF3 FLASH GSE118265" = c(2, 4),
+      "JUM_and_PSIsigma_differential|SRSF5 FLASH GSE118265" = c(1, 7),
       "JUM_and_PSIsigma_differential|SRSF6 FLASH GSE118265" = c(1, 2, 4, 7),
-      "JUM_and_PSIsigma_differential|SRSF11 FLASH GSE118265" = c(1, 5, 8, 10, 12),
+      "JUM_and_PSIsigma_differential|SRSF11 FLASH GSE118265" = c(6, 7, 8, 10, 12),
       "JUM_and_PSIsigma_differential|HNRNPA1 eCLIP ENCODE" = c(4),
-      "JUM_and_PSIsigma_differential|HNRNPA2B1 HITS-CLIP GSM1716538" = c(1, 2, 4, 5),
-      "JUM_and_PSIsigma_differential|MBNL1 HITS-CLIP GSE76486" = c(1, 2, 3, 6, 7, 13, 14),
+      "JUM_and_PSIsigma_differential|HNRNPA2B1 HITS-CLIP GSM1716538" = c(6),
+      "JUM_and_PSIsigma_differential|MBNL1 HITS-CLIP GSE76486" = c(1, 2, 6, 7),
       "JUM_and_PSIsigma_differential|PRPF4 eCLIP ENCODE" = c(6),
       # "JUM_and_PSIsigma_differential|RBM15 eCLIP ENCODE" = c(6),
-      "JUM_and_PSIsigma_differential|SFPQ eCLIP ENCODE" = c(1, 4, 7),
-      "JUM_and_PSIsigma_differential|SUGP2 eCLIP ENCODE" = c(3, 4, 5, 6, 14),
-      "JUM_and_PSIsigma_differential|TRA2A eCLIP ENCODE" = c(1, 3, 4, 9),
+      "JUM_and_PSIsigma_differential|SFPQ eCLIP ENCODE" = c(6),
+      "JUM_and_PSIsigma_differential|SUGP2 eCLIP ENCODE" = c(3, 2, 6, 12, 14),
+      "JUM_and_PSIsigma_differential|TRA2A eCLIP ENCODE" = c(1, 4),
       "JUM_and_PSIsigma_differential|SNRPA eCLIP GSM4512295" = c(4)
     ), 
     "a3" = names(list_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table[!grepl(x = list_JUM_PSIsigma_combined_diff_VSR_overlapping_clip_seq_matched_to_combinedexpr_table %>% names, pattern = "(SRSF2 HITS-CLIP GSE111900)|SRSF1 |(SRSF4)|(SRSF7)|(SRSF9)|RBM15")])
@@ -3910,6 +3937,186 @@ purrr::map2(.x = list_of_tibbles_SOM_family.enrichment_clusterwise_top.hits, .y 
 
 # JUM, PSI-Sigma and proteome/phosphoproteome.
 
+## co-clustering of expr and phospho/proteome by MSC, 6h and 1d.
+
+We will not use consensus clustering here. Instead, we will be using plain old SOMs. This is because we only have 3 timepoints to work with.
+
+### merge all 4 datasets.
+
+```{r}
+
+# combine into a tibble
+tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d <- dplyr::bind_rows(
+  tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_ud.6h.1d_only %>% 
+    dplyr::mutate("id" = paste("JUM", `Gene`, `AS_event_ID`, `splicemode`, `sub_junction_start_coor`, `sub_junction_end_coor`, sep = "|")) %>%
+    .[, c("id", "MSC", "6h", "1d")],
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na_ud.6h.1d_only %>%
+    dplyr::mutate("id" = paste("PSISigma", `matched_gene_names`, `database_ID`, `splicemode`, `event_region_coords`, `diff_exon_coords`, sep = "|")) %>%
+    .[, c("id", "MSC", "6h", "1d")],
+  # protein_groups
+  list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d$con_sp.hsa.canonical.isoforms$protein_groups %>%
+    dplyr::mutate("id" = paste("protein_groups", `Gene.names`, `Protein.IDs`, sep = "|")) %>% 
+    .[, c("id", "MSC", "6h", "1d")],
+  # phosphosites
+  list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d$con_sp.hsa.canonical.isoforms$phosphosites %>%
+    dplyr::mutate("id" = paste("phosphosites|", `Gene.names`, "|", `Protein`, "|Position.in.peptide", `Position.in.peptide`, sep = "")) %>% 
+    .[, c("id", "MSC", "6h", "1d")],
+)
+
+```
+
+### TRADITIONAL SOM
+
+#### construction of a 5x5 SOM
+
+```{r}
+
+som_seed_number <- 7
+
+set.seed(som_seed_number)
+
+OB_xdim <- 4
+OB_ydim <- 3
+
+number_of_som_clusters <- OB_xdim * OB_ydim
+
+tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d_scaled <- tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d
+
+# rescale values
+tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d[, c("MSC", "6h", "1d")] <- tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d[, c("MSC", "6h", "1d")] %>% genescale(m = ., axis = 1, method = "Z")
+
+# remove na
+tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d <- tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d[tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d[, c("MSC", "6h", "1d")] %>% add_column("id" = rownames(.)) %>% na.omit %>% .$id, ]
+
+somdata_5_by_5_OBseries <- som(tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d[, c("MSC", "6h", "1d")] %>% as.matrix, grid = somgrid(xdim = OB_xdim, ydim = OB_ydim, topo = "rectangular", toroidal = FALSE), rlen = 100, keep.data = TRUE)
+
+wide_tibble_of_final_SOM_summary_5_by_5_OBseries <- cbind(tibble_JUM_PSISigma_proteome_phosphoproteome_MSC.6h.1d[, c("id", c("MSC", "6h", "1d"))], cluster = somdata_5_by_5_OBseries[["unit.classif"]]) %>% as_tibble
+
+```
+
+#### convert the som table to a long form interprable by ggplot
+
+Steps:
+
+0. Melt wide table into long form
+1. Subtract 1 from the cluster number
+2. x-facet is the remainder when mod 5
+3. y-facet is the quotient when mod 5
+4. in ggplot, the numbers go from 1-5 from top left to top right, then 6-10 on second row left-right... 25 will be bottom right.
+
+```{r}
+
+# OB series #####
+
+# reshaping into long table
+
+long_table_of_final_SOM_summary_5_by_5_OBseries <- reshape2::melt(wide_tibble_of_final_SOM_summary_5_by_5_OBseries, id.vars = c("id", "cluster"), variable.name = "timepoint", value.name = "scaled_PSI_value") %>% as_tibble
+
+# calculating the facet coordinates for 5x5 plot in ggplot
+
+long_table_of_final_SOM_summary_5_by_5_OBseries[, "cluster_minus_1"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster - 1
+
+long_table_of_final_SOM_summary_5_by_5_OBseries[, "remainder_facet.x"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster_minus_1 %% 5
+
+long_table_of_final_SOM_summary_5_by_5_OBseries[, "quotient_facet.y"] <- long_table_of_final_SOM_summary_5_by_5_OBseries$cluster_minus_1 %/% 5
+
+# also create a tibble for the average line for each cluster
+long_tibble_of_final_SOM_summary_5_by_5_OBseries_average.line <- long_table_of_final_SOM_summary_5_by_5_OBseries %>% dplyr::group_by(cluster, timepoint, cluster_minus_1, remainder_facet.x, quotient_facet.y) %>% 
+  dplyr::summarise("avg_PSI_value" = mean(scaled_PSI_value))
+
+```
+
+#### THE GGPLOT
+
+all the genes
+
+```{r}
+
+# OB series
+
+ggplot() +
+  geom_line(data = long_table_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_PSI_value, group = id), alpha = 0.33) +
+  geom_line(data = long_tibble_of_final_SOM_summary_5_by_5_OBseries_average.line, aes(x = timepoint, y = avg_PSI_value, group = cluster), colour = "white", size = 1) +
+  scale_colour_manual(values = c("black")) +
+  facet_wrap( ~ cluster) +
+  ggtitle(paste(OB_xdim, "x", OB_ydim, "\nSOM of PSI (JUM/PSI-Sigma), expr (MQ protein_groups), phosphosites")) +
+  scale_x_discrete(limits = c("MSC", "6h", "1d"), labels = c("MSC", "6h", "1d")) +
+  xlab("Time-point") +
+  ylab("Scaled PSI Level") +
+  # guides(colour = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family="Helvetica")) +
+ ggsave(filename = paste(results_dir, OB_xdim, "x", OB_ydim, "_SOM_combined_PSI_phospho_proteome.pdf", sep = ""), device = "pdf", dpi = 600, width = 12, height = 10, units = "cm") +
+ ggsave(filename = paste(results_dir, OB_xdim, "x", OB_ydim, "_SOM_combined_PSI_phospho_proteome.svg", sep = ""), device = "svg", dpi = 600, width = 12, height = 10, units = "cm")
+
+write.table(x = wide_tibble_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_dir, OB_xdim, "x", OB_ydim, "_SOM_combined_PSI_phospho_proteome_wide.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+write.table(x = long_table_of_final_SOM_summary_5_by_5_OBseries, file = paste(results_dir, OB_xdim, "x", OB_ydim, "_SOM_combined_PSI_phospho_proteome_long.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+#### GO analysis per cluster
+
+##### catdb
+
+```{r}
+
+load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
+
+```
+
+##### execute GO analysis
+
+```{r}
+
+# we can look at either what the RNA targets are OR what the proteins/phosphosites are.
+
+# group_split the wide SOM tibble by cluster
+list_final_SOM_summary_5_by_5_OBseries <- wide_tibble_of_final_SOM_summary_5_by_5_OBseries %>%
+  dplyr::group_split(cluster) %>%
+  set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$cluster %>% unique) %>% unlist)
+
+plan(list(tweak(multiprocess, workers = 12),
+          tweak(multiprocess, workers = 2),
+          tweak(multiprocess, workers = 3)))
+
+# loop thru each cluster x targets/proteins x GO category
+# note: this purrr returns nothing.
+tibble_SOM_combined_PSI_phospho_proteome_GOterms_per_cluster <- furrr::future_map2(
+  .x = list_final_SOM_summary_5_by_5_OBseries,
+  .y = names(list_final_SOM_summary_5_by_5_OBseries),
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- list_final_SOM_summary_5_by_5_OBseries[[1]]
+    ###########
+    
+    # extract genesets
+    list_genesets <- list(
+      "JUM_PSISigma" = a1[grep(x = a1$id, pattern = "JUM|PSISigma"), ] %>% gsub(x = .$id, pattern = "^([^\\|]+)\\|([^\\|]+).*", replacement = "\\2") %>% unique %>% .[. != "NA"],
+      "protein_groups_phosphosites" = a1[grep(x = a1$id, pattern = "protein_groups|phosphosites"), ] %>% gsub(x = .$id, pattern = "^([^\\|]+)\\|([^\\|]+).*", replacement = "\\2") %>% unique %>% .[. != "NA"]
+    )
+    
+    furrr::future_map2(
+      .x = list_genesets,
+      .y = names(list_genesets),
+      .f = function(b1, b2) {
+        
+        furrr::future_map(
+          .x = c("BP", "MF", "CC"),
+          .f = function(c1) {
+            
+            GOHyperGAll(catdb = catdb, gocat = c1, Nannot = 2, sample = b1) %>% GOHyperGAll_benjamini_correction %>% return
+            
+          } ) %>% rbindlist %>% add_column("data_origin" = b2) %>% return
+        
+      } ) %>% rbindlist %>% add_column("cluster" = a2) %>% return
+    
+  }, .progress = TRUE) %>% rbindlist %>% as_tibble
+
+write.table(x = tibble_SOM_combined_PSI_phospho_proteome_GOterms_per_cluster, file = paste(results_dir, OB_xdim, "x", OB_ydim, "_SOM_combined_PSI_phospho_proteome_wide_GOterms_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+```
+
 ## JUM: Filter the junction/exon ontology by validated junc.exons
 ### Match the validated JUM junction identifiers to the junction ID
 
@@ -4361,8 +4568,8 @@ tibble_ref_gtf_original <- tibble_ref_gtf_original %>% mutate_if(is.factor, as.c
 
 # import dbPTM info
 # Z:/dbPTM_download/extract/allPTM_human.txt
-tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
-# tibble_dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
+tibble_dbPTM_allhuman_annotations <- read.delim("/mnt/Tertiary/sharedfolder/dbPTM_download/extract/allPTM_human_filtered.txt", col.names = c("_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_dbPTM_allhuman_annotations <- read.delim("Z:/dbPTM_download/extract/allPTM_human_filtered.txt", col.names = c("uniprotkb_entryname", "uniprotkb_entry", "modified_residue_position", "PTM_type", "pubmed_accessions", "context_sequence"), na = c("NA", ""), sep = "\t", stringsAsFactors = FALSE) %>% as_tibble
 
 # import PhosphoSitePlus info
 # Z:/phosphositeplus_phosphosites_human.tab
@@ -4378,8 +4585,7 @@ row.indices_phosphosite.is.na <- which(is.na(tibble_phosphositeplus_allhuman_pho
 tibble_phosphositeplus_allhuman_phosphosites <- tibble_phosphositeplus_allhuman_phosphosites[-row.indices_phosphosite.is.na, ]
 
 # RBIND THE PTM TABLES
-tibble_PTM_combined <- dplyr::bind_rows(tibble_dbPTM_allhuman_annotations, tibble_phosphositeplus_allhuman_phosphosites)
-
+tibble_PTM_combined <- tibble_dbPTM_allhuman_annotations
 ```
 
 ### Reference preprocessing: define and map topologies, cast reference regions onto exon-relative coords.
@@ -5821,8 +6027,7 @@ list_granges_biomart_regions_exome_relative <- future_map(
 # as_tibble %>%
 # na.omit
 
-# save(tibble_ENSP_to_uniprotkb, file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
-load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
+tibble_ENSP_to_uniprotkb <- read.delim(file = paste(shared_dir, "table_ENSP_to_uniprot_entry_mapping_38.98.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL) %>% as_tibble
 
 # convert uniprotkb_entry into ENSP
 tibble_dbPTM_allhuman_annotations_with_ENSP <- dplyr::left_join(tibble_dbPTM_allhuman_annotations, tibble_ENSP_to_uniprotkb, by = "uniprotkb_entry") %>% 
@@ -6268,6 +6473,8 @@ list_permtest_exonic_PTMs_pvalues <- list_permtest_exonic_PTMs %>% purrr::map(.f
 
 # optional: save workspace for debugging because i'm going to run this overnight and go to sleep.
 save.image(file = "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/multiomic_synthesis/source/22092020_topology_conversion_bootstrapping.RData")
+
+stop("Proteome section finished")
 
 ```
 
@@ -7321,7 +7528,6 @@ ggplot(data = long_tibble_combined_overlap_and_significance_contexts, aes(x = `C
 
 ```
 
-
 ### Plot distances from junc/exon boundaries to SNPs
 
 STRATEGY: 
@@ -7463,7 +7669,7 @@ ggplot(tibble("vector_differences_to_plot" = vector_differences_to_plot)) +
 
 ```{r}
 
-list_JUM_PSIsigma_combined_diff_coordinate_level_clip_seq_target_entries
+# list_JUM_PSIsigma_combined_diff_coordinate_level_clip_seq_target_entries
 
 # extract the overlapping clip-seq regions
 list_clip_seq_entries_overlapping_VSRs_diff <- list_overlaps_clipseq_peakfiles_x_jum_psisigma[grep(x = names(list_overlaps_clipseq_peakfiles_x_jum_psisigma), pattern = "differential.*tibble_VSRs_with_overlap_with_matched_clipseq_regions$")]
@@ -7620,6 +7826,11 @@ list_matched_iCLIP_entries_per_differential_region_JUM_pruned <- list_matched_iC
 # percolate and tibblise
 tibble_differential_region_JUM_with_iclip_ago2 <- list_matched_iCLIP_entries_per_differential_region_JUM_pruned %>% purrr::map(~dplyr::bind_cols(.x[c("AS_event_ID", "splicemode", "Gene")], .x$tibble_matched_iclip_entries)) %>% rbindlist(use.names = TRUE) %>% as_tibble
 
+```
+
+```{r}
+
+stop("SNP section done")
 
 ```
 

@@ -2022,7 +2022,7 @@ list_DEXSeq_results_tibble.only_with_PSI <- purrr::map2(.x = list_DEXSeq_results
                                                             dplyr::filter(featureID == "E001") %>%
                                                             dplyr::mutate("DEXSeq_PSI_first" = DEXSeq_IR_first/DEXSeq_pseudotranscript_IR_plus_ER_first,
                                                                           "DEXSeq_PSI_second" = DEXSeq_IR_second/DEXSeq_pseudotranscript_IR_plus_ER_second) %>%
-                                                            dplyr::mutate("DEXSeq_dpsi" = DEXSeq_PSI_first - DEXSeq_PSI_second)
+                                                            dplyr::mutate("DEXSeq_dpsi" = comparison.1_average.psi - comparison.2_average.psi)
                                                             
                                                         } )
 
@@ -2050,9 +2050,15 @@ future_map2(.x = list_DEXSeq_results_tibble.only_with_PSI,
 # rbind and tibblise
 long_tibble_DEXSeq_results_with_PSI <- list_DEXSeq_results_tibble.only_with_PSI %>% rbindlist %>% as_tibble %>%
 # select only cols that are informative
-  dplyr::select(id, DEXSeq_exonBaseMean, DEXSeq_dispersion, DEXSeq_stat, DEXSeq_pvalue, DEXSeq_padj, DEXSeq_log2FC_second_minus_first, comparison, DEXSeq_IR_first, DEXSeq_IR_second, DEXSeq_pseudotranscript_IR_plus_ER_first, DEXSeq_pseudotranscript_IR_plus_ER_second, DEXSeq_PSI_first, DEXSeq_PSI_second, DEXSeq_dpsi)
+  dplyr::select(id, DEXSeq_exonBaseMean, DEXSeq_dispersion, DEXSeq_stat, DEXSeq_pvalue, DEXSeq_padj, DEXSeq_log2FC_second_minus_first, comparison, DEXSeq_dpsi)
+# , DEXSeq_IR_first, DEXSeq_IR_second, DEXSeq_pseudotranscript_IR_plus_ER_first, DEXSeq_pseudotranscript_IR_plus_ER_second, comparison.1_average.psi, comparison.2_average.psi
 
 long_tibble_of_psisigma_DEXSeq_results <- dplyr::left_join(wide_tibble_of_psisigma_results_allcomparisons_final_with_denominator_numerator_filtered_5_in_at_least_3, long_tibble_DEXSeq_results_with_PSI, by = c("id", "comparison"))
+
+# add in PSI #1 and #2 columns
+long_tibble_of_psisigma_DEXSeq_results <- dplyr::mutate(long_tibble_of_psisigma_DEXSeq_results, 
+                                                        "comparison.1_average.psi" = rowMeans(long_tibble_of_psisigma_DEXSeq_results[, c("comparison.1_absolute.psi_1", "comparison.1_absolute.psi_2", "comparison.1_absolute.psi_3")]),
+                                                        "comparison.2_average.psi" = rowMeans(long_tibble_of_psisigma_DEXSeq_results[, c("comparison.2_absolute.psi_1", "comparison.2_absolute.psi_2", "comparison.2_absolute.psi_3")]))
 
 write.table(x = long_tibble_of_psisigma_DEXSeq_results, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -2070,7 +2076,7 @@ long_tibble_of_psisigma_DEXSeq_results <- read.delim(paste(R_processing_results_
 # write coords for poison exon finder
 write.table(x = long_tibble_of_psisigma_DEXSeq_results[, c("event_region_coords", "diff_exon_coords", "splicemode")] %>% dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords"), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results_prepare_for_poison_exon_finder.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-# comeback from poison exon finder
+# comeback from poison exon finder ####
 tibble_poison_exon_finder_results <- read.delim(paste(R_processing_results_dir, "PSISigma_all_exons_with_na_poison_exon_finder.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 # create logical of whether exon introduces PTC or not
@@ -2157,7 +2163,7 @@ write.table(x = wide_tibble_of_psisigma_results_allcomparisons_differential_info
               dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords", "gene_name" = "matched_gene_names") %>% 
               add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_allcomparisons_differential_exons", number.of.exons_differential_anysig_with_na, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_anysig_with_na_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
-# also write table of differential information for 12d vs. MSC
+# also write table of differential information for 12d vs. MSC ###
 tibble_differential_results_12d_vs_ud <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison == "BM_MSC_to_OB_12d_vs_BM_MSC_to_OB_MSC" & !!as.name(pvalue_or_FDR) <= pvalue_cutoff & abs(dpsi) >= dpsi_cutoff)
 # write table
 write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV", tibble_differential_results_12d_vs_ud %>% nrow, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
@@ -2165,6 +2171,16 @@ write.table(x = tibble_differential_results_12d_vs_ud, file = paste(R_processing
 write.table(x = tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% mixedsort, file = paste(R_processing_results_dir, "geneset_differential_LIV_", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% length, "genes_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
 cat("There are", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% na.omit %>% length, "differential genes between MSC and 12d only, using the specified cutoff of", pvalue_or_FDR, "<", pvalue_cutoff, "and dpsi > ", dpsi_cutoff)
+
+# also get table of differential information for MSC, 6h and 1d ###
+tibble_differential_results_MSC_6h_1d <- wide_tibble_of_psisigma_results_allcomparisons_differential %>% dplyr::filter(comparison %in% c("BM_MSC_to_OB_6h_vs_BM_MSC_to_OB_MSC", "BM_MSC_to_OB_1d_vs_BM_MSC_to_OB_MSC", "BM_MSC_to_OB_1d_vs_BM_MSC_to_OB_6h") & abs(dpsi) >= dpsi_cutoff)
+# write table
+write.table(x = tibble_differential_results_MSC_6h_1d, file = paste(R_processing_results_dir, "long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV", tibble_differential_results_MSC_6h_1d %>% nrow, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_MSC_6h_1d_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# export associated gene set
+# write.table(x = tibble_differential_results_MSC_6h_1d$matched_gene_names %>% unique %>% na.omit %>% mixedsort, file = paste(R_processing_results_dir, "geneset_differential_LIV_", tibble_differential_results_12d_vs_ud$matched_gene_names %>% unique %>% length, "genes_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_12d.vs.ud_with_na.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+
+# cat("There are", tibble_differential_results_MSC_6h_1d$matched_gene_names %>% unique %>% na.omit %>% length, "differential genes between MSC and 12d only, using the specified cutoff of", pvalue_or_FDR, "<", pvalue_cutoff, "and dpsi > ", dpsi_cutoff)
+
 
 ```
 
@@ -2382,7 +2398,7 @@ vector_of_comparisons_final_edited <- gsub(x = vector_of_comparisons_final_edite
 vector_of_ud_comparisons <- vector_of_comparisons_final_edited[grep(x = vector_of_comparisons_final_edited, pattern = "MSC$")]
 
 # subset the wide table of all comparisons for only comparisons which have MSC
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 <- dplyr::filter(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV, comparison %in% vector_of_ud_comparisons) %>% dplyr::select(database_ID, event_region_coords, diff_exon_coords, splicemode, chr, diff_exon_start, diff_exon_end, matched_gene_names, matched_recon_transcript_names, matched_ref_transcript_names, matched_strand, NMD_biotype_reference, NMD_flagged_ref, NMD_flagged_recon, any_NMD, poison_exon_candidate_ref, poison_exon_candidate_recon, contains_PTC_ref, contains_PTC_recon, first_or_last_exon_reference, first_or_last_exon_recon, any_first_exon, any_last_exon, comparison, DEXSeq_PSI_first, DEXSeq_PSI_second) %>% dplyr::rename("DEXSeq_PSI_ud" = "DEXSeq_PSI_second")
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 <- dplyr::filter(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV, comparison %in% vector_of_ud_comparisons) %>% dplyr::select(database_ID, event_region_coords, diff_exon_coords, splicemode, chr, diff_exon_start, diff_exon_end, matched_gene_names, matched_recon_transcript_names, matched_ref_transcript_names, matched_strand, NMD_biotype_reference, NMD_flagged_ref, NMD_flagged_recon, any_NMD, poison_exon_candidate_ref, poison_exon_candidate_recon, contains_PTC_ref, contains_PTC_recon, first_or_last_exon_reference, first_or_last_exon_recon, any_first_exon, any_last_exon, introduces_PTC_for_all_matched_transcripts, introduces_PTC_for_any_matched_transcripts, alters_frame_for_all_matched_transcripts, alters_frame_for_any_matched_transcripts, comparison, comparison.1_average.psi, comparison.2_average.psi) %>% dplyr::rename("comparison_ud" = "comparison.2_average.psi")
 
 # rename the columns. replace "comparison name" with "timepoint", rename the comparison 2 to MSC
 # >
@@ -2392,8 +2408,8 @@ colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0)[whi
 wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0[, "timepoint"] <- gsub(x = wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0$timepoint, pattern = "(BM_MSC_to_OB_)(.*)_vs_(BM_MSC_to_OB_)(.*)", replacement = "\\2")
 
 # rbind to shake off the timepointwise comparison
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1 <- dplyr::bind_rows(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-DEXSeq_PSI_ud) %>% dplyr::rename("PSI" = "DEXSeq_PSI_first"),
-                                                                                       wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-DEXSeq_PSI_first) %>% dplyr::rename("PSI" = "DEXSeq_PSI_ud") %>% dplyr::mutate_at(.vars = "timepoint", .funs = function(x) {"MSC" %>% return}) %>% dplyr::group_by_at(.vars = setdiff(colnames(.), "PSI")) %>% dplyr::mutate_at(.vars = "PSI", .funs = mean )) %>% dplyr::distinct()
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1 <- dplyr::bind_rows(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-comparison_ud) %>% dplyr::rename("PSI" = "comparison.1_average.psi"),
+                                                                                       wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 %>% dplyr::select(-comparison.1_average.psi) %>% dplyr::rename("PSI" = "comparison_ud") %>% dplyr::mutate_at(.vars = "timepoint", .funs = function(x) {"MSC" %>% return}) %>% dplyr::group_by_at(.vars = setdiff(colnames(.), "PSI")) %>% dplyr::mutate_at(.vars = "PSI", .funs = mean )) %>% dplyr::distinct()
 
 # recast into a wide tibble
 ## aggregate function taken as the mean
@@ -2412,7 +2428,7 @@ wide_tibble_of_psisigma_PSI_with_na_LIV <- wide_tibble_of_psisigma_results_allco
 
 ```{r}
 
-wide_tibble_of_absolute_PSI_averages_sum_temp <- wide_tibble_of_psisigma_PSI_with_na_LIV %>% dplyr::select(., -database_ID)
+wide_tibble_of_absolute_PSI_averages_sum_temp <- wide_tibble_of_psisigma_PSI_with_na_LIV %>% dplyr::select(., -id, -database_ID)
 
 # create list of event region, splicemode
 list_unique_exon_regions <- wide_tibble_of_absolute_PSI_averages_sum_temp[, c("event_region_coords", "diff_exon_coords")] %>% unique %>% array_tree
@@ -2640,6 +2656,12 @@ wide_tibble_of_LIV_PSI_no_na_scaled <- wide_tibble_of_LIV_PSI_no_na
 wide_tibble_of_LIV_PSI_no_na_scaled[, colnames(wide_tibble_of_LIV_PSI_no_na_scaled) %in% vector_OBseries_timepoints_edited] <- wide_tibble_of_LIV_PSI_no_na_scaled[, colnames(wide_tibble_of_LIV_PSI_no_na_scaled) %in% vector_OBseries_timepoints_edited] %>% genescale(m = ., axis = 1, method = "Z") %>% as_tibble
 
 write.table(x = wide_tibble_of_LIV_PSI_no_na_scaled, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(wide_tibble_of_LIV_PSI_no_na_scaled), "LIVs_scaled.PSI_OB_diff.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
+# also write the scaled table for MSC_6h_1d only
+wide_tibble_of_LIV_PSI_no_na_scaled_MSC_6h_1d <- dplyr::semi_join(wide_tibble_of_LIV_PSI_no_na_scaled, tibble_differential_results_MSC_6h_1d, by = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode"))
+
+write.table(x = wide_tibble_of_LIV_PSI_no_na_scaled_MSC_6h_1d, file = paste(R_processing_results_dir, "wide_table_of_",  nrow(wide_tibble_of_LIV_PSI_no_na_scaled_MSC_6h_1d), "LIVs_scaled.PSI_OB_diff_MSC_6h_1d.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+
 
 ```
 
@@ -5443,15 +5465,16 @@ message("percent of differential regions matched to a CDS region: ", 100 * grep(
 
 # create table of transcript-level summary
 tibble_transcript_level_summary_count <- tibble_final_transcript_feature_annotation %>%
-  dplyr::mutate("protein_coding" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "protein_coding"),
-                # "lncRNA" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "lncRNA"),
-                "miRNA" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "miRNA"),
-                
-                "start_codon" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "start_codon"),
-                "stop_codon" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "stop_codon"),
-                "three_prime_utr" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "three_prime_utr"),
-                "five_prime_utr" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "five_prime_utr"),
-                "CDS" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "CDS"))
+  dplyr::mutate(
+    # "protein_coding" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "protein_coding"),
+    # "lncRNA" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "lncRNA"),
+    # "miRNA" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "miRNA"),
+    
+    "start_codon" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "start_codon"),
+    "stop_codon" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "stop_codon"),
+    "three_prime_utr" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "three_prime_utr"),
+    "five_prime_utr" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "five_prime_utr"),
+    "CDS" = grepl(x = tibble_overlapping_parent_transcript_features, pattern = "CDS"))
 tibble_transcript_level_summary_count[, "splicemode"] <- gsub(x = tibble_transcript_level_summary_count$splicemode, pattern = "IR_overlapping_region", replacement = "IR")
 tibble_transcript_level_summary_count[, "splicemode"] <- gsub(x = tibble_transcript_level_summary_count$splicemode, pattern = "TSS\\|", replacement = "")
 
@@ -5497,15 +5520,15 @@ upset_combs <- data.frame(tibble_transcript_level_summary_count, row.names = pas
 
 print(set_size(upset_combs))
 
-pdf(file = paste(R_processing_results_dir, "upset_plot_transcript_ontology_x_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 4, width = 20)
+pdf(file = paste(R_processing_results_dir, "upset_plot_transcript_ontology_x_splicemode_", pvalue_or_FDR, pvalue_cutoff, "_dpsi", dpsi_cutoff, "_differential.pdf", sep = ""), height = 4, width = 12)
 
 ht <- ComplexHeatmap::UpSet(upset_combs, 
                             comb_order = order(-comb_size(upset_combs)), 
                             left_annotation = rowAnnotation("Set Type" = c(
                               "A3SS" = "Splicemode",
-                              "protein_coding" = "Transcript type",
+                              # "protein_coding" = "Transcript type",
                               # "lncRNA" = "Transcript type",
-                              "miRNA" = "Transcript type",
+                              # "miRNA" = "Transcript type",
                               
                               "start_codon" = "Transcript region",
                               "stop_codon" = "Transcript region",
@@ -5518,9 +5541,9 @@ ht <- ComplexHeatmap::UpSet(upset_combs,
                               "MES" = "Splicemode",
                               "MXS" = "Splicemode",
                               "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
-                              col = list("Set Type" = c("Transcript type" = "tomato1", "Transcript region" = "sandybrown", "Splicemode" = "red4"))
+                              col = list("Set Type" = c("Transcript region" = "sandybrown", "Splicemode" = "red4"))
                             ),
-                            row_labels =  c("A3SS", "Protein coding", "miRNA", "Start codon", "Stop codon", "3' UTR", "5' UTR", "CDS", "A5SS", "IR", "MES", "MXS", "SES")
+                            row_labels =  c("A3SS", "Start codon", "Stop codon", "3' UTR", "5' UTR", "CDS", "A5SS", "IR", "MES", "MXS", "SES")
 )
 
 ro <- row_order(ht)
@@ -5530,9 +5553,9 @@ ht <- draw(ComplexHeatmap::UpSet(upset_combs,
                                  comb_order = order(-comb_size(upset_combs)), 
                                  left_annotation = rowAnnotation("Set Type" = c(
                                    "A3SS" = "Splicemode",
-                                   "protein_coding" = "Transcript type",
+                                   # "protein_coding" = "Transcript type",
                                    # "lncRNA" = "Transcript type",
-                                   "miRNA" = "Transcript type",
+                                   # "miRNA" = "Transcript type",
                                    
                                    "start_codon" = "Transcript region",
                                    "stop_codon" = "Transcript region",
@@ -5545,9 +5568,9 @@ ht <- draw(ComplexHeatmap::UpSet(upset_combs,
                                    "MES" = "Splicemode",
                                    "MXS" = "Splicemode",
                                    "SES" = "Splicemode")[set_name(upset_combs)], show_annotation_name = FALSE, 
-                                   col = list("Set Type" = c("Transcript type" = "tomato1", "Transcript region" = "sandybrown", "Splicemode" = "red4"))
+                                   col = list("Set Type" = c("Transcript region" = "sandybrown", "Splicemode" = "red4"))
                                  ),
-                                 row_labels =  c("A3SS", "Protein coding", "miRNA", "Start codon", "Stop codon", "3' UTR", "5' UTR", "CDS", "A5SS", "IR", "MES", "MXS", "SES")
+                                 row_labels =  c("A3SS", "Start codon", "Stop codon", "3' UTR", "5' UTR", "CDS", "A5SS", "IR", "MES", "MXS", "SES")
 ) +
   rowAnnotation(labels = anno_text(sz, which = "row", just = c("left", "centre"), gp = gpar(fontsize = 9)), 
                 width = max(grobWidth(textGrob(sz))))

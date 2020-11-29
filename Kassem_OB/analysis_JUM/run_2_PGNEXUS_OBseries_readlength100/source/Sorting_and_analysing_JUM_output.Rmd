@@ -1992,16 +1992,39 @@ write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only, file = paste(
 # export associated gene set
 write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_", length(PSI_levels_timeseries_OB_wide_with_na_ud.12d.only$Gene %>% unique %>% na.omit), "_differential_genes_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_with_na_ud.vs.12d.only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
 
+# also write table of differential information for MSC, 6h, 1d only
+PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only <- PSI_levels_timeseries_OB_wide_with_na[which((PSI_levels_timeseries_OB_wide_with_na$deltaPSI_BM_MSC_to_OB_6h.BM_MSC_to_OB_ud %>% as.numeric %>% abs >= dPSI_cutoff) |
+                                                                                             (PSI_levels_timeseries_OB_wide_with_na$deltaPSI_BM_MSC_to_OB_1d.BM_MSC_to_OB_ud %>% as.numeric %>% abs >= dPSI_cutoff) |
+                                                                                             (PSI_levels_timeseries_OB_wide_with_na$deltaPSI_BM_MSC_to_OB_1d.BM_MSC_to_OB_6h %>% as.numeric %>% abs >= dPSI_cutoff)), ]
+# create time-series columns 
+PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only <- PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only %>% dplyr::select(-contains("pvalue"), -contains("qvalue"), -contains("deltaPSI"), matches("deltaPSI.*ud$"))
+
+colnames(PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
+
+PSI_levels_timeseries_OB_wide_not.all.na.rows_ud.6h.1d_only <- (apply(PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only[, vector_OBseries_timepoints_edited[vector_OBseries_timepoints_edited != "MSC"]], 1, function(X) {all(is.na(X))}) == FALSE) %>% which
+
+PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only <- cbind(PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only, MSC = 0)
+
+PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only <- PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only[PSI_levels_timeseries_OB_wide_not.all.na.rows_ud.6h.1d_only, ]
+
+# reorder cols to match chronological order
+PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only <- dplyr::bind_cols(PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only %>% dplyr::select(-vector_OBseries_timepoints_edited), PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only %>% dplyr::select(vector_OBseries_timepoints_edited))
+# write table of MSC, 6h, 1d only
+write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only, file = paste(R_processing_results_dir, "wide_table_of_", length(PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only$AS_event_ID %>% unique), "_differential_VSRs_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_with_na_ud.6h.1d_only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+# export associated gene set of MSC, 6h, 1d only
+write.table(x = PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only$Gene %>% unique %>% na.omit, file = paste(R_processing_results_dir, "geneset_", length(PSI_levels_timeseries_OB_wide_with_na_ud.6h.1d_only$Gene %>% unique %>% na.omit), "_differential_genes_", p_or_q_value, qpvalue_cutoff, "_dPSI", dPSI_cutoff, "_with_na_ud.6h.1d_only.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE, col.names = FALSE)
+
+# CONTINUE WITH THE MAIN TABLE ###
 # further subsetting into ud-only comparisons
 PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(-contains("pvalue"), -contains("qvalue"), -contains("deltaPSI"), matches("deltaPSI.*ud$"))
 
 colnames(PSI_levels_timeseries_OB_wide_with_na) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide_with_na), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_OB_ud)", replacement = "\\3")
 
-PSI_levels_timeseries_OB_wide_na.rows <- apply(PSI_levels_timeseries_OB_wide_with_na[, vector_OBseries_timepoints_edited[2:length(vector_OBseries_timepoints_edited)]], 1, function(X) {all(is.na(X))}) %>% which(. == TRUE)
+PSI_levels_timeseries_OB_wide_not.all.na.rows <- which(apply(PSI_levels_timeseries_OB_wide_with_na[, vector_OBseries_timepoints_edited[2:length(vector_OBseries_timepoints_edited)]], 1, function(X) {all(is.na(X))}) == FALSE)
 
 PSI_levels_timeseries_OB_wide_with_na <- cbind(PSI_levels_timeseries_OB_wide_with_na, MSC = 0)
 
-PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[-PSI_levels_timeseries_OB_wide_na.rows, ]
+PSI_levels_timeseries_OB_wide_with_na <- PSI_levels_timeseries_OB_wide_with_na[PSI_levels_timeseries_OB_wide_not.all.na.rows, ]
 
 # reorder cols to match chronological order
 PSI_levels_timeseries_OB_wide_with_na <- dplyr::bind_cols(PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(-vector_OBseries_timepoints_edited), PSI_levels_timeseries_OB_wide_with_na %>% dplyr::select(vector_OBseries_timepoints_edited))

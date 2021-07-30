@@ -1,0 +1,98 @@
+#!/bin/bash
+
+#PBS -N JUM_BM_alltimeseries
+#PBS -l select=1:ncpus=10:mem=60gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -k eod
+#PBS -o /home/z3463471/2019_rauch_data/analysis_JUM/run_2_BM_timeseries/results/
+#PBS -M z3463471@ad.unsw.edu.au
+#PBS -m ae
+
+# language: sample = timepoint. replicate = technical replicate.
+
+module load samtools/1.9
+module load bedtools/2.27.1
+module load R/3.6.1
+module load perl/5.28.0
+
+data_dir="/srv/scratch/z3463471/2019_rauch_data/
+bam_bai_SJ_and_sam_files_dir="/srv/scratch/z3463471/2019_rauch_data/bam_bai_sj_sam_files/BM_MSC/"
+# NOTE: DO NOT EVER PUT BAM BAI SJ SAM FILES THAT YOU ARE NOT GOING TO ANALYSE INTO THE FOLDER. THE PROGRAMS IS REALLY DUMB AND WILL ATTEMPT TO PROCESS THAT ANYWAYS BUT FAIL MISERABLY
+# expect that the bam bai sj sam files relevant to the analysis folder ONLY AND NOTHING ELSE is placed into this folder
+refFlat_dir="/srv/scratch/z3463471/hg38_ensembl_reference/"
+jum_package_dir="/home/z3463471/isoform_software/JUM_2.0.2/"
+results_dir="/home/z3463471/2019_rauch_data/analysis_JUM/run_2_BM_timeseries/results/"
+sampleandaccessionlists="/home/z3463471/2019_rauch_data/"
+
+replicate_name_list_ATandBMonly=$sampleandaccessionlists"annotated_fastq_bulkRNASeq_names_underscore.txt"
+
+# JUM (MULTI) step 2
+# goal: to create one subdirectory for each technical replicate for each time-point
+
+# select only the names of the samples which are bone marrow-derived
+
+cat $replicate_name_list_ATandBMonly | grep BM_MSC > $results_dir"replicate_name_list_BMonly.txt"
+
+replicate_name_list_BMonly=$results_dir"replicate_name_list_BMonly.txt"
+
+cat $replicate_name_list_BMonly
+
+echo There are $(cat $replicate_name_list_BMonly | wc -l) replicates described.
+
+# generating text files of SAMPLE names to loop through
+
+sed -e 's/_r[0-9]_//g' $replicate_name_list_BMonly | sort -u > $results_dir"sample_name_list_BMonly.txt"
+
+sample_name_list_BMonly=$results_dir"sample_name_list_BMonly.txt"
+
+cat $sample_name_list_BMonly
+
+echo $(cat $sample_name_list_BMonly | wc -l) samples extracted.
+
+# JUM (MULTI) step 14
+
+## FIRST, AN R SCRIPT TO GENERATE THE COMBINATION NAMES OF THE PAIRWISE COMPARISONS BETWEEN TIMEPOINTS.
+
+R $sampleandaccessionlists $results_dir $sample_name_list_BMonly
+
+print(commandArgs())
+args <- print(commandArgs())
+
+# test if there are two arguments: if not, return an error
+#if (length(args)!==2) {
+#  stop("Go back and set the sampleandaccessionlists and results_dir correctly in bash", call.=FALSE)
+#} else if (length(args)==1) {
+  # default output file
+#  args[2] = "out.txt"
+#}
+
+sample_name_list_BMonly <- read.delim(paste(args[4], sep = ""), sep = "\t", stringsAsFactors = FALSE, header = FALSE)
+
+print(sample_name_list_BMonly)
+
+raw_combination_table <- t(combn(sample_name_list_BMonly[, 1], 2))
+
+print(raw_combination_table)
+
+raw_combination_table <- cbind(raw_combination_table, paste(raw_combination_table[, 1], "_vs_", raw_combination_table[, 2], sep = ""))
+
+# we now extract the list of comparisons that occur ONLY BETWEEN OB DIFF AND ITSELF, AD DIFF AND ITSELF, AND 14d AD vs 14d OB
+list_of_timepoint_combinations_final <- raw_combination_table[grepl(x = raw_combination_table[, 3], pattern = ".*ud.*")|grepl(x = raw_combination_table[, 3], pattern = "(BM_MSC_to_AD).*(BM_MSC_to_AD)")|grepl(x = raw_combination_table[, 3], pattern = "(BM_MSC_to_OB).*(BM_MSC_to_OB)")|(raw_combination_table[, 3] == "BM_MSC_to_AD_14d_vs_BM_MSC_to_OB_14d"), 3]
+
+print(list_of_timepoint_combinations_final)
+
+print(paste(length(list_of_timepoint_combinations_final), " combinations will be considered.", sep = ""))
+
+write.table(x = list_of_timepoint_combinations_final, file = paste(args[3], "list_of_timepoint_combinations_final.txt", sep = ""), sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+q(save = "no")
+
+## CREATING SUBDIRECTORIES FOR EACH PAIRWISE COMPARISON UNDER THE JUM_DIFF FOLDER
+
+cd $bam_bai_SJ_and_sam_files_dir"JUM_diff/"
+
+for comparisonfoldername in $(ls $results_dir"list_of_timepoint_combinations_final.txt"); do mkdir comparisonfoldername; done
+
+
+sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1/g' $results_dir"list_of_timepoint_combinations_final.txt"

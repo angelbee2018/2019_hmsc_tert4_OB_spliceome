@@ -1,0 +1,132 @@
+#!/bin/bash
+
+#PBS -N JUM_BM_alltimeseries_uptostep13_BMTOAD3DTAKENOUT
+#PBS -l select=1:ncpus=10:mem=60gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -k eod
+#PBS -o /home/z3463471/2019_rauch_data/analysis_JUM/run_2_BM_timeseries/results/
+#PBS -M z3463471@ad.unsw.edu.au
+#PBS -m ae
+
+# language: timepoint = timepoint. replicate = technical replicate.
+
+module load samtools/1.9
+module load bedtools/2.27.1
+module load R/3.6.1
+module load perl/5.28.0
+
+data_dir="/srv/scratch/z3463471/2019_rauch_data/"
+
+bam_bai_SJ_and_sam_files_dir="/srv/scratch/z3463471/2019_rauch_data/bam_bai_sj_sam_files/BM_MSC/"
+
+# NOTE: DO NOT EVER PUT BAM BAI SJ SAM FILES THAT YOU ARE NOT GOING TO ANALYSE INTO THE FOLDER. THE PROGRAMS IS REALLY DUMB AND WILL ATTEMPT TO PROCESS THAT ANYWAYS BUT FAIL MISERABLY
+# expect that the bam bai sj sam files relevant to the analysis folder ONLY AND NOTHING ELSE is placed into this folder
+
+refFlat_dir="/srv/scratch/z3463471/hg38_ensembl_reference/"
+jum_package_dir="/home/z3463471/isoform_software/JUM_2.0.2/"
+results_dir="/home/z3463471/2019_rauch_data/analysis_JUM/run_2_BM_timeseries/results/"
+sampleandaccessionlists="/home/z3463471/2019_rauch_data/"
+
+replicate_name_list_ATandBMonly=$sampleandaccessionlists"annotated_fastq_bulkRNASeq_names_underscore.txt"
+
+# step 0: preparing the bam bai sj sam directory and move BM_MSC only into one folder
+
+mv $data_dir"aligned_bam/"*"sorted.bam" $data_dir"bam_bai_sj_sam_files/"
+mv $data_dir"mapping_pass_2/"*"bam.bai" $data_dir"bam_bai_sj_sam_files/"
+mv $data_dir"mapping_pass_2/"*"SJ.out.tab" $data_dir"bam_bai_sj_sam_files/"
+mv $data_dir"mapping_pass_2/"*".sam" $data_dir"bam_bai_sj_sam_files/"
+
+mv $data_dir"bam_bai_sj_sam_files/BM_MSC"* $bam_bai_SJ_and_sam_files_dir
+
+cd $bam_bai_SJ_and_sam_files_dir
+
+# JUM (MULTI) step 1
+# This will create in the working directory: *SJ.out.tab_strand_symbol_scaled, *_SJ_coor.txt, UNION_junc_coor.txt and UNION_junc_coor_with_junction_ID.txt
+
+bash $jum_package_dir"JUM_2-1.sh"
+
+# JUM (MULTI) step 2
+# goal: to create one subdirectory for each time-point
+
+# select only the names of the timepoints which are bone marrow-derived
+
+cat $replicate_name_list_ATandBMonly | grep BM_MSC > $results_dir"replicate_name_list_BMonly.txt"
+
+replicate_name_list_BMonly=$results_dir"replicate_name_list_BMonly.txt"
+
+cat $replicate_name_list_BMonly
+
+echo There are $(cat $replicate_name_list_BMonly | wc -l) replicates described.
+
+# generating text files of TIMEPOINT names to loop through
+
+sed -e 's/_r[0-9]_//g' $replicate_name_list_BMonly | sort -u > $results_dir"timepoint_name_list_BMonly.txt"
+
+timepoint_name_list_BMonly=$results_dir"timepoint_name_list_BMonly.txt"
+
+cat $timepoint_name_list_BMonly
+
+echo $(cat $timepoint_name_list_BMonly | wc -l) timepoints considered.
+
+# now creating subdirectory for each TIMEPOINT, the ${string//match/replacement} syntax is used to reduce the replicate names to timepoint names
+
+# for replicatename in $(cat $replicate_name_list_BMonly); do mkdir ${replicatename//_r*/}; done
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do mkdir $timepointname; done
+
+# JUM (MULTI) step 3 and 4
+# copying *SJ.out.tab_strand_symbol_scaled for each REPLICATE and UNION_junc_coor_with_junction_ID.txt into their respective TIMEPOINT folders
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cp $timepointname*"SJ.out.tab_strand_symbol_scaled" $timepointname"/"; cp UNION_junc_coor_with_junction_ID.txt $timepointname"/"; done
+
+# JUM (MULTI) step 5
+# running JUM-2-2.sh in each of the sample subdirectories
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cd $bam_bai_SJ_and_sam_files_dir$timepointname"/"; bash $jum_package_dir"JUM_2-2.sh" --Folder $jum_package_dir --Threshold 5 --Filenum 3 --Condition $timepointname; done
+
+# JUM (MULTI) step 6
+# apparently, you have to copy all the *junction_counts.txt and *formatted.txt files back to the .bam .bai .sj .sam folder ==''
+
+cd $bam_bai_SJ_and_sam_files_dir
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cp $timepointname"/"*"junction_counts.txt" ./; cp $timepointname"/"*"formatted.txt" ./; done
+
+# JUM (MULTI) step 7
+# process and sort each relevant .bam file to sorted .bed
+
+for replicatename in $(cat $replicate_name_list_BMonly); do bedtools bamtobed -i $replicatename"Aligned.out_sorted.bam" > $replicatename"Aligned.out.bed"; sort -k1,1 -k2,2n $replicatename"Aligned.out.bed" > $replicatename"Aligned.out.sorted.bed"; done
+
+# JUM (MULTI) step 8
+
+bash $jum_package_dir"JUM_A_multi_1.sh" --Folder $jum_package_dir --JuncThreshold 5 --fileNum_threshold 3 --IRthreshold 5 --Readlength 50 --Thread 10
+
+# JUM (MULTI) step 9
+# creating subdirectories for EACH TIMEPOINT for intron retention analyses
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do mkdir $timepointname"_IR"; done
+
+# JUM (MULTI) step 10
+# copying the *junction_counts_combined_intron_retention_event_list.txt into each IR subdirectory
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cp $timepointname*"junction_counts_combined_intron_retention_event_list.txt" $timepointname"_IR"; done
+
+# JUM (MULTI) step 11
+# running a perl script in each IR subdirectory
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cd $bam_bai_SJ_and_sam_files_dir$timepointname"_IR"; perl $jum_package_dir"Identify_intron_retention_event_exist_in_all_samples.pl" *junction_counts_combined_intron_retention_event_list.txt $timepointname"_junction_counts_intron_retention_in_all_replicates_list.txt" 3; done
+
+# JUM (MULTI) step 12
+# combining IR file outputs from step 11 and putting them back in the bam bai dj sam folder
+
+cd $bam_bai_SJ_and_sam_files_dir
+
+#recursive glob
+shopt -s globstar
+
+cat **/*junction_counts_intron_retention_in_all_replicates_list.txt > All_junction_counts_intron_retention_in_all_samples_sorted_list.txt
+
+# JUM (MULTI) step 13
+
+bash $jum_package_dir"JUM_A_multi_2.sh" --Folder $jum_package_dir --JuncThreshold 5 --fileNum_threshold 3 --IRthreshold 5 --Readlength 50 --Thread 10
+

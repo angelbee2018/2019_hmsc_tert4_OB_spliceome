@@ -1,0 +1,29 @@
+
+source_dir="/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/source/"
+results_dir="/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/"
+
+ref_gtf_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+# recon_gtf_path="/srv/scratch/z3463471/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+
+reference_genome_fasta_dir="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+
+# execution
+## Ensembl ref GTF
+(Rscript $source_dir"NMD_flagger.R" -R $ref_gtf_path -F $reference_genome_fasta_dir -D $results_dir -O Homo_sapiens.GRCh38.98_NMD_PTC_E4 -C 12 -S TRUE -H 1 -E 4 -V YES 2>&1 | tee $results_dir"Homo_sapiens.GRCh38.98_NMD_PTC_E4.log") &
+
+## Recon GTF
+(Rscript $source_dir"NMD_flagger.R" -R $recon_gtf_path -F $reference_genome_fasta_dir -D $results_dir -O alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4 -C 6 -S FALSE -H 1 -E 4 -V YES 2>&1 | tee $results_dir"alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.log") &
+
+# Poison exon finder ###
+# all PSI-Sigma exons
+(Rscript $source_dir"poison_exon_finder.R" -E "/mnt/Helium_8TB_1/2020_RNA_atlas/results/R_processing_results/tibble_unique_LIV_info_prepare_for_poison_exon_finder.txt" -I IR -R $ref_gtf_path -F $reference_genome_fasta_dir -D "/mnt/Helium_8TB_1/2020_RNA_atlas/results/R_processing_results/" -O tibble_unique_LIV_info_poison_exon_finder_annotated -C 32 -S ALWAYS -H 1 -V NO --chrmode 1 --output_fasta FALSE 2>&1 | tee "/mnt/Helium_8TB_1/2020_RNA_atlas/results/R_processing_results/tibble_unique_LIV_info_prepare_for_poison_exon_finder.log") &
+
+# katana ###
+
+module load R/3.6.1
+
+source_dir="/srv/scratch/z3463471/sandbox/source/"
+ref_gtf_path="/srv/scratch/z3463471/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+reference_genome_fasta_dir="/srv/scratch/z3463471/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+
+Rscript $source_dir"poison_exon_finder.R" -E "/srv/scratch/z3463471/sandbox/R_processing_results_dir/tibble_unique_LIV_info_prepare_for_poison_exon_finder.txt" -I IR -R $ref_gtf_path -F $reference_genome_fasta_dir -D "/srv/scratch/z3463471/sandbox/R_processing_results_dir/" -O tibble_unique_LIV_info_poison_exon_finder_annotated -C 56 -S ALWAYS -H 1 -V NO --chrmode 1 --output_fasta FALSE 2>&1 | tee "/srv/scratch/z3463471/sandbox/R_processing_results_dir/tibble_unique_LIV_info_prepare_for_poison_exon_finder.log"

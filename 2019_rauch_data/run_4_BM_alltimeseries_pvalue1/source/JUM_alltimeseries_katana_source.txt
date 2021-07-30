@@ -1,0 +1,179 @@
+#!/bin/bash
+
+#PBS -N JUM_BM_alltimeseries_pvalue1
+#PBS -l select=1:ncpus=10:mem=100gb
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -k eod
+#PBS -o /home/z3463471/2019_rauch_data/analysis_JUM/run_4_BM_alltimeseries_pvalue1/results/
+#PBS -M z3463471@ad.unsw.edu.au
+#PBS -m ae
+
+# language: timepoint = timepoint. replicate = technical replicate.
+
+module load samtools/1.9
+module load bedtools/2.27.1
+module load R/3.6.1
+module load perl/5.28.0
+
+data_dir="/srv/scratch/z3463471/2019_rauch_data/"
+
+bam_bai_SJ_and_sam_files_dir="/srv/scratch/z3463471/2019_rauch_data/bam_bai_sj_sam_files/BM_MSC/"
+
+# THIS CODE EXPECTS YOU TO HAVE PUT THE BAM BAI SJ SAM FILES INTO THE AFOREMENTIONED DIRECTORY BEFOREHAND
+# NOTE: DO NOT EVER PUT BAM BAI SJ SAM FILES THAT YOU ARE NOT GOING TO ANALYSE INTO THE FOLDER. THE PROGRAMS IS REALLY DUMB AND WILL ATTEMPT TO PROCESS THAT ANYWAYS BUT FAIL MISERABLY
+# expect that the bam bai sj sam files relevant to the analysis folder ONLY AND NOTHING ELSE is placed into this folder
+
+refFlat_dir="/srv/scratch/z3463471/hg38_ensembl_reference/"
+jum_package_dir="/home/z3463471/isoform_software/JUM_2.0.2/"
+source_dir="/home/z3463471/2019_rauch_data/analysis_JUM/run_4_BM_alltimeseries_pvalue1/source/"
+results_dir="/home/z3463471/2019_rauch_data/analysis_JUM/run_4_BM_alltimeseries_pvalue1/results/"
+sampleandaccessionlists="/home/z3463471/2019_rauch_data/"
+
+replicate_name_list_ATandBMonly=$sampleandaccessionlists"annotated_fastq_bulkRNASeq_names_underscore.txt"
+
+cd $bam_bai_SJ_and_sam_files_dir
+
+# JUM (MULTI) step 1
+# This will create in the working directory: *SJ.out.tab_strand_symbol_scaled, *_SJ_coor.txt, UNION_junc_coor.txt and UNION_junc_coor_with_junction_ID.txt
+
+bash $jum_package_dir"JUM_2-1.sh"
+
+# JUM (MULTI) step 2
+# goal: to create one subdirectory for each time-point
+
+# select only the names of the timepoints which are bone marrow-derived
+
+cat $replicate_name_list_ATandBMonly | grep BM_MSC > $results_dir"replicate_name_list_BMonly.txt"
+
+replicate_name_list_BMonly=$results_dir"replicate_name_list_BMonly.txt"
+
+cat $replicate_name_list_BMonly
+
+echo There are $(cat $replicate_name_list_BMonly | wc -l) replicates described.
+
+# generating text files of TIMEPOINT names to loop through
+
+sed -e 's/_r[0-9]_//g' $replicate_name_list_BMonly | sort -u > $results_dir"timepoint_name_list_BMonly.txt"
+
+timepoint_name_list_BMonly=$results_dir"timepoint_name_list_BMonly.txt"
+
+cat $timepoint_name_list_BMonly
+
+echo $(cat $timepoint_name_list_BMonly | wc -l) timepoints considered.
+
+# now creating subdirectory for each TIMEPOINT, the ${string//match/replacement} syntax is used to reduce the replicate names to timepoint names
+
+# for replicatename in $(cat $replicate_name_list_BMonly); do mkdir ${replicatename//_r*/}; done
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do mkdir $timepointname; done
+
+# JUM (MULTI) step 3 and 4
+# copying *SJ.out.tab_strand_symbol_scaled for each REPLICATE and UNION_junc_coor_with_junction_ID.txt into their respective TIMEPOINT folders
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cp $timepointname*"SJ.out.tab_strand_symbol_scaled" $timepointname"/"; cp UNION_junc_coor_with_junction_ID.txt $timepointname"/"; done
+
+# JUM (MULTI) step 5
+# running JUM-2-2.sh in each of the sample subdirectories
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cd $bam_bai_SJ_and_sam_files_dir$timepointname"/"; bash $jum_package_dir"JUM_2-2.sh" --Folder $jum_package_dir --Threshold 5 --Filenum 3 --Condition $timepointname; done
+
+# JUM (MULTI) step 6
+# apparently, you have to copy all the *junction_counts.txt and *formatted.txt files back to the .bam .bai .sj .sam folder ==''
+
+cd $bam_bai_SJ_and_sam_files_dir
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cp $timepointname"/"*"junction_counts.txt" ./; cp $timepointname"/"*"formatted.txt" ./; done
+
+# JUM (MULTI) step 7
+# process and sort each relevant .bam file to sorted .bed
+
+for replicatename in $(cat $replicate_name_list_BMonly); do bedtools bamtobed -i $replicatename"Aligned.out_sorted.bam" > $replicatename"Aligned.out.bed"; sort -k1,1 -k2,2n $replicatename"Aligned.out.bed" > $replicatename"Aligned.out.sorted.bed"; done
+
+# JUM (MULTI) step 8
+
+bash $jum_package_dir"JUM_A_multi_1_edited.sh" --Folder $jum_package_dir --JuncThreshold 5 --fileNum_threshold 3 --IRthreshold 5 --Readlength 50 --Thread 10
+
+# JUM (MULTI) step 9
+# creating subdirectories for EACH TIMEPOINT for intron retention analyses
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do mkdir $timepointname"_IR"; done
+
+# JUM (MULTI) step 10
+# copying the *junction_counts_combined_intron_retention_event_list.txt into each IR subdirectory
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cp $timepointname*"junction_counts_combined_intron_retention_event_list.txt" $timepointname"_IR"; done
+
+# JUM (MULTI) step 11
+# running a perl script in each IR subdirectory
+
+for timepointname in $(cat $timepoint_name_list_BMonly); do cd $bam_bai_SJ_and_sam_files_dir$timepointname"_IR"; perl $jum_package_dir"Identify_intron_retention_event_exist_in_all_samples.pl" *junction_counts_combined_intron_retention_event_list.txt $timepointname"_junction_counts_intron_retention_in_all_replicates_list.txt" 3; done
+
+# JUM (MULTI) step 12
+# combining IR file outputs from step 11 and putting them back in the bam bai dj sam folder
+
+cd $bam_bai_SJ_and_sam_files_dir
+
+#recursive glob
+shopt -s globstar
+
+cat **/*junction_counts_intron_retention_in_all_replicates_list.txt > All_junction_counts_intron_retention_in_all_samples_sorted_list.txt
+
+# JUM (MULTI) step 13
+
+bash $jum_package_dir"JUM_A_multi_2_edited.sh" --Folder $jum_package_dir --JuncThreshold 5 --fileNum_threshold 3 --IRthreshold 5 --Readlength 50 --Thread 10
+
+# JUM (MULTI) step 14a
+
+## FIRST, AN R SCRIPT TO GENERATE THE COMBINATION NAMES OF THE PAIRWISE COMPARISONS BETWEEN TIMEPOINTS.
+
+Rscript $source_dir"generatingpairwisecomparisonlist.R" $sampleandaccessionlists $results_dir $timepoint_name_list_BMonly
+
+# BACK TO BASH
+## CREATING SUBDIRECTORIES FOR EACH PAIRWISE COMPARISON UNDER THE JUM_DIFF FOLDER
+### Steps required: 1. create a directory for a comparison (31 in total for example), 2. COPY(small)/MOVE(large) 6 different types of relevant analysis files to the folder, 3. execute steps 14-15 in each comparison subdirectory, 4. move the common files back to the original folder, and keep/remove the uncommon files to finally, 5. repeat all the aforementioned for the next comparison until all comparisons are exhausted.
+
+JUM_diff_dir=$bam_bai_SJ_and_sam_files_dir"JUM_diff/"
+
+cd $JUM_diff_dir
+
+list_of_timepoint_comparisons_final=$results_dir"list_of_timepoint_comparisons_final.txt"
+
+for comparisonname in $(cat $list_of_timepoint_comparisons_final); do mkdir $comparisonname; done
+
+# BACK TO R
+## CREATION OF THE EXPERIMENT_DESIGN.TXT FILES FOR EACH COMPARISON
+
+Rscript $source_dir"generatingexperiment_designfilesforeachcomparison.R" $sampleandaccessionlists $results_dir $timepoint_name_list_BMonly $list_of_timepoint_comparisons_final $JUM_diff_dir
+
+# BACK TO BASH: JUM(MULTI) step 14b and 15
+# running the R script
+## move the 6 file classes into their respective comparison-specific directories and run step 14
+
+cd $JUM_diff_dir
+
+# run the R script and JUM_B in each comparison subdirectory, and move the big *coverage.bed files back to where they came from
+
+for comparisonname in $(cat $list_of_timepoint_comparisons_final); do cd $JUM_diff_dir; mv $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1*coverage.bed/g') $comparisonname"/"; cp $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1*combined_count.txt/g') $comparisonname"/"; mv $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\3*coverage.bed/g') $comparisonname"/"; cp $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\3*combined_count.txt/g') $comparisonname"/"; cp UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt $comparisonname"/"; cp more_than_5_profiled_total_AS_event_junction_first_processing_for_JUM_reference_building.txt $comparisonname"/"; cp combined_AS_JUM.gff $comparisonname"/"; cd $JUM_diff_dir$comparisonname"/"; Rscript $jum_package_dir"R_script_JUM_updated.R" experiment_design.txt > outputFile.Rout 2> errorFile.Rout; bash $jum_package_dir"JUM_B.sh" --Folder $jum_package_dir --Test pvalue --Cutoff 1 --TotalFileNum 6 --Condition1_fileNum_threshold 3 --Condition2_fileNum_threshold 3 --Condition1SampleName $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1_r1_,\1_r2_,\1_r3_/g') --Condition2SampleName $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\3_r1_,\3_r2_,\3_r3_/g'); rm -rf temp_JUM_B_run_pvalue_1; mv *coverage.bed ../; done
+
+# JUM (MULTI) step 16
+
+for comparisonname in $(cat $list_of_timepoint_comparisons_final); do cd $JUM_diff_dir$comparisonname"/FINAL_JUM_OUTPUT_pvalue_1/"; bash $jum_package_dir"JUM_C.sh" --Folder $jum_package_dir --Test pvalue --Cutoff 1 --TotalCondition1FileNum 3 --TotalCondition2FileNum 3 --REF $refFlat_dir"refFlat.txt"; done
+
+# CLEANUP
+
+## deleting temp folders for each of the three main JUM steps
+
+rm -rf $bam_bai_SJ_and_sam_files_dir"temp_JUM_A_run"
+
+for comparisonname in $(cat $list_of_timepoint_comparisons_final); do cd $JUM_diff_dir$comparisonname; rm -rf temp_JUM_B_run_pvalue_1; done
+
+for comparisonname in $(cat $list_of_timepoint_comparisons_final); do cd $JUM_diff_dir$comparisonname"/FINAL_JUM_OUTPUT_pvalue_1/"; rm -rf temp_JUM_C_run; done
+
+## transferring final input folders to results_dir
+
+for comparisonname in $(cat $list_of_timepoint_comparisons_final); do mkdir $results_dir"final_JUM_output_"$comparisonname"/"; cp $JUM_diff_dir$comparisonname"/FINAL_JUM_OUTPUT_pvalue_1/"* $results_dir"final_JUM_output_"$comparisonname"/"; done
+
+## delete the JUM_diff folder
+
+rm -rf $JUM_diff_dir

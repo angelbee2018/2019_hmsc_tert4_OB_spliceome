@@ -1,0 +1,59 @@
+# specify directories
+## this contains all the folders of each sample
+fastq_gz_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq_gz/"
+fastq_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq/"
+
+fastqc_path="/mnt/LTS/tools/fastqc_0.11.9/fastqc"
+
+psisigma_dir="/mnt/LTS/tools/psisigma_1.9r/"
+
+trimmomatic_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/1_trimmomatic/"
+star_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/2_star/"
+psisigma_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/3_psisigma/"
+mkdir -p $psisigma_output_dir
+
+source_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/source/"
+results_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/results/"
+
+sorted_gtf_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.sorted.gtf"
+
+export PATH=$PATH:/home/angel/perl5/lib/perl5/x86_64-linux-thread-multi:/home/angel/perl5/lib/perl5/x86_64-linux-thread-multi/PDL:/home/angel/perl5/lib/perl5
+export PERL5LIB=/home/angel/perl5/lib/perl5/x86_64-linux-thread-multi:/home/angel/perl5/lib/perl5/x86_64-linux-thread-multi/PDL:/home/angel/perl5/lib/perl5
+
+ulimit -n 65535
+
+conda activate psisigma
+
+export PATH=/home/angel/miniconda3/bin:/home/angel/miniconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/angel/lib/perl5/x86_64-linux-thread-multi:/home/angel/lib/perl5/x86_64-linux-thread-multi/PDL:/home/angel/perl5/lib/perl5:/home/angel/lib/perl5/x86_64-linux-thread-multi:/home/angel/lib/perl5/x86_64-linux-thread-multi/PDL:/home/angel/perl5/lib/perl5echo:/usr/local/share/perl/5.30.0:/usr/local/bin
+
+export PERL5LIB=/home/angel/lib/perl5/x86_64-linux-thread-multi:/home/angel/lib/perl5/x86_64-linux-thread-multi/PDL:/home/angel/perl5/lib/perl5:/usr/local/share/perl/5.30.0:/usr/local/bin
+
+cd $psisigma_output_dir
+
+mkdir LGMN_OE_minus_ctrl
+mkdir LGMN_KD_minus_ctrl
+
+ln -s $star_output_dir"T4_LGMN"*".bam"* LGMN_OE_minus_ctrl/
+ln -s $star_output_dir"T4_LGMN"*".SJ.out.tab" LGMN_OE_minus_ctrl/
+ln -s $star_output_dir"T4_pBabe"*".bam"* LGMN_OE_minus_ctrl/
+ln -s $star_output_dir"T4_pBabe"*".SJ.out.tab" LGMN_OE_minus_ctrl/
+ls $star_output_dir"T4_pBabe"*".bam" | sed "s|$star_output_dir||g" > LGMN_OE_minus_ctrl/groupa.txt
+ls $star_output_dir"T4_LGMN"*".bam" | sed "s|$star_output_dir||g" > LGMN_OE_minus_ctrl/groupb.txt
+
+ln -s $star_output_dir"T4_shCtrl"*".bam"* LGMN_KD_minus_ctrl/
+ln -s $star_output_dir"T4_shCtrl"*".SJ.out.tab" LGMN_KD_minus_ctrl/
+ln -s $star_output_dir"T4_shLGMN"*".bam"* LGMN_KD_minus_ctrl/
+ln -s $star_output_dir"T4_shLGMN"*".SJ.out.tab" LGMN_KD_minus_ctrl/
+ls $star_output_dir"T4_shCtrl"*".bam" | sed "s|$star_output_dir||g" > LGMN_KD_minus_ctrl/groupa.txt
+ls $star_output_dir"T4_shLGMN"*".bam" | sed "s|$star_output_dir||g" > LGMN_KD_minus_ctrl/groupb.txt
+
+cd $psisigma_output_dir"LGMN_OE_minus_ctrl/"; \
+perl $psisigma_dir"dummyai.pl" --gtf $sorted_gtf_path --name LGMN_OE_minus_ctrl --type 1 --fmode 3 --nread 1 --irmode 0 --denominator 1 --adjp 0 &
+
+cd $psisigma_output_dir"LGMN_KD_minus_ctrl/"; \
+perl $psisigma_dir"dummyai.pl" --gtf $sorted_gtf_path --name LGMN_KD_minus_ctrl --type 1 --fmode 3 --nread 1 --irmode 0 --denominator 1 --adjp 0 &
+
+
+
+
+

@@ -15,6 +15,9 @@ library(Sierra)
 library(Seurat)
 library(patchwork)
 library(sctransform)
+library(SeuratWrappers)
+library(monocle)
+library(monocle3)
 
 library(furrr)
 options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
@@ -55,21 +58,20 @@ library(tidyverse)
 
 OBseries_timepoints <- c("BM_MSC_to_OB_ud", "BM_MSC_to_OB_7d")
 
-# shared_dir <- "/media/Ubuntu/sharedfolder/"
-shared_dir <- "/mnt/Tertiary/sharedfolder/"
+reference_data_dir <- "/mnt/LTS/reference_data/"
 
-R_processing_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/"
+R_processing_results_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_scRNAseq/R_processing_results/seurat/"
 # R_processing_results_dir <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_scRNAseq/R_processing_results/"
 
-sierra_output_dir <- paste(R_processing_results_dir, "sierra/", sep = "")
-
-if(! dir.exists(sierra_output_dir) ) {
-     dir.create(sierra_output_dir, recursive = TRUE)}
-
-seurat_output_dir <- paste(R_processing_results_dir, "seurat/", sep = "")
-
-if(! dir.exists(seurat_output_dir) ) {
-     dir.create(seurat_output_dir, recursive = TRUE)}
+# sierra_output_dir <- paste(R_processing_results_dir, "sierra/", sep = "")
+# 
+# if(! dir.exists(sierra_output_dir) ) {
+#      dir.create(sierra_output_dir, recursive = TRUE)}
+# 
+# R_processing_results_dir <- paste(R_processing_results_dir, "seurat/", sep = "")
+# 
+# if(! dir.exists(R_processing_results_dir) ) {
+#      dir.create(R_processing_results_dir, recursive = TRUE)}
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
@@ -78,10 +80,10 @@ if(! dir.exists(seurat_output_dir) ) {
 # tibble_ref_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged_exon.only_with_first.last_NMD_E4.gtf") %>% as_tibble
 
-hg38.98_ensembl_gtf_path <- "/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38_cellranger.gtf"
+hg38.98_ensembl_gtf_path <- "/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38_cellranger.gtf"
 # hg38.98_ensembl_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38_cellranger.gtf"
 
-cellranger_output_dir <- "/mnt/4tb_ironwolf/2019_rauch_data/scRNASeq/cellranger_results/"
+cellranger_output_dir <- "/mnt/LTS/data/2019_rauch_data/scRNASeq/cellranger_results/"
 # cellranger_output_dir <- "/media/sbi/4tb_ironwolf/2019_rauch_data/scRNASeq/cellranger_results/"
 
 ```
@@ -742,7 +744,37 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
 
 ```
 
+# Monocle Pipeline
 
+```{r}
+
+library(monocle)
+library(monocle3)
+library(cellrangerRkit)
+
+# load dataset
+list_cellrangerRkit_imported_cellranger_results_per_timepoint <- purrr::map(.x = OBseries_timepoints, 
+                                                                            .f = ~cellrangerRkit::load_cellranger_matrix( paste(cellranger_output_dir, .x, sep = ""))) %>% 
+  set_names(OBseries_timepoints)
+
+cellranger_pipestance_path <- "/path/to/your/pipeline/output/directory"
+test <- load_cellranger_matrix(cellranger_pipestance_path)
+
+fd <- fData(gbm)
+
+# The number 2 is picked arbitrarily in the line below.
+# Where "2" is placed you should place the column number that corresponds to your
+# featureData's gene short names.
+
+colnames(fd)[2] <- "gene_short_name"
+
+gbm_cds <- newCellDataSet(exprs(gbm),
+                          phenoData = new("AnnotatedDataFrame", data = pData(gbm)),
+                          featureData = new("AnnotatedDataFrame", data = fd),
+                          lowerDetectionLimit = 0.5,
+                          expressionFamily = negbinomial.size())
+
+```
 
 
 # Seurat Pipeline
@@ -750,6 +782,8 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
 ## Set-up the Seurat object
 
 ```{r}
+
+library(Seurat)
 
 # load dataset
 list_seurat_imported_cellranger_results_per_timepoint <- purrr::map(.x = OBseries_timepoints, 
@@ -780,24 +814,24 @@ table(seurat_object_combined_raw$orig.ident)
 
 seurat_object_combined_QC <- seurat_object_combined_raw
 
-seurat_object_combined_QC[["percent.features_MT"]] <- PercentageFeatureSet(seurat_object_combined_QC, pattern = "^MT-")
+seurat_object_combined_QC[["percent.features_MT"]] <- Seurat::PercentageFeatureSet(seurat_object_combined_QC, pattern = "^MT-")
 
 # print a snippet of the %MT metadata
 print(head(seurat_object_combined_QC@meta.data, n = 5))
 
 # plot the %MT metadata
-pdf(paste(seurat_output_dir, "quality_violinplot_MT_features_combined_raw.pdf", sep = ""), width = 25, height = 15)
-VlnPlot(seurat_object_combined_QC, features = c("nFeature_RNA", "nCount_RNA", "percent.features_MT"), ncol = 3)
+pdf(paste(R_processing_results_dir, "quality_violinplot_MT_features_combined_raw.pdf", sep = ""), width = 25, height = 15)
+  Seurat::VlnPlot(seurat_object_combined_QC, features = c("nFeature_RNA", "nCount_RNA", "percent.features_MT"), ncol = 3)
 dev.off()
 
 # plot the feature and RNA count behaviour as a function of percentage MT features per cell
-plot_qc_nCount.RNA_vs_percentMT <- FeatureScatter(seurat_object_combined_QC, feature1 = "nCount_RNA", feature2 = "percent.features_MT", span = 0.75)
-plot_qc_nFeature.RNA_vs_percentMT <- FeatureScatter(seurat_object_combined_QC, feature1 = "nFeature_RNA", feature2 = "percent.features_MT", span = 0.75)
-plot_qc_nCount.RNA_vs_nFeature.RNA <- FeatureScatter(seurat_object_combined_QC, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", span = 0.75)
+plot_qc_nCount.RNA_vs_percentMT <- Seurat::FeatureScatter(seurat_object_combined_QC, feature1 = "nCount_RNA", feature2 = "percent.features_MT", span = 0.75)
+plot_qc_nFeature.RNA_vs_percentMT <- Seurat::FeatureScatter(seurat_object_combined_QC, feature1 = "nFeature_RNA", feature2 = "percent.features_MT", span = 0.75)
+plot_qc_nCount.RNA_vs_nFeature.RNA <- Seurat::FeatureScatter(seurat_object_combined_QC, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", span = 0.75)
 
 # facet plot
-pdf(paste(seurat_output_dir, "quality_scatterplot_MT_features_behaviour_combined_raw.pdf", sep = ""), width = 25, height = 8)
-plot_qc_nCount.RNA_vs_percentMT + plot_qc_nFeature.RNA_vs_percentMT + plot_qc_nCount.RNA_vs_nFeature.RNA
+pdf(paste(R_processing_results_dir, "quality_scatterplot_MT_features_behaviour_combined_raw.pdf", sep = ""), width = 25, height = 8)
+  plot_qc_nCount.RNA_vs_percentMT + plot_qc_nFeature.RNA_vs_percentMT + plot_qc_nCount.RNA_vs_nFeature.RNA
 dev.off()
 
 ```
@@ -809,8 +843,9 @@ We filter out mitochondrial % > 15% for MSCs, and > 25% for differentiating OBs,
 ```{r}
 
 # SCT
-plan(strategy = "multicore", workers = 7)
-seurat_object_combined_SCT <- SCTransform(seurat_object_combined_QC, vars.to.regress = "percent.features_MT", verbose = TRUE)
+future::plan(strategy = "multicore", workers = 16)
+
+seurat_object_combined_SCT <- Seurat::SCTransform(seurat_object_combined_QC, vars.to.regress = "percent.features_MT", verbose = TRUE)
 
 seurat_object_combined_filtered <- subset(seurat_object_combined_SCT, subset = 
                                                  (orig.ident == "BM_MSC_to_OB_ud" & nCount_RNA > 2500 & nCount_RNA < 60000 & nFeature_RNA > 200 & nFeature_RNA < 6500 & percent.features_MT < 15 & percent.features_MT > 1)|
@@ -820,18 +855,29 @@ seurat_object_combined_filtered <- subset(seurat_object_combined_SCT, subset =
 table(seurat_object_combined_filtered$orig.ident)
 
 # plot the %MT metadata
-pdf(paste(seurat_output_dir, "quality_violinplot_MT_features_combined_filtered.pdf", sep = ""), width = 25, height = 15)
-  VlnPlot(seurat_object_combined_filtered, features = c("nFeature_RNA", "nCount_RNA", "percent.features_MT"), ncol = 3)
-  dev.off()
+pdf(paste(R_processing_results_dir, "quality_violinplot_MT_features_combined_filtered.pdf", sep = ""), width = 25, height = 15)
+  Seurat::VlnPlot(seurat_object_combined_filtered, features = c("nFeature_RNA", "nCount_RNA", "percent.features_MT"), ncol = 3)
+dev.off()
 
 # plot the feature and RNA count behaviour as a function of percentage MT features per cell
-plot_qc_nCount.RNA_vs_percentMT <- FeatureScatter(seurat_object_combined_filtered, feature1 = "nCount_RNA", feature2 = "percent.features_MT", span = 0.75)
-plot_qc_nFeature.RNA_vs_percentMT <- FeatureScatter(seurat_object_combined_filtered, feature1 = "nFeature_RNA", feature2 = "percent.features_MT", span = 0.75)
-plot_qc_nCount.RNA_vs_nFeature.RNA <- FeatureScatter(seurat_object_combined_filtered, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", span = 0.75)
+pdf(paste(R_processing_results_dir, "seurat_plot_qc_nCount.RNA_vs_percentMT.pdf", sep = ""), width = 25, height = 15)
+  plot_qc_nCount.RNA_vs_percentMT <- Seurat::FeatureScatter(seurat_object_combined_filtered, feature1 = "nCount_RNA", feature2 = "percent.features_MT", span = 0.75)
+dev.off()
+
+pdf(paste(R_processing_results_dir, "seurat_plot_qc_nFeature.RNA_vs_percentMT.pdf", sep = ""), width = 25, height = 15)
+  plot_qc_nFeature.RNA_vs_percentMT <- Seurat::FeatureScatter(seurat_object_combined_filtered, feature1 = "nFeature_RNA", feature2 = "percent.features_MT", span = 0.75)
+dev.off()
+
+pdf(paste(R_processing_results_dir, "seurat_plot_qc_nCount.RNA_vs_nFeature.RNA.pdf", sep = ""), width = 25, height = 15)
+  plot_qc_nCount.RNA_vs_nFeature.RNA <- Seurat::FeatureScatter(seurat_object_combined_filtered, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", span = 0.75)
+dev.off()
+
+
+
 
 # facet plot
-pdf(paste(seurat_output_dir, "quality_scatterplot_MT_features_behaviour_combined_filtered.pdf", sep = ""), width = 25, height = 8)
-plot_qc_nCount.RNA_vs_percentMT + plot_qc_nFeature.RNA_vs_percentMT + plot_qc_nCount.RNA_vs_nFeature.RNA
+pdf(paste(R_processing_results_dir, "quality_scatterplot_MT_features_behaviour_combined_filtered.pdf", sep = ""), width = 25, height = 8)
+  plot_qc_nCount.RNA_vs_percentMT + plot_qc_nFeature.RNA_vs_percentMT + plot_qc_nCount.RNA_vs_nFeature.RNA
 dev.off()
 
 ```
@@ -840,36 +886,304 @@ dev.off()
 
 ```{r}
 
-seurat_object_combined_filtered <- RunPCA(seurat_object_combined_filtered, verbose = FALSE)
-seurat_object_combined_filtered <- RunUMAP(seurat_object_combined_filtered, dims = 1:30, verbose = FALSE)
-seurat_object_combined_filtered <- RunTSNE(seurat_object_combined_filtered, dims = 1:30, verbose = FALSE)
+seurat_object_combined_filtered <- Seurat::RunPCA(seurat_object_combined_filtered, verbose = FALSE)
+seurat_object_combined_filtered <- Seurat::RunUMAP(seurat_object_combined_filtered, dims = 1:30, verbose = FALSE)
+seurat_object_combined_filtered <- Seurat::RunTSNE(seurat_object_combined_filtered, dims = 1:30, verbose = FALSE)
 
-seurat_object_combined_filtered <- FindNeighbors(seurat_object_combined_filtered, dims = 1:30, verbose = FALSE)
-seurat_object_combined_filtered <- FindClusters(seurat_object_combined_filtered, verbose = FALSE)
+seurat_object_combined_filtered <- Seurat::FindNeighbors(seurat_object_combined_filtered, dims = 1:30, verbose = FALSE)
+seurat_object_combined_filtered <- Seurat::FindClusters(seurat_object_combined_filtered, verbose = FALSE)
 
 DimPlot(seurat_object_combined_filtered, reduction = "pca", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
   ggtitle("PCA") +
   labs(colour = "Cluster") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(seurat_output_dir, "PCA_seurat_SCT_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
- ggsave(filename = paste(seurat_output_dir, "PCA_seurat_SCT_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "PCA_seurat_SCT_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "PCA_seurat_SCT_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
-DimPlot(seurat_object_combined_filtered, reduction = "umap", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
+Seurat::DimPlot(seurat_object_combined_filtered, reduction = "umap", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
   ggtitle("UMAP") +
   labs(colour = "Cluster") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
- ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
-DimPlot(seurat_object_combined_filtered, reduction = "tsne", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
+Seurat::DimPlot(seurat_object_combined_filtered, reduction = "tsne", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
   ggtitle("t-SNE") +
   labs(colour = "Cluster") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(seurat_output_dir, "tSNE_seurat_SCT_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
- ggsave(filename = paste(seurat_output_dir, "tSNE_seurat_SCT_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+Seurat::DimPlot(seurat_object_combined_filtered, group.by = "orig.ident", reduction = "umap") +
+  scale_colour_manual(values = c("#8b92a5", "#ecce82"), breaks = c("BM_MSC_to_OB_ud", "BM_MSC_to_OB_7d")) +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_timepoint_legend.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_timepoint_legend.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+Seurat::DimPlot(seurat_object_combined_filtered, group.by = "orig.ident", reduction = "tsne") +
+  scale_colour_manual(values = c("#8b92a5", "#ecce82"), breaks = c("BM_MSC_to_OB_ud", "BM_MSC_to_OB_7d")) +
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_timepoint_legend.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_timepoint_legend.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+```
+
+## Trajectory inference using monocle
+
+```{r}
+
+###
+newimport <- function(otherCDS, import_all = FALSE) {
+  if(class(otherCDS)[1] == 'Seurat') {
+    requireNamespace("Seurat")
+    data <- otherCDS@assays$RNA@counts
+
+    if(class(data) == "data.frame") {
+      data <- as(as.matrix(data), "sparseMatrix")
+    }
+
+    pd <- tryCatch( {
+      pd <- new("AnnotatedDataFrame", data = otherCDS@meta.data)
+      pd
+    }, 
+    #warning = function(w) { },
+    error = function(e) { 
+      pData <- data.frame(cell_id = colnames(data), row.names = colnames(data))
+      pd <- new("AnnotatedDataFrame", data = pData)
+
+      message("This Seurat object doesn't provide any meta data");
+      pd
+    })
+
+    # remove filtered cells from Seurat
+    if(length(setdiff(colnames(data), rownames(pd))) > 0) {
+      data <- data[, rownames(pd)]  
+    }
+
+    fData <- data.frame(gene_short_name = row.names(data), row.names = row.names(data))
+    fd <- new("AnnotatedDataFrame", data = fData)
+    lowerDetectionLimit <- 0
+
+    if(all(data == floor(data))) {
+      expressionFamily <- negbinomial.size()
+    } else if(any(data < 0)){
+      expressionFamily <- uninormal()
+    } else {
+      expressionFamily <- tobit()
+    }
+
+    valid_data <- data[, row.names(pd)]
+
+    monocle_cds <- newCellDataSet(data,
+                                  phenoData = pd, 
+                                  featureData = fd,
+                                  lowerDetectionLimit=lowerDetectionLimit,
+                                  expressionFamily=expressionFamily)
+
+    if(import_all) {
+      if("Monocle" %in% names(otherCDS@misc)) {
+        otherCDS@misc$Monocle@auxClusteringData$seurat <- NULL
+        otherCDS@misc$Monocle@auxClusteringData$scran <- NULL
+
+        monocle_cds <- otherCDS@misc$Monocle
+        mist_list <- otherCDS
+
+      } else {
+        # mist_list <- list(ident = ident) 
+        mist_list <- otherCDS
+      }
+    } else {
+      mist_list <- list()
+    }
+
+    if(1==1) {
+      var.genes <- setOrderingFilter(monocle_cds, otherCDS@assays$RNA@var.features)
+
+    }
+    monocle_cds@auxClusteringData$seurat <- mist_list
+
+  } else if (class(otherCDS)[1] == 'SCESet') {
+    requireNamespace("scater")
+
+    message('Converting the exprs data in log scale back to original scale ...')    
+    data <- 2^otherCDS@assayData$exprs - otherCDS@logExprsOffset
+
+    fd <- otherCDS@featureData
+    pd <- otherCDS@phenoData
+    experimentData = otherCDS@experimentData
+    if("is.expr" %in% slotNames(otherCDS))
+      lowerDetectionLimit <- otherCDS@is.expr
+    else 
+      lowerDetectionLimit <- 1
+
+    if(all(data == floor(data))) {
+      expressionFamily <- negbinomial.size()
+    } else if(any(data < 0)){
+      expressionFamily <- uninormal()
+    } else {
+      expressionFamily <- tobit()
+    }
+
+    if(import_all) {
+      # mist_list <- list(iotherCDS@sc3,
+      #                   otherCDS@reducedDimension)
+      mist_list <- otherCDS 
+
+    } else {
+      mist_list <- list()
+    }
+
+    monocle_cds <- newCellDataSet(data,
+                                  phenoData = pd, 
+                                  featureData = fd,
+                                  lowerDetectionLimit=lowerDetectionLimit,
+                                  expressionFamily=expressionFamily)
+    # monocle_cds@auxClusteringData$sc3 <- otherCDS@sc3
+    # monocle_cds@auxOrderingData$scran <- mist_list
+
+    monocle_cds@auxOrderingData$scran <- mist_list
+
+  } else {
+    stop('the object type you want to export to is not supported yet')
+  }
+
+  return(monocle_cds)
+}
+
+test <- newimport(seurat_object_combined_filtered)
+
+
+test@assayData[["exprs"]] %>% as_tibble(rownames = "gene_symbol")
+
+HSMM <- newCellDataSet(as.matrix(test@assayData[["exprs"]]),
+    phenoData = pd, featureData = fd)
+
+diff_test_res <- differentialGeneTest(test@assayData[["exprs"]],
+              fullModelFormulaStr = "~Media")
+
+ordering_genes <- row.names (subset(diff_test_res, qval < 0.01))
+
+```
+
+```{r}
+
+# library(monocle)
+library(monocle3)
+
+# regress out the cell cycle effect
+## detection
+seurat_object_combined_filtered <- CellCycleScoring(seurat_object_combined_filtered, s.features = cc.genes$s.genes, g2m.features = cc.genes$g2m.genes, set.ident = TRUE)
+
+RidgePlot(seurat_object_combined_filtered, features = c("PCNA", "TOP2A", "MCM6", "MKI67"), ncol = 2)
+
+seurat_object_combined_filtered <- RunPCA(seurat_object_combined_filtered, features = c(cc.genes$s.genes, cc.genes$g2m.genes))
+
+pdf(file = paste(R_processing_results_dir, "seurat_UMAP_coloured_by_cell_cycle.pdf", sep = ""))
+  Seurat::DimPlot(seurat_object_combined_filtered)
+dev.off()
+
+## regression
+seurat_object_combined_filtered_nocellcycle <- ScaleData(seurat_object_combined_filtered, vars.to.regress = c("S.Score", "G2M.Score"), features = rownames(seurat_object_combined_filtered))
+
+seurat_object_combined_filtered_nocellcycle <- Seurat::RunPCA(seurat_object_combined_filtered_nocellcycle, verbose = FALSE)
+seurat_object_combined_filtered_nocellcycle <- Seurat::RunUMAP(seurat_object_combined_filtered_nocellcycle, dims = 1:30, verbose = FALSE)
+seurat_object_combined_filtered_nocellcycle <- Seurat::RunTSNE(seurat_object_combined_filtered_nocellcycle, dims = 1:30, verbose = FALSE)
+
+seurat_object_combined_filtered_nocellcycle <- Seurat::FindNeighbors(seurat_object_combined_filtered_nocellcycle, dims = 1:30, verbose = FALSE)
+seurat_object_combined_filtered_nocellcycle <- Seurat::FindClusters(seurat_object_combined_filtered_nocellcycle, verbose = FALSE)
+
+DimPlot(seurat_object_combined_filtered_nocellcycle, reduction = "pca", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
+  ggtitle("PCA") +
+  labs(colour = "Cluster") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "PCA_seurat_SCT_filtered_nocellcycle.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "PCA_seurat_SCT_filtered_nocellcycle.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+Seurat::DimPlot(seurat_object_combined_filtered_nocellcycle, reduction = "umap", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
+  ggtitle("UMAP") +
+  labs(colour = "Cluster") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_nocellcycle.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_nocellcycle.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+Seurat::DimPlot(seurat_object_combined_filtered_nocellcycle, reduction = "tsne", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
+  ggtitle("t-SNE") +
+  labs(colour = "Cluster") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_nocellcycle.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_nocellcycle.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+Seurat::DimPlot(seurat_object_combined_filtered_nocellcycle, group.by = "orig.ident", reduction = "umap") +
+  scale_colour_manual(values = c("#8b92a5", "#ecce82"), breaks = c("BM_MSC_to_OB_ud", "BM_MSC_to_OB_7d")) +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_nocellcycle_timepoint_legend.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_nocellcycle_timepoint_legend.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+Seurat::DimPlot(seurat_object_combined_filtered_nocellcycle, group.by = "orig.ident", reduction = "tsne") +
+  scale_colour_manual(values = c("#8b92a5", "#ecce82"), breaks = c("BM_MSC_to_OB_ud", "BM_MSC_to_OB_7d")) +
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_nocellcycle_timepoint_legend.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_nocellcycle_timepoint_legend.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+
+cell_data_set_object_combined_filtered_nocellcycle <- as.cell_data_set(seurat_object_combined_filtered_nocellcycle)
+cell_data_set_object_combined_filtered_nocellcycle <- cluster_cells(cds = cell_data_set_object_combined_filtered_nocellcycle, reduction_method = "UMAP")
+cell_data_set_object_combined_filtered_nocellcycle <- learn_graph(cell_data_set_object_combined_filtered_nocellcycle, use_partition = TRUE)
+
+rowData(cell_data_set_object_combined_filtered_nocellcycle)$gene_name <- rownames(cell_data_set_object_combined_filtered_nocellcycle)
+rowData(cell_data_set_object_combined_filtered_nocellcycle)$gene_short_name <- rowData(cell_data_set_object_combined_filtered_nocellcycle)$gene_name
+
+# check if cell names in the cluster mapping is unchanged. 
+# if equal, replace monocle UMAP clusters with seurat UMAP clusters **BEFORE cell cycle regression**
+if (purrr::map2(
+  .x = cell_data_set_object_combined_filtered_nocellcycle@clusters$UMAP$clusters %>% names, 
+  .y = seurat_object_combined_filtered$seurat_clusters %>% names,
+  .f = ~.x == .y) %>% unlist %>% all == TRUE) {
+  
+  cell_data_set_object_combined_filtered_nocellcycle@clusters$UMAP$clusters <- seurat_object_combined_filtered$seurat_clusters
+  
+}
+
+pdf(file = paste(R_processing_results_dir, "monocle_UMAP_original_seurat_clusters.pdf", sep = ""), width = 8, height = 8)
+  plot_cells(cell_data_set_object_combined_filtered_nocellcycle, label_groups_by_cluster = TRUE, label_leaves = FALSE, label_branch_points = FALSE, group_label_size = 10, cell_size = 1.2)
+dev.off()
+
+pdf(file = paste(R_processing_results_dir, "monocle_UMAP_timepoint_legend.pdf", sep = ""), width = 8, height = 8)
+  # Seurat::DimPlot(trajectory_integrated.sub, label = TRUE, label.size = 16, pt.size = 1, group.by = c("orig.ident", "ident"))
+  
+  plot_cells(cell_data_set_object_combined_filtered_nocellcycle, color_cells_by = "orig.ident", label_groups_by_cluster = TRUE, label_leaves = FALSE, label_branch_points = FALSE, group_label_size = 1, cell_size = 1.2)
+dev.off()
+
+plot_cells(cell_data_set_object_combined_filtered_nocellcycle, group_label_size = 10, genes = c("ALPL", "ZBTB16"))
+
+# tally partition membership
+test <- cell_data_set_object_combined_filtered_nocellcycle@clusters$UMAP$clusters %>% tibble::enframe(name = "cell_origin", value = "cluster")
+test$cell_origin <- gsub(x = test$cell_origin, pattern = "(.*)_([^\\-]+)\\-.*", replacement = "\\1")
+test %>% 
+  dplyr::group_by(cell_origin, cluster) %>%
+  dplyr::summarise("tally" = n()) %>% 
+  dplyr::arrange(cluster)
+
+# cell_data_set_object_combined_filtered_nocellcycle <- order_cells(cell_data_set_object_combined_filtered_nocellcycle, reduction_method = "UMAP")
+
+trajectory_integrated.sub <- subset(as.Seurat(cell_data_set_object_combined_filtered_nocellcycle), monocle3_partitions == 1)
+
+cell_data_set_object_combined_filtered_nocellcycle <- order_cells(
+  cell_data_set_object_combined_filtered_nocellcycle, 
+  root_cells = c(colnames(trajectory_integrated.sub)[which.min(unlist(FetchData(trajectory_integrated.sub, "ALPL")))],
+                 colnames(trajectory_integrated.sub)[which.min(unlist(FetchData(trajectory_integrated.sub, "ZBTB16")))]))
+
+pdf(file = paste(R_processing_results_dir, "monocle_UMAP_trajectory.pdf", sep = ""), width = 10, height = 8)
+  plot_cells(
+  cds = cell_data_set_object_combined_filtered_nocellcycle,
+  color_cells_by = "pseudotime",
+  show_trajectory_graph = TRUE, 
+  cell_size = 1.2,
+  graph_label_size = 5
+)
+dev.off()
+
 
 ```
 
@@ -881,10 +1195,78 @@ Here, we attempt to classify the cell type described by each cluster
 
 ```{r}
 
-plan(strategy = "transparent", workers = 1)
+# plan(strategy = "transparent", workers = 1)
+plan(strategy = "multiprocess", workers = 4)
+options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
 tibble_all_gene_markers_per_cluster_vs_the_rest <- FindAllMarkers(seurat_object_combined_filtered, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.25) %>% as_tibble
 
 tibble_top_markers_per_cluster <- tibble_all_gene_markers_per_cluster_vs_the_rest %>% group_by(cluster) %>% top_n(n = 5, wt = avg_logFC)
+
+# calculate percentages of features over multiple clusters
+# average expression
+# PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "RUNX2") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[seurat_object_combined_filtered$seurat_clusters %in% c(1, 6)] %>% names),] %>% mean
+# percentage of cells with x expression
+cat("percentage of cluster 1 and 6 with RUNX2 expression:\n")
+100*(PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "RUNX2") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[seurat_object_combined_filtered$seurat_clusters %in% c(1, 6)] %>% names),] %>% .[. > 0] %>% length)/(seurat_object_combined_filtered$seurat_clusters %>% .[seurat_object_combined_filtered$seurat_clusters %in% c(1, 6)] %>% names %>% length) 
+
+cat("percentage of cluster 1 and 6 with SFRP2 expression:\n")
+100*(PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "SFRP2") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[seurat_object_combined_filtered$seurat_clusters %in% c(1, 6)] %>% names),] %>% .[. > 0] %>% length)/(seurat_object_combined_filtered$seurat_clusters %>% .[seurat_object_combined_filtered$seurat_clusters %in% c(1, 6)] %>% names %>% length) 
+
+cat("percentage of 7d OB cells with ALPL expression:\n")
+100*(PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "ALPL") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names),] %>% .[. > 0] %>% length)/(seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names %>% length) 
+
+cat("percentage of MSC cells with ALPL expression:\n")
+100*(PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "ALPL") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "ud")] %>% names),] %>% .[. > 0] %>% length)/(seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "ud")] %>% names %>% length) 
+
+cat("percentage of 7d OB cells with HES4 expression:\n")
+100*(PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "HES4") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names),] %>% .[. > 0] %>% length)/(seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names %>% length) 
+
+cat("percentage of 7d OB cells with JAG1 expression:\n")
+100*(PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "JAG1") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names),] %>% .[. > 0] %>% length)/(seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names %>% length) 
+
+cat("percentage of 7d OB cells with NOTCH3 expression:\n")
+100*(PercentageFeatureSet(object = seurat_object_combined_filtered, pattern = "NOTCH3") %>% .[row.names(.) %in% (seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names),] %>% .[. > 0] %>% length)/(seurat_object_combined_filtered$seurat_clusters %>% .[grep(x = seurat_object_combined_filtered$seurat_clusters %>% names, pattern = "7d")] %>% names %>% length) 
+
+# also do DE test between every single cluster combination to show differences in MSC and 7d OB heterogeneity.
+plan(strategy = "multiprocess", workers = 100)
+list_seurat_DEGs_between_every_cluster_combination <- future_map2(
+  .x = combn(x = c(0:10), m = 2) %>% t %>% as_tibble %>% .$V1,
+  .y = combn(x = c(0:10), m = 2) %>% t %>% as_tibble %>% .$V2,
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- combn(x = c(0:10), m = 2) %>% t %>% as_tibble %>% .$V1 %>% .[[1]]
+    # a2 <- combn(x = c(0:10), m = 2) %>% t %>% as_tibble %>% .$V2 %>% .[[1]]
+    ###########
+    
+    # run Seurat DE analysis
+    tibble_markers <- FindMarkers(
+      seurat_object_combined_filtered, 
+      only.pos = FALSE, 
+      min.pct = 0.25, 
+      logfc.threshold = 0.25,
+      ident.1 = a1,
+      ident.2 = a2
+      # cells.1 = seurat_object_combined_filtered$seurat_clusters %>% .[seurat_object_combined_filtered$seurat_clusters %in% a1] %>% names, 
+      # cells.2 = seurat_object_combined_filtered$seurat_clusters %>% .[seurat_object_combined_filtered$seurat_clusters %in% a2] %>% names
+    ) %>% as_tibble
+    
+    # filter for FDR and logFC
+    tibble_markers %>%
+      dplyr::filter(p_val_adj < 0.01 & avg_logFC > 0) %>% 
+      return
+    
+  }, .progress = TRUE) %>%
+  set_names(nm = paste(combn(x = c(0:10), m = 2) %>% t %>% as_tibble %>% .$V1, "_vs_", combn(x = c(0:10), m = 2) %>% t %>% as_tibble %>% .$V2, sep = ""))
+
+# make tibble of cluster comparisons together with the number of DEGs in the comparison.
+tibble_number_of_DEGs_for_each_pairwise_cluster_comparison <- combn(x = c(0:10), m = 2) %>% t %>% as_tibble %>% add_column("no_of_DEGs" = list_seurat_DEGs_between_every_cluster_combination %>% purrr::map(.f = ~.x %>% nrow) %>% unlist)
+
+cat("average number of DEGs per comparison between MSC clusters only:\n")
+tibble_number_of_DEGs_for_each_pairwise_cluster_comparison[!tibble_number_of_DEGs_for_each_pairwise_cluster_comparison$V1 %in% c(0, 2, 4, 5, 7, 8, 9) & !tibble_number_of_DEGs_for_each_pairwise_cluster_comparison$V2 %in% c(0, 2, 4, 5, 7, 8, 9), ] %>% .$no_of_DEGs %>% mean
+
+cat("average number of DEGs per comparison between 7d OB clusters only:\n")
+tibble_number_of_DEGs_for_each_pairwise_cluster_comparison[!tibble_number_of_DEGs_for_each_pairwise_cluster_comparison$V1 %in% c(1, 3, 6, 7, 8, 10) & !tibble_number_of_DEGs_for_each_pairwise_cluster_comparison$V2 %in% c(1, 3, 6, 7, 8, 10), ] %>% .$no_of_DEGs %>% mean
 
 ```
 
@@ -894,7 +1276,7 @@ tibble_top_markers_per_cluster <- tibble_all_gene_markers_per_cluster_vs_the_res
 
 ```{r}
 
-load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
+load(paste(reference_data_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 
 ```
 
@@ -920,12 +1302,12 @@ tibble_hyperGO_inclusion_biomarkers_per_cluster <- tibble_inclusion_genesets_per
     unnest(cols = c("GOhyper_result"))
 
 # write the GOHyper result tables
-write.table(tibble_hyperGO_inclusion_biomarkers_per_cluster, file = paste(seurat_output_dir, "GSEA_hyperGO_inclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+write.table(tibble_hyperGO_inclusion_biomarkers_per_cluster, file = paste(R_processing_results_dir, "GSEA_hyperGO_inclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 # write the inclusion geneset tables 
 tibble_inclusion_genesets_per_cluster_nested_concatenated <- tibble_inclusion_genesets_per_cluster_nested %>% dplyr::summarise("genes" = paste(geneset %>% unlist %>% mixedsort, collapse = ","))
 
-write.table(tibble_inclusion_genesets_per_cluster_nested_concatenated, file = paste(seurat_output_dir, "geneset_inclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+write.table(tibble_inclusion_genesets_per_cluster_nested_concatenated, file = paste(R_processing_results_dir, "geneset_inclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 # determine the UNIQUE inclusion biomarkers per cluster (occurs only once)
 ## count the number of times each gene name appears
@@ -936,7 +1318,7 @@ tibble_inclusion_biomarkers_unique_genes_only <- tibble_inclusion_genesets_per_c
 tibble_unique_inclusion_biomarkers <- dplyr::semi_join(tibble_inclusion_genesets_per_cluster_nested[, c("cluster", "geneset")] %>% unnest(cols = "geneset"), tibble_inclusion_biomarkers_unique_genes_only, by = "geneset") %>% dplyr::summarise("unique_biomarkers" = paste(geneset %>% mixedsort, collapse = ","))
 
 ## write the table of unique inclusion biomarkers per cluster
-write.table(tibble_unique_inclusion_biomarkers, file = paste(seurat_output_dir, "geneset_unique_inclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+write.table(tibble_unique_inclusion_biomarkers, file = paste(R_processing_results_dir, "geneset_unique_inclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 # also do exclusion biomarkers ###
 tibble_exclusion_genesets_per_cluster_nested <- tibble_all_gene_markers_per_cluster_vs_the_rest %>%
@@ -948,7 +1330,7 @@ tibble_exclusion_genesets_per_cluster_nested <- tibble_all_gene_markers_per_clus
 # write the inclusion geneset tables 
 tibble_exclusion_genesets_per_cluster_nested_concatenated <- tibble_exclusion_genesets_per_cluster_nested %>% dplyr::summarise("genes" = paste(geneset %>% unlist %>% mixedsort, collapse = ","))
 
-write.table(tibble_exclusion_genesets_per_cluster_nested_concatenated, file = paste(seurat_output_dir, "geneset_exclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+write.table(tibble_exclusion_genesets_per_cluster_nested_concatenated, file = paste(R_processing_results_dir, "geneset_exclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 # determine the UNIQUE exclusion biomarkers per cluster (occurs only once)
 ## count the number of times each gene name appears
@@ -959,7 +1341,7 @@ tibble_exclusion_biomarkers_unique_genes_only <- tibble_exclusion_genesets_per_c
 tibble_unique_exclusion_biomarkers <- dplyr::semi_join(tibble_exclusion_genesets_per_cluster_nested[, c("cluster", "geneset")] %>% unnest(cols = "geneset"), tibble_exclusion_biomarkers_unique_genes_only, by = "geneset") %>% dplyr::summarise("unique_biomarkers" = paste(geneset %>% mixedsort, collapse = ","))
 
 ## write the table of unique exclusion biomarkers per cluster
-write.table(tibble_unique_exclusion_biomarkers, file = paste(seurat_output_dir, "geneset_unique_exclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+write.table(tibble_unique_exclusion_biomarkers, file = paste(R_processing_results_dir, "geneset_unique_exclusion_biomarkers_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
   
 ```
 
@@ -977,8 +1359,8 @@ FeaturePlot(seurat_object_combined_filtered,
   # scale_alpha_manual(values = 0.5) +
   # theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_SC.maintenance.factors.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_SC.maintenance.factors.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_SC.maintenance.factors.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_SC.maintenance.factors.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
 
 FeaturePlot(seurat_object_combined_filtered, 
             features = c("CDK1", "CDK2", "CDK3", "CDK6", "CDKN1A", "CDKN1B", "WEE1", "CDR1", "CCNA2", "CCNB1", "CCNB2", "CCND1", "CCND3", "CCNE1", "CCNE2", "SRSF2", "TRA2B", "SRRM2", "TSEN2", "PRMT2", "HDAC7", "HDAC11", "MYO5A", "EZH2", "DNMT1", "TET1", "TET2", "MBD6", "CSRP2", "TADA2A", "TADA3", "SIRT2", "KAT2A", "KAT2B", "KAT14"), 
@@ -986,8 +1368,8 @@ FeaturePlot(seurat_object_combined_filtered,
   # scale_alpha_manual(values = 0.5) +
   # theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_major.cell.factors.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_major.cell.factors.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_major.cell.factors.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_major.cell.factors.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
 
 FeaturePlot(seurat_object_combined_filtered, 
             features = c("RUNX2", "ALPL", "ZBTB16", "ZBTB38", "ZNF25", "BGLAP", "TIRAP", "JAK1", "STAT3", "NFKB1", "IL6", "WNT5A", "TCF4", "TCF7L1", "NFATC4", "SFRP1", "SFRP2", "CCT2", "KCNE4", "KCNK6", "KCNMA1", "ATF4", "CEBPB", "HES4", "NOTCH3", "JAG1", "NFE2L2", "WNK1", "ILK", "CTNNA1", "DDX5", "HIF1A"), 
@@ -995,8 +1377,8 @@ FeaturePlot(seurat_object_combined_filtered,
   # scale_alpha_manual(values = 0.5) +
   # theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_osteoblastic.factors.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_osteoblastic.factors.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_osteoblastic.factors.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_osteoblastic.factors.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
 
 FeaturePlot(seurat_object_combined_filtered, 
             features = c("ATXN1", "ITGAV", "CD44", "LEPR", "MMP13", "SFRP4", "CSF1", "TNFSF11", "CDKN1A", "CDKN2B", "CTGF"), 
@@ -1004,8 +1386,47 @@ FeaturePlot(seurat_object_combined_filtered,
   # scale_alpha_manual(values = 0.5) +
   # theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_bone.lining.cell.markers.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
-  ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_annotation_set_bone.lining.cell.markers.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm")
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_bone.lining.cell.markers.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 15, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_bone.lining.cell.markers.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 15, units = "cm")
+
+# plots for the final paper
+FeaturePlot(seurat_object_combined_filtered, 
+            features = c("ZBTB16", "ZBTB38", "ZNF25", "BGLAP", "JAK1", "WNT5A", "TCF4", "TCF7L1", "NFATC4", "CCT2", "KCNE4", "KCNK6", "KCNMA1", "NOTCH3", "JAG1", "CTGF", "CDKN1A", "SFRP4", "ITGAV", "LEPR", "CSF1", "CD44", "ATXN1", "SNAI2", "JUNB", "VEGFA", "SVIL", "FOSB", "ATP2B1", "LMO4") %>% mixedsort, 
+            pt.size = 0.05, ncol = 5, reduction = "umap") +
+  # scale_alpha_manual(values = 0.5) +
+  # theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_final_markers_in_paper.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
+  ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_final_markers_in_paper.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
+
+# test plots for the final paper
+## NOTE: no expression detected
+FeaturePlot(seurat_object_combined_filtered, 
+            features = c("MEPE") %>% mixedsort, 
+            pt.size = 0.05, ncol = 5, reduction = "umap") +
+  # scale_alpha_manual(values = 0.5) +
+  # theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none") 
+
+# +
+#   ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_final_markers_in_paper.pdf", sep = ""), device = "pdf", dpi = 600, width = 40, height = 40, units = "cm") +
+#   ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_annotation_set_final_markers_in_paper.svg", sep = ""), device = "svg", dpi = 600, width = 40, height = 40, units = "cm")
+
+# natalie cluster 3
+FeaturePlot(seurat_object_combined_filtered, 
+            features = c("VCAM1", "POSTN", "IFIT1", "IFIT1B", "MX1", "IFIT3", "IFI27", "ISG15", "OAS1", "MX2", "BST2", "ALPL", "B2M", "IGF2", "SCARB1", "INS", "WWOX", "ICAM1", "FMOD", "ARNT", "CTSX") %>% mixedsort, 
+            pt.size = 0.05, ncol = 5, reduction = "umap") +
+    # scale_alpha_manual(values = 0.5) +
+    # theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none")
+
+# natalie cluster 4
+FeaturePlot(seurat_object_combined_filtered, 
+            features = c("COL8A1", "TGFB2", "CSF1", "SAMHD1", "COL4A4", "DCN", "CTHRC1", "COL8A2", "MFAP2", "NFYB", "BMP4", "LUM", "TGFB3", "HDAC5", "COL11A1", "COL16A1", "CLEC3B", "CD24", "COL14A1", "THBS1", "COL4A5", "DLX5", "IGF1R", "SFRP1", "FZD1") %>% mixedsort, 
+            pt.size = 0.05, ncol = 5, reduction = "umap") +
+    # scale_alpha_manual(values = 0.5) +
+    # theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica"), legend.position = "none")
 
 ```
 
@@ -1013,7 +1434,7 @@ FeaturePlot(seurat_object_combined_filtered,
 
 ```{r}
 
-save(seurat_object_combined_filtered, file = paste(seurat_output_dir, "seurat_object_combined_filtered.seurat", sep = ""))
+save(seurat_object_combined_filtered, file = paste(R_processing_results_dir, "seurat_object_combined_filtered.seurat", sep = ""))
 
 ```
 
@@ -1109,7 +1530,7 @@ AnnotatePeaksFromGTF(peak.sites.file = tibble_merged_peak_file_name,
 ```{r}
 
 # load precompiled Seurat gene-level object called "seurat_object_combined_filtered"
-load(file = paste(seurat_output_dir, "seurat_object_combined_filtered.seurat", sep = ""))
+load(file = paste(R_processing_results_dir, "seurat_object_combined_filtered.seurat", sep = ""))
 
 # read in the counts
 matrix_sierra_peak_counts <- ReadPeakCounts(data.dir = sierra_output_dir)
@@ -1468,24 +1889,24 @@ DimPlot(seurat_object_combined_filtered_peak.level_bypass, reduction = "pca", la
   labs(colour = "Cluster") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(seurat_output_dir, "PCA_seurat_SCT_filtered_peak_level.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
- ggsave(filename = paste(seurat_output_dir, "PCA_seurat_SCT_filtered_peak_level.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "PCA_seurat_SCT_filtered_peak_level.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "PCA_seurat_SCT_filtered_peak_level.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 DimPlot(seurat_object_combined_filtered_peak.level_bypass, reduction = "umap", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
   ggtitle("UMAP") +
   labs(colour = "Cluster") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_peak_level.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
- ggsave(filename = paste(seurat_output_dir, "UMAP_seurat_SCT_filtered_peak_level.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_peak_level.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "UMAP_seurat_SCT_filtered_peak_level.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 DimPlot(seurat_object_combined_filtered_peak.level_bypass, reduction = "tsne", label = TRUE, pt.size = 1, shape.by = "orig.ident") +
   ggtitle("t-SNE") +
   labs(colour = "Cluster") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(seurat_output_dir, "tSNE_seurat_SCT_filtered_peak_level.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
- ggsave(filename = paste(seurat_output_dir, "tSNE_seurat_SCT_filtered_peak_level.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
+ ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_peak_level.pdf", sep = ""), device = "pdf", dpi = 600, width = 25, height = 20, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tSNE_seurat_SCT_filtered_peak_level.svg", sep = ""), device = "svg", dpi = 600, width = 25, height = 20, units = "cm")
 
 ```
 

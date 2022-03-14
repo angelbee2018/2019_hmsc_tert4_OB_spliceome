@@ -46,21 +46,21 @@ library(seqinr)
 
 library(rtracklayer)
 
-shared_dir <- "/mnt/Tertiary/sharedfolder/"
+reference_data_dir <- "/mnt/LTS/reference_data/"
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% 
+tibble_ref_gtf <- rtracklayer::import("/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% 
   as_tibble %>%
   dplyr::mutate_if(is.factor, as.character)
 
 # maxquant_junctions.3FT_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB_fastqc/proteome_validation/results_maxquant/run_1_PGNEXUS_OBseries_allsamples_angel.junctions.3FT/txt/"
 
-R_processing_results_dir <- paste("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/", sep = "")
+R_processing_results_dir <- paste("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/proteome_validation/results_maxquant/R_processing_results/", sep = "")
 
 if(! dir.exists(R_processing_results_dir) ) {
      dir.create(R_processing_results_dir, recursive = TRUE)}
 
-`3FT_results_dir` <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/proteome_validation/three_frame_translation_results/"
+`3FT_results_dir` <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/proteome_validation/three_frame_translation_results/"
 
 ```
 
@@ -1737,11 +1737,11 @@ STRATEGY:
 ```{r}
 
 # get ENSP to uniprotkb_entry mapping
-# load(file = paste(shared_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
-tibble_ENSP_to_uniprotkb <- read.delim(file = paste(shared_dir, "table_ENSP_to_uniprot_entry_mapping_38.98.txt", sep = ""), check.names = FALSE, stringsAsFactors = FALSE, sep = "\t") %>% as_tibble
+# load(file = paste(reference_data_dir, "tibble_ENSP_to_uniprotkb.tibble", sep = ""))
+tibble_ENSP_to_uniprotkb <- read.delim(file = paste(reference_data_dir, "table_ENSP_to_uniprot_entry_mapping_38.98.txt", sep = ""), check.names = FALSE, stringsAsFactors = FALSE, sep = "\t") %>% as_tibble
 
 # get all the genome-relative positions of CDS nucleotides for every ENSP id
-load(file = paste(shared_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tibble", sep = ""))
+load(file = paste(reference_data_dir, "tibble_ENSP_to_genome_relative_CDS_positions.tibble", sep = ""))
 
 # import dbPTM info
 # Z:/dbPTM_download/extract/allPTM_human.txt
@@ -2159,6 +2159,8 @@ tibble_confirmed_junc.exons_checked_against_sp <- tibble_confirmed_junc.exons[ti
 
 # write table
 write.table(tibble_confirmed_junc.exons_checked_against_sp, file = paste(R_processing_results_dir, "table_brief.info_confirmed_junc.exons_checked_against_sp.txt", sep = ""), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+# read-back
+tibble_confirmed_junc.exons_checked_against_sp <- read.delim(file = paste(R_processing_results_dir, "table_brief.info_confirmed_junc.exons_checked_against_sp.txt", sep = ""), sep = "\t", header = TRUE, row.names = NULL, stringsAsFactors = FALSE) %>% as_tibble 
 
 ```
 
@@ -2166,14 +2168,15 @@ write.table(tibble_confirmed_junc.exons_checked_against_sp, file = paste(R_proce
 
 ```{r}
 
-tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp <- tibble_confirmed_junc.exons_checked_against_sp %>% 
+tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp_diff <- tibble_confirmed_junc.exons_checked_against_sp %>%
+  .[grep(x = .$Leading.razor.protein, pattern = "differential", ignore.case = TRUE), ] %>% 
   dplyr::mutate_at(.vars = "splicemode", .funs = function(x) {gsub(x = x, pattern = "IR_overlapping_region", replacement = "IR") %>% gsub(x = ., pattern = "TSS\\|", replacement = "")} ) %>%
   dplyr::mutate("tool" = gsub(x = `Leading.razor.protein`, pattern = "^([^_]+).*", replacement = "\\1")) %>%
   dplyr::distinct(Leading.razor.protein, tool, .keep_all = TRUE) %>% 
   dplyr::group_by(splicemode, tool) %>% 
   dplyr::summarise("splicemode_tally" = n())
 
-ggplot(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp, aes(x = reorder(splicemode, -splicemode_tally), y = splicemode_tally)) +
+ggplot(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp_diff, aes(x = reorder(splicemode, -splicemode_tally), y = splicemode_tally)) +
   facet_wrap(~tool, scales = "free", ncol = 1) +
   geom_col(mapping = aes(fill = tool)) +
   geom_text(stat = "identity", nudge_y = 1, aes(label = splicemode_tally), angle = 90, hjust = 0) +
@@ -2182,11 +2185,34 @@ ggplot(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp,
   scale_fill_manual(limits = c("JUM", "PSISigma"), breaks = c("JUM", "PSISigma"), values = c("purple3", "firebrick4")) +
   scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
   ylab("Frequency") +
-  ylim(c(0, max(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp$splicemode_tally) + 50)) +
+  ylim(c(0, max(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp_diff$splicemode_tally) + 10)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 14, units = "cm") +
- ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 14, units = "cm") 
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp_differential.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 14, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp_differential.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 14, units = "cm")
+
+tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp_cons <- tibble_confirmed_junc.exons_checked_against_sp %>%
+  .[grep(x = .$Leading.razor.protein, pattern = "constitutive", ignore.case = TRUE), ] %>% 
+  dplyr::mutate_at(.vars = "splicemode", .funs = function(x) {gsub(x = x, pattern = "IR_overlapping_region", replacement = "IR") %>% gsub(x = ., pattern = "TSS\\|", replacement = "")} ) %>%
+  dplyr::mutate("tool" = gsub(x = `Leading.razor.protein`, pattern = "^([^_]+).*", replacement = "\\1")) %>%
+  dplyr::distinct(Leading.razor.protein, tool, .keep_all = TRUE) %>% 
+  dplyr::group_by(splicemode, tool) %>% 
+  dplyr::summarise("splicemode_tally" = n())
+
+ggplot(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp_cons, aes(x = reorder(splicemode, -splicemode_tally), y = splicemode_tally)) +
+  facet_wrap(~tool, scales = "free", ncol = 1) +
+  geom_col(mapping = aes(fill = tool)) +
+  geom_text(stat = "identity", nudge_y = 1, aes(label = splicemode_tally), angle = 90, hjust = 0) +
+  ggtitle(paste("Tally of splicemodes for validated splice events")) +
+  xlab("splicemode") +
+  scale_fill_manual(limits = c("JUM", "PSISigma"), breaks = c("JUM", "PSISigma"), values = c("purple3", "firebrick4")) +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 50)}) +
+  ylab("Frequency") +
+  ylim(c(0, max(tibble_frequency_of_confirmed_peptides_per_splicemode_checked_against_sp_cons$splicemode_tally) + 50)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.y = element_text(margin = margin(r = 10)), legend.title.align = 0.5, legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp_constitutive.pdf", sep = ""), device = "pdf", dpi = 600, width = 8, height = 14, units = "cm") +
+ ggsave(filename = paste(R_processing_results_dir, "tally_validated_peptides_by_splicemode_checked_against_sp_constitutive.svg", sep = ""), device = "svg", dpi = 600, width = 8, height = 14, units = "cm") 
 
 ```
 

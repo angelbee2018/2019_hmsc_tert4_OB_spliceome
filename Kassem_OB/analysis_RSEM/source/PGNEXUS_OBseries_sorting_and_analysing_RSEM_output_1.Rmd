@@ -13,7 +13,7 @@ output: html_document
 
 library(tidyverse)
 library(gtools)
-library(extrafont)
+# library(extrafont)
 # loadfonts(device = "win")
 # windowsFonts("Helvetica" = windowsFont("Helvetica"))
 library(RColorBrewer)
@@ -1188,7 +1188,8 @@ ggplot() +
   geom_line(data = long_tibble_of_final_SOM_summary_5_by_5_OBseries, aes(x = timepoint, y = scaled_expr, group = ensembl_gene_id), alpha = 0.33) +
   geom_line(data = long_tibble_of_final_SOM_summary_5_by_5_OBseries_average.line, aes(x = timepoint, y = avg_expr, group = cluster), colour = "white", size = 1) +
   scale_colour_manual(values = c("black")) +
-  facet_grid(quotient_facet.y ~ remainder_facet.x) +
+  # facet_grid(quotient_facet.y ~ remainder_facet.x) +
+  facet_wrap(~ cluster, ncol = 5) +
   ggtitle(paste("5 x 5 SOM\n", length(wide_tibble_of_final_SOM_summary_5_by_5_OBseries$ensembl_gene_id %>% unique), " OBseries genes\n", "RSEM/edgeR", sep = "")) +
   scale_x_discrete(limits = vec_timepoint_order_OBseries_short, labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   xlab("Time-point") +
@@ -1196,8 +1197,8 @@ ggplot() +
   # guides(colour = FALSE) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.background = element_rect(size = 0.5, linetype = "solid", colour = "black"), text = element_text(family = "Helvetica")) +
- ggsave(filename = paste(OBseries_R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(wide_tibble_of_final_SOM_summary_5_by_5_OBseries$ensembl_gene_id %>% unique), "_genes_expr_OB_diff_qvalue0.01_fc2.pdf", sep = ""), device = "pdf", dpi = 600, width = 30, height = 20, units = "cm") +
- ggsave(filename = paste(OBseries_R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(wide_tibble_of_final_SOM_summary_5_by_5_OBseries$ensembl_gene_id %>% unique), "_genes_expr_OB_diff_qvalue0.01_fc2.svg", sep = ""), device = "svg", dpi = 600, width = 30, height = 20, units = "cm")
+ ggsave(filename = paste(OBseries_R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(wide_tibble_of_final_SOM_summary_5_by_5_OBseries$ensembl_gene_id %>% unique), "_genes_expr_OB_diff_qvalue0.01_fc2.pdf", sep = ""), device = "pdf", dpi = 600, width = 28, height = 20, units = "cm") +
+ ggsave(filename = paste(OBseries_R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(wide_tibble_of_final_SOM_summary_5_by_5_OBseries$ensembl_gene_id %>% unique), "_genes_expr_OB_diff_qvalue0.01_fc2.svg", sep = ""), device = "svg", dpi = 600, width = 28, height = 20, units = "cm")
 
 write.table(x = wide_tibble_of_final_SOM_summary_5_by_5_OBseries, file = paste(OBseries_R_processing_results_dir, OB_xdim, "x", OB_ydim, "_SOM_", length(wide_tibble_of_final_SOM_summary_5_by_5_OBseries$ensembl_gene_id %>% unique), "_genes_expr_OB_diff_qvalue0.01_fc2.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
@@ -1323,23 +1324,37 @@ write.table(x = tibble_inclusion_exclusion_biomarkers_expression, file = paste(O
 
 ```{r}
 
+plan(list(tweak(multiprocess, workers = 4),
+          tweak(multiprocess, workers = 12),
+          tweak(multiprocess, workers = 4)))
+
 wide_tibble_of_final_SOM_summary_5_by_5_OBseries_edited <- wide_tibble_of_final_SOM_summary_5_by_5_OBseries %>% add_column("1_3d" = (.$`24h` + .$`3d`)/2)
 
 vec_timepoints_for_bootstrap <- c(vec_timepoint_order_OBseries_short, "1_3d")
 
 library(MASS)
 
-list_of_probability_cdf_bootstrap_tibbles <- purrr::map2(
+list_of_probability_cdf_bootstrap_tibbles <- furrr::future_map2(
   .x = list_scRNAseq_inclusion_exclusion_biomarkers,
   .y = names(list_scRNAseq_inclusion_exclusion_biomarkers),
   .f = function(a1, a2) {
     
+    # DEBUG ###
+    # a1 <- list_scRNAseq_inclusion_exclusion_biomarkers[[1]]
+    # a2 <- names(list_scRNAseq_inclusion_exclusion_biomarkers) %>% .[[1]]
+    ###########
+    
     cat("\nlevel 1: ", a2)
     
-    purrr::map2(
+    furrr::future_map2(
       .x = a1,
       .y = names(a1),
       .f = function(b1, b2) {
+        
+        # DEBUG ###
+        # b1 <- a1[[1]]
+        # b2 <- names(a1) %>% .[[1]]
+        ###########
         
         cat("\nlevel 2: ", b2)
         
@@ -1369,7 +1384,7 @@ list_of_probability_cdf_bootstrap_tibbles <- purrr::map2(
           
           return(tibble_bootstrap_sample)
           
-        }, .progress = TRUE, .options = future_options(globals = c("wide_tibble_of_final_SOM_summary_5_by_5_OBseries_edited", "sample_size", "dplyr::sample_n", "vec_timepoints_for_bootstrap", "dplyr::mutate_all")) ) %>% rbindlist %>% as_tibble
+        }, .options = future_options(globals = c("wide_tibble_of_final_SOM_summary_5_by_5_OBseries_edited", "sample_size", "dplyr::sample_n", "vec_timepoints_for_bootstrap", "dplyr::mutate_all")) ) %>% rbindlist %>% as_tibble
         
         # fit normal distribution to each column
         tibble_normal_distribution_fit <- tibble_timepointwise_bootstrap_result %>% 
@@ -1395,7 +1410,18 @@ list_of_probability_cdf_bootstrap_tibbles <- purrr::map2(
           } ) %>% unique
         
         # test normality of the bootstrapping for goodness of fit - all good :D
-        # qqnorm(tibble_timepointwise_bootstrap_result$ud)
+        purrr::map(.x = tibble_timepointwise_bootstrap_result %>% colnames,
+                   .f = function(c1) {
+                     
+                     pdf(file = paste(OBseries_R_processing_results_dir, "QQplot_significance_of_coherence_expression_", inclusion_or_exclusion, "_cluster", scRNAseq_cluster, "_timepoint", c1, ".pdf", sep = ""))
+                     
+                     qqnorm(tibble_timepointwise_bootstrap_result[, c1] %>% unlist, main = "", xlab = "", ylab = "")
+                     
+                     dev.off()
+                     
+                     
+                   })
+        
         
         # plot the bootstrap frequency density and show where the observation is.
         # plot(density(rnorm(n = 10000, mean = fit_mean, sd = fit_sd)), main = probability_cdf, xlim = c(0, max(c(tibble_timepointwise_bootstrap_result %>% .[[query_timepoint]], tibble_subset_by_cluster_matrix %>% .[[query_timepoint]])))) +
@@ -1407,7 +1433,7 @@ list_of_probability_cdf_bootstrap_tibbles <- purrr::map2(
         
       } ) %>% return # L2 - scRNA-Seq clusters
     
-  } ) %>% return # L1 - exclusion/inclusion
+  }, .progress = TRUE ) %>% return # L1 - exclusion/inclusion
 
 # save the list
 save(list_of_probability_cdf_bootstrap_tibbles, file = paste(OBseries_R_processing_results_dir, "list_of_probability_cdf_bootstrap_tibbles.Rlist", sep = ""))

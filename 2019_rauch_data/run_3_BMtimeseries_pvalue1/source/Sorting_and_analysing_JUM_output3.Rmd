@@ -1,0 +1,727 @@
+---
+title: "Sorting JUM output files and analysing them"
+author: "Angel Liang"
+date: "10/21/2019"
+output: pdf_document
+---
+
+## Set the running environment
+
+### Packages and directories
+
+```{r}
+
+library(tidyverse)
+library(dplyr)
+library(purrr)
+library(data.table)
+
+results_dir <- "C:/Users/angel/Documents/run_3_BMtimeseries_pvalue1/results/"
+
+```
+
+### functions
+
+SOMs analysis - credits to Igy 2016
+
+```{r}
+
+
+library(kohonen)
+library(genefilter)
+library(gplots)
+library(lattice)
+
+setwd (results_dir)
+
+data_directory    <- "../Data/"
+results_directory <- results_dir
+results_directory_soms <- paste( results_directory, "SOMs/", sep="")
+
+if(      ! dir.exists(results_directory_soms) ) {
+     dir.create(results_directory_soms, recursive = TRUE)
+}
+
+# Seed for random number generator used in Self-organizing map (SOM)
+my_som_random_number_seed <- 7
+
+# Set parameters for heatmap of the codebook vector
+my_colour_palette <- colorRampPalette(c("#2166ac","#f7f7f7","#b2182b"))(75) 
+margins_size_factor <- 5
+texts_size_factor_col <- 10
+texts_size_factor_row <- 30
+heatmap_column_labels <-  c( "CA1", "CA2", "CA3", "A1", "A2", "A3", "CAL1", "CAL2", "CAL3", "AL1", "AL2", "AL3" ) 
+
+# convert_to_format_for_lattice
+## You need to use this function to convert it into a data.frame that is used for lattice plot. Convert into a format useful for lattice xyplot. Record the cluster for which each gene is assigned into.
+
+# **The parameter values** 
+# 
+# * som = output from the 'som' function from the kohonen library
+# * input_matrix = The input data matrix with the gene expression data series for each gene (see input table above)
+# * The variables 'id\_a' and 'id\_b' are used to provide an ID for each row. The length of the two vectors must be equal, and the length of the vector is used to initialize the output dataframe.
+# * ncol = the X dimension size of the SOM grid
+# * nrow = the Y dimension size of the SOM grid
+
+convert_to_format_for_lattice <- function (  som, input_matrix, id_a, id_b, ncol, nrow) {
+
+        # Check number of empty SOMs clusters
+        num_empty_som_clusters <- 0
+        for ( i in 1:(ncol*nrow) )  {   
+
+                temp_num_genes  <- length(which(som$unit.classif == i))
+
+                if ( temp_num_genes == 0 ) {  
+                	
+                        num_empty_som_clusters <- num_empty_som_clusters + 1
+                }
+        }
+
+        data.dimension <- dim( input_matrix)
+
+        # dimension 1 is the number of genes
+        # dimension 2 is the number of time points
+        data.total_length <- (data.dimension[1] + num_empty_som_clusters) * data.dimension[2]
+        data.num_id_a <- data.dimension[1]
+
+        som_data_pivot <- data.frame(  id_a= rep(0, data.total_length),  id_b= rep(0, data.total_length), 
+                                       x = rep(0, data.total_length), y= rep(0, data.total_length), cluster=rep(0, data.total_length) )
+
+        row_count <- 1
+        for ( i in 1:(ncol*nrow) ) {    
+        	
+                temp_input_matrix_data  <- input_matrix[ som$unit.classif == i, ]
+                temp_id_a     		    <- id_a[ som$unit.classif == i] 
+                temp_id_b     		    <- id_b[ som$unit.classif == i] 
+                temp_num_genes  		<- length(which(som$unit.classif == i ) )
+
+                if ( temp_num_genes  > 0 ) {     
+                        for ( j in 1:temp_num_genes ) {
+                        	
+                                my_k_length <- 0
+                                
+                                if ( temp_num_genes > 1 ) {
+                                      my_k_length <- length(temp_input_matrix_data[1,])
+                                } else {
+                                      my_k_length <- length(temp_input_matrix_data)
+                                }       
+
+                                for ( k in 1:my_k_length ) {
+                                      som_data_pivot[row_count,"id_a"] <- as.character(temp_id_a[j])
+                                      som_data_pivot[row_count,"id_b"] <- as.character(temp_id_b[j])
+                                      som_data_pivot[row_count,"x"]    <- k 
+
+                                      som_data_pivot[row_count,"cluster"] <- i 
+                                
+                                      if ( temp_num_genes > 1 ) {
+                                         som_data_pivot[row_count,"y"] <- temp_input_matrix_data[j, k] 
+                                      } else if( temp_num_genes == 1 ) {
+                                         som_data_pivot[row_count,"y"] <- temp_input_matrix_data[k] 
+                                      }  
+                                                                
+                                      row_count <- row_count + 1
+                                }
+                        }
+                } else {
+
+                    # treat empty clusters                  
+                    som_data_pivot <-  som_data_pivot 
+    
+                   for ( num_time_points in 1:data.dimension[2] ) {     
+                        # I am trying to avoid rbind as it is slow!
+                        #som_data_pivot <- rbind( som_data_pivot, 
+                        #                        c(NA, NA, num_time_points, NA, i ))
+
+                        # id_a, id_b, x, y, cluster, values in that order in the vector
+                        som_data_pivot[row_count,] <-  c(NA, NA, num_time_points, NA, i )
+                        
+                        row_count <- row_count + 1
+                   }
+                }
+
+        }
+
+        return ( som_data_pivot) 
+}
+
+# run_soms_analysis
+
+## Function to performs SOMs analysis.
+
+
+# **Input parameters** 
+# 
+# * data_matrix - same as the input for the function 'convert_to_format_for_lattice'  
+# * organism - a label to indicate the organism
+# * expt_label - a label to annotate the experiment performed (e.g. AMB_only)
+# * som_size_x - X dimension size of the SOM grid
+# * som_size_y - Y dimension size of the SOM grid 
+# * results_directory - a directory to store the results
+# * som_number_seed - a number seed for the random number generator used by the kohonent package (default = 7 )
+# 
+# **Output parameters** 
+# 
+# * som_data_pivot - same as the output for the function 'convert_to_format_for_lattice'  
+# * all.som - output of the 'som' function of the 'kohonen' package.
+
+run_soms_analysis <- function ( data_matrix, organism, expt_label, som_size_x, som_size_y, results_directory, som_number_seed = 7 ) {
+
+        ### Centering the values of each gene to zero
+        data_matrix <- genescale(data_matrix, axis=1, method="Z")
+
+        ### need to remove gene in which all experiments have zero counts
+        data_matrix <- data_matrix[rowSums(is.na(data_matrix))!=12, ]
+
+        write.table(data_matrix, file=paste(results_directory, "edgeR_log_scaled_soms_", organism, "_", expt_label, "_", som_size_x, "_", som_size_y,".tab", sep="") )
+
+        ### Initialize the X by Y SOM grid, we are using a rectangular grid here
+        rectangular_x_by_y <- somgrid(xdim = som_size_x, ydim = som_size_y, topo = c("rectangular"))
+
+        ### Need to set the seed so that every time you run the code, the results are the same
+        set.seed(som_number_seed)
+
+        # alpha = c(0.05, 0.01), radius = quantile(nhbrdist, 0.67) * c(1, -1), init, n.hood,
+        all.som <- som(data_matrix, grid=rectangular_x_by_y , rlen = 100, toroidal = FALSE,   keep.data = TRUE)  
+
+        ### Convert the data into a format that can be used by lattice to plot the SOM
+        print("Perform data pivot")
+
+        som_data_pivot <- convert_to_format_for_lattice(all.som, data_matrix, rownames(data_matrix), rownames(data_matrix), ncol = som_size_x, nrow = som_size_y) 
+
+        # write.table( som_data_pivot, file=paste(results_directory, "som_data_pivot_", organism, "_", expt_label, "_", som_size_x, "_", som_size_y ,".tab", sep="") ) 
+
+        ### Save the cluster for each gene (id_a)
+        print("Save cluster for each gene")
+        cluster_for_each_id_a <- unique(som_data_pivot[,c("id_a", "id_b", "cluster")])
+
+        # write.table( cluster_for_each_id_a, file=paste(results_directory, "cluster_for_each_gene_", organism, "_", expt_label, "_", som_size_x, "_", som_size_y , ".tab", sep="") ) 
+
+        return( list(pivot=som_data_pivot, som=all.som) )
+}
+
+# draw_soms_xyplot
+## Draw SOMs plot into the current output device
+
+draw_soms_xyplot <- function ( som_data_pivot, som_size_x, som_size_y  ) { 
+	################## Plot data using xyplot ##########################################################  
+	print("Plot data using xyplot")
+	
+	### This variable gives a colour to each SOM cluster. The order of the colours must match the 'data = som_data_pivot' variable.
+	colours <- factor (som_data_pivot[,'cluster'] , labels=rainbow(som_size_x * som_size_y) )
+	
+	### This provides the grouping to the 'panel' function. We can then use 'subscripts' to select the groups specific to each cluster.
+	grouping <- factor(som_data_pivot[,'id_a'])
+	
+	xyplot (  y ~ x | cluster, 
+			  data=som_data_pivot, 
+			  groups= grouping, 
+			  layout=c(som_size_x, som_size_y),  
+			  strip=FALSE, ## The 'Strip' option removes the top header for each cluster
+			  xlab="Experiments", 
+			  ylab="Expression Level",  
+			  user.defined.color=as.character(colours) ,  ## You can add extra variable for passing onto panel
+			  panel = function(x, y,user.defined.color,groups= groups,subscripts=subscripts) {
+			  	my_fill <- user.defined.color[subscripts]     # Using the extra variable to define the colour of lines used in each cluster
+			  	panel.xyplot(x, y, 
+			  				 type=c("l"),    # Line graph options: the option 'l' gives the lines, the option 'p' gives the points
+			  				 col=my_fill, 
+			  				 groups=groups,
+			  				 subscripts=subscripts) 
+			  } )
+	
+}
+
+# draw_soms_xyplot_pdf
+
+## Draw SOMs plot into the PDF.
+
+draw_soms_xyplot_pdf <- function ( som_data_pivot, organism, expt_label, som_size_x, som_size_y, results_directory ) { 
+	my_pdf_file <- paste(results_directory, "soms/soms_", organism, "_", expt_label, "_" , som_size_x, "_by_", som_size_y, ".pdf", sep="")
+	
+	pdf(file= my_pdf_file )
+	
+	print ( draw_soms_xyplot ( som_data_pivot, som_size_x, som_size_y  )  ) 
+		
+	dev.off()
+	
+}
+
+```
+
+
+
+## read all the final tables into environment
+
+```{r}
+
+list_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL)
+
+print(head(list_of_timepoint_comparisons_final))
+
+for (comparison in list_of_timepoint_comparisons_final[, 1])
+{
+  
+  for (AS_event in c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events"))
+  {
+    
+    assign(x = paste(comparison, "_", AS_event, "_simplified", sep = ""), value = read.delim(file = paste(results_dir, "final_JUM_output_", comparison, "/", list.files(path = paste(results_dir, "final_JUM_output_", comparison, "/", sep = ""), pattern = paste("(.)", AS_event, "(.*)simplified.txt", sep = "")), sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf"), colClasses = "character"))
+  
+  }
+  
+}
+
+# this must be equal to the total number of comparisons
+
+length(ls(pattern = "(.*)simplified")) / 6
+
+```
+
+## chopping files into a net summary table
+
+note: the final simplified intron retention table outputted by JUM has two header rows. Remove those.
+
+### A3SS
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_A3SS_simplified_output_table_names <- ls(pattern = "(.*)(_)(A3SS_events)(_simplified$)")
+print(paste("There are", length(list_of_A3SS_simplified_output_table_names), "output tables loaded for A3SS events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_A3SS_simplified_output_tables <- purrr::map(list_of_A3SS_simplified_output_table_names, get)
+names(list_of_A3SS_simplified_output_tables) <- list_of_A3SS_simplified_output_table_names
+## subset
+list_of_A3SS_simplified_output_tables_simplified <- purrr::map(list_of_A3SS_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+A3SS_pvalue_column_names <- gsub(x = list_of_A3SS_simplified_output_table_names, pattern = "(.*)_A3SS_events_simplified", replacement = "pvalue_\\1")
+A3SS_qvalue_column_names <- gsub(x = list_of_A3SS_simplified_output_table_names, pattern = "(.*)_A3SS_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A3SS_simplified_output_tables_simplified, A3SS_pvalue_column_names, ~rename(.x, !!.y := 5))
+list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A3SS_simplified_output_tables_shuffled, A3SS_qvalue_column_names, ~rename(.x, !!.y := 6))
+
+print(paste("Shuffled", length(list_of_A3SS_simplified_output_tables_shuffled), "output tables for A3SS events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+A3SS_summary_table <- list_of_A3SS_simplified_output_tables_shuffled %>% reduce(full_join, by = c("common_5_SS_coor", "Gene", "AS_event_ID", "A3SS_coordinates"))
+
+# NOTEEEEEE: further column exclusion later on.
+
+# A3SS_trimmed_table <- A3SS_summary_table[, c(1, 2, 5, 6, 7... to the end)]
+
+```
+
+### A5SS
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_A5SS_simplified_output_table_names <- ls(pattern = "(.*)(_)(A5SS_events)(_simplified$)")
+print(paste("There are", length(list_of_A5SS_simplified_output_table_names), "output tables loaded for A5SS events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_A5SS_simplified_output_tables <- purrr::map(list_of_A5SS_simplified_output_table_names, get)
+names(list_of_A5SS_simplified_output_tables) <- list_of_A5SS_simplified_output_table_names
+
+## subset
+list_of_A5SS_simplified_output_tables_simplified <- purrr::map(list_of_A5SS_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+A5SS_pvalue_column_names <- gsub(x = list_of_A5SS_simplified_output_table_names, pattern = "(.*)_A5SS_events_simplified", replacement = "pvalue_\\1")
+A5SS_qvalue_column_names <- gsub(x = list_of_A5SS_simplified_output_table_names, pattern = "(.*)_A5SS_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_A5SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A5SS_simplified_output_tables_simplified, A5SS_pvalue_column_names, ~rename(.x, !!.y := 5))
+list_of_A5SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A5SS_simplified_output_tables_shuffled, A5SS_qvalue_column_names, ~rename(.x, !!.y := 6))
+
+print(paste("Shuffled", length(list_of_A5SS_simplified_output_tables_shuffled), "output tables for A5SS events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+A5SS_summary_table <- list_of_A5SS_simplified_output_tables_shuffled %>% reduce(full_join, by = c("common_3_SS_coor", "Gene", "AS_event_ID", "A5SS_coordinates"))
+
+
+```
+
+### cassette exon
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_cassette_exon_simplified_output_table_names <- ls(pattern = "(.*)(_)(cassette_exon_events)(_simplified$)")
+print(paste("There are", length(list_of_cassette_exon_simplified_output_table_names), "output tables loaded for cassette exon events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_cassette_exon_simplified_output_tables <- purrr::map(list_of_cassette_exon_simplified_output_table_names, get)
+names(list_of_cassette_exon_simplified_output_tables) <- list_of_cassette_exon_simplified_output_table_names
+
+## subset
+list_of_cassette_exon_simplified_output_tables_simplified <- purrr::map(list_of_cassette_exon_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9, 10, 11))
+## annotating the column names to be comparison name specific
+
+cassette_exon_pvalue_column_names <- gsub(x = list_of_cassette_exon_simplified_output_table_names, pattern = "(.*)_cassette_exon_events_simplified", replacement = "pvalue_\\1")
+cassette_exon_qvalue_column_names <- gsub(x = list_of_cassette_exon_simplified_output_table_names, pattern = "(.*)_cassette_exon_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_cassette_exon_simplified_output_tables_shuffled <- purrr::map2(list_of_cassette_exon_simplified_output_tables_simplified, cassette_exon_pvalue_column_names, ~rename(.x, !!.y := 7))
+list_of_cassette_exon_simplified_output_tables_shuffled <- purrr::map2(list_of_cassette_exon_simplified_output_tables_shuffled, cassette_exon_qvalue_column_names, ~rename(.x, !!.y := 8))
+
+print(paste("Shuffled", length(list_of_cassette_exon_simplified_output_tables_shuffled), "output tables for cassette exon events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+cassette_exon_summary_table <- list_of_cassette_exon_simplified_output_tables_shuffled %>% reduce(full_join, by = c("upstream_exon_end_coor", "downstream_exon_start_coor", "Gene", "AS_event_ID", "cassette_exon_start_coor", "cassette_exon_end_coor"))
+
+
+```
+
+
+
+### MXE events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_MXE_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(MXE_events)(_simplified$)")
+print(paste("There are", length(list_of_MXE_events_simplified_output_table_names), "output tables loaded for MXE events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_MXE_events_simplified_output_tables <- purrr::map(list_of_MXE_events_simplified_output_table_names, get)
+names(list_of_MXE_events_simplified_output_tables) <- list_of_MXE_events_simplified_output_table_names
+
+## subset
+list_of_MXE_events_simplified_output_tables_simplified <- purrr::map(list_of_MXE_events_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9, 10))
+## annotating the column names to be comparison name specific
+
+MXE_events_pvalue_column_names <- gsub(x = list_of_MXE_events_simplified_output_table_names, pattern = "(.*)_MXE_events_simplified", replacement = "pvalue_\\1")
+MXE_events_qvalue_column_names <- gsub(x = list_of_MXE_events_simplified_output_table_names, pattern = "(.*)_MXE_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_MXE_events_simplified_output_tables_shuffled <- purrr::map2(list_of_MXE_events_simplified_output_tables_simplified, MXE_events_pvalue_column_names, ~rename(.x, !!.y := 6))
+list_of_MXE_events_simplified_output_tables_shuffled <- purrr::map2(list_of_MXE_events_simplified_output_tables_shuffled, MXE_events_qvalue_column_names, ~rename(.x, !!.y := 7))
+
+print(paste("Shuffled", length(list_of_MXE_events_simplified_output_tables_shuffled), "output tables for MXE exon events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+MXE_events_summary_table <- list_of_MXE_events_simplified_output_tables_shuffled %>% reduce(full_join, by = c("upstream_exon_end_coor", "downstream_exon_start_coor", "Gene", "AS_event_ID", "MXE_exon_coordinates"))
+
+```
+
+### composite events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_composite_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(composite_events)(_simplified$)")
+print(paste("There are", length(list_of_composite_events_simplified_output_table_names), "output tables loaded for composite events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_composite_events_simplified_output_tables <- purrr::map(list_of_composite_events_simplified_output_table_names, get)
+## subset
+list_of_composite_events_simplified_output_tables_simplified <- purrr::map(list_of_composite_events_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8))
+## annotating the column names to be comparison name specific
+
+composite_events_pvalue_column_names <- gsub(x = list_of_composite_events_simplified_output_table_names, pattern = "(.*)_composite_events_simplified", replacement = "pvalue_\\1")
+composite_events_qvalue_column_names <- gsub(x = list_of_composite_events_simplified_output_table_names, pattern = "(.*)_composite_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_composite_events_simplified_output_tables_shuffled <- purrr::map2(list_of_composite_events_simplified_output_tables_simplified, composite_events_pvalue_column_names, ~rename(.x, !!.y := 4))
+list_of_composite_events_simplified_output_tables_shuffled <- purrr::map2(list_of_composite_events_simplified_output_tables_shuffled, composite_events_qvalue_column_names, ~rename(.x, !!.y := 5))
+
+print(paste("Shuffled", length(list_of_composite_events_simplified_output_tables_shuffled), "output tables for composite events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+composite_events_summary_table <- list_of_composite_events_simplified_output_tables_shuffled %>% reduce(full_join, by = c("Composite_coordinates", "Gene", "AS_event_ID"))
+
+```
+
+### IR events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_IR_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(intron_retention)(_simplified$)")
+print(paste("There are", length(list_of_IR_events_simplified_output_table_names), "output tables loaded for IR events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_IR_events_simplified_output_tables <- purrr::map(list_of_IR_events_simplified_output_table_names, get)
+names(list_of_IR_events_simplified_output_tables) <- list_of_IR_events_simplified_output_table_names
+
+## subset
+list_of_IR_events_simplified_output_tables_simplified <- list_of_IR_events_simplified_output_tables %>% purrr::map(~filter(.x, chromosome != "chromosome", Gene != "", pvalue != ""))
+
+list_of_IR_events_simplified_output_tables_simplified <- purrr::map(list_of_IR_events_simplified_output_tables_simplified, ~select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+IR_events_pvalue_column_names <- gsub(x = list_of_IR_events_simplified_output_table_names, pattern = "(.*)_intron_retention_simplified", replacement = "pvalue_\\1")
+IR_events_qvalue_column_names <- gsub(x = list_of_IR_events_simplified_output_table_names, pattern = "(.*)_intron_retention_simplified", replacement = "qvalue_\\1")
+
+
+list_of_IR_events_simplified_output_tables_shuffled <- purrr::map2(list_of_IR_events_simplified_output_tables_simplified, IR_events_pvalue_column_names, ~rename(.x, !!.y := 5))
+list_of_IR_events_simplified_output_tables_shuffled <- purrr::map2(list_of_IR_events_simplified_output_tables_shuffled, IR_events_qvalue_column_names, ~rename(.x, !!.y := 6))
+
+print(paste("Shuffled", length(list_of_IR_events_simplified_output_tables_shuffled), "output tables for IR events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+IR_events_summary_table <- list_of_IR_events_simplified_output_tables_shuffled %>% reduce(full_join, by = c("retained_intron_start", "retained_intron_end", "Gene", "AS_event_ID"))
+
+```
+
+# discard the superfluous columns for each table containing each splice mode
+
+```{r}
+
+# generating the list of tables
+list_of_summary_tables <- list(A3SS_summary_table, A5SS_summary_table, cassette_exon_summary_table, composite_events_summary_table, IR_events_summary_table, MXE_events_summary_table)
+
+# naming the list of tables
+list_of_summary_table_names <- c("A3SS_summary_table", "A5SS_summary_table", "cassette_exon_summary_table", "composite_events_summary_table", "IR_events_summary_table", "MXE_events_summary_table")
+names(list_of_summary_tables) <- list_of_summary_table_names
+
+# remove columns we don't want
+
+list_of_summary_tables_reduced <- list_of_summary_tables
+
+list_of_summary_tables_reduced[[1]] <- list_of_summary_tables_reduced[[1]] %>% select(., -3, -4)
+list_of_summary_tables_reduced[[2]] <- list_of_summary_tables_reduced[[2]] %>% select(., -3, -4)
+list_of_summary_tables_reduced[[3]] <- list_of_summary_tables_reduced[[3]] %>% select(., -(3:6))
+list_of_summary_tables_reduced[[4]] <- list_of_summary_tables_reduced[[4]] %>% select(., -3)
+list_of_summary_tables_reduced[[5]] <- list_of_summary_tables_reduced[[5]] %>% select(., -3, -4)
+list_of_summary_tables_reduced[[6]] <- list_of_summary_tables_reduced[[6]] %>% select(., -(3:5))
+
+# this doesn't work
+
+# list_of_summary_tables <- list(A3SS_summary_table, A5SS_summary_table, cassette_exon_summary_table, composite_events_summary_table, IR_events_summary_table, MXE_events_summary_table)
+# 
+# 
+# functionlist_column_discard_summary_table <- list(~select(., -3, -4),
+#                                                ~select(., -3, -4),
+#                                                ~select(., -(3:6)),
+#                                                ~select(., -3),
+#                                                ~select(., -3, -4),
+#                                                ~select(., -(3:5)))
+
+
+
+```
+
+
+### append the name of the splice mode to each data frame 
+
+
+
+```{r}
+
+splicemode_colname <- rep("splicemode", 6)
+
+column_of_splicemode_names <- gsub(x = list_of_summary_table_names, pattern = "(.*)_summary_table", replacement = "\\1")
+
+list_of_summary_tables_reduced_appendedwithsplicemode <- purrr::map2(.x = list_of_summary_tables_reduced, .y = column_of_splicemode_names, ~cbind(.x, splicemode=.y))
+
+```
+
+### combining the summary tables for each splice mode into a large table
+
+NOTE: wide_table_all_splicemodes_split IS THE MAIN TABULAR OUTPUT THAT CONTAINS VALUES THAT EXIST IN *ALL* COMPARISONS. IT WILL BE USED FOR SOMS ANALYSIS AND OTHER ANALYSES THAT REQUIRE DATA FROM ALL COMPARISONS. 
+
+NOTE2: wide_table_of_all_splicemodes(_with_na) IS/ARE THE MAIN TABULAR OUTPUT(S) THAT CONTAIN(S) *EVERYTHING*, EVEN NA VALUES. USED FOR GENE ONTOLOGY
+
+NOTE3: I NEED TO WRITE A FUNCTION FOR THIS STEP
+
+```{r}
+
+wide_table_of_all_splicemodes_with_na <-  reduce(.x = list_of_summary_tables_reduced_appendedwithsplicemode, .f = bind_rows) 
+
+wide_table_of_all_splicemodes <- wide_table_of_all_splicemodes_with_na %>% na.omit
+
+wide_table_of_all_splicemodes <- type_convert(wide_table_of_all_splicemodes)
+
+rownames(wide_table_of_all_splicemodes) <- NULL
+
+
+# SPLITTING THE SEMICOLON DELIMITED VALUES INTO NEW ROWS
+
+wide_table_of_all_splicemodes_column_names <- colnames(wide_table_of_all_splicemodes)
+
+
+wide_table_of_all_splicemodes_dPSI_column_numbers <- wide_table_of_all_splicemodes_column_names %>% grep(., pattern = "deltaPSI(.*)")
+
+# for (i in wide_table_of_all_splicemodes_dPSI_column_numbers)
+# {
+#   
+#   wide_table_of_all_splicemodes[, i] %>% strsplit(., split = ";") %>% unlist %>% wide_table_of_all_splicemodes[, i]
+# 
+#   
+# }
+
+# A. SPLITTING EACH CELL OF DELTAPSI INTO SEPARATE ROWS
+# THIS OUTPUTS A LIST WITH EACH ELEMENT CONTAINING THE VALUES OF EACH ROW
+list_of_all_splicemodes_dPSI_values_only_split <- wide_table_of_all_splicemodes[, wide_table_of_all_splicemodes_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){strsplit(x, split = ";")})
+
+# WE MUST FIRST DEFINE THE FINAL TABLE THEN GO BACK TO FINISHING THE FINAL TABLE BECAUSE IT NEEDS TO SCAFFOLD BASED ON A PREDETERMINED NUMBER OF ROWS IN data.frame(matrix(...))
+
+# B. USE SPLITTING LENGTH FOR EACH ROW TO DETERMINE THE AMOUNT OF TIMES ROWS ARE TO BE REPEATED.
+# THIS OUTPUTS THE SAME DATA.FRAME EXCEPT THE RIGHT COLUMNS ARE REPEATED THE SAME NUMBER OF TIMES AS SEMICOLONS
+wide_table_of_all_splicemodes_non_dPSI_values_only_split <- wide_table_of_all_splicemodes[, -wide_table_of_all_splicemodes_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){rep(x, sapply(list_of_all_splicemodes_dPSI_values_only_split[[1]], length))}) %>% data.frame
+
+list_of_isoform_number <- list_of_all_splicemodes_dPSI_values_only_split[[1]] %>% lapply(length) %>% purrr::map(.x = ., ~c(1:.x)) %>% unlist
+
+# DONE STEP B.
+
+# BACK TO A.
+wide_table_all_splicemodes_dPSI_values_only_split <- data.frame(matrix(unlist(list_of_all_splicemodes_dPSI_values_only), nrow = nrow(wide_table_of_all_splicemodes_non_dPSI_values_only_split), byrow = FALSE), stringsAsFactors = FALSE)
+
+colnames(wide_table_all_splicemodes_dPSI_values_only_split) <- names(list_of_all_splicemodes_dPSI_values_only_split)
+
+# DONE STEP A.
+
+# APPEND THE TWO TABLES TO RE-CREATE THE WIDE MASTER TABLE EXCEPT THE VALUES ARE ACTUALLY READABLE BY R NOW.
+wide_table_all_splicemodes_split <- dplyr::bind_cols(wide_table_of_all_splicemodes_non_dPSI_values_only_split, wide_table_all_splicemodes_dPSI_values_only_split)
+
+# rearrange the columns to preserve consistency with the rest of the wide_table s
+
+wide_table_all_splicemodes_split <- wide_table_all_splicemodes_split[, wide_table_of_all_splicemodes_column_names]
+
+# append the list of isoform numbers
+
+wide_table_all_splicemodes_split <- cbind(wide_table_all_splicemodes_split, isoform_number = list_of_isoform_number)
+
+# remove non-integer values
+
+wide_table_all_splicemodes_split <- type_convert(wide_table_all_splicemodes_split, na = "Inf", trim_ws = TRUE)
+
+wide_table_all_splicemodes_split <- wide_table_all_splicemodes_split %>% na.omit
+
+row.names(wide_table_all_splicemodes_split) <- NULL
+
+# re-interpret numbers as numeric
+
+wide_table_all_splicemodes_split[, !(colnames(wide_table_all_splicemodes_split) == c("Gene", "AS_event_ID", "splicemode"))] <- wide_table_all_splicemodes_split[, !(colnames(wide_table_all_splicemodes_split) == c("Gene", "AS_event_ID", "splicemode"))] %>% mutate_each(., funs = as.character) %>% mutate_each(., funs = as.numeric)
+
+```
+
+## DRAWING SOMS TO ANALYSE TIME SERIES DATA
+
+### preparing the wide tables which are chopped and ready for next SOMs analyses
+
+At the present time, we shall just cluster the OB time series separate to the AD time series.
+
+Our trick is to use only the "deltaPSI_BM_MSC_to_OB_[something]d-BM_MSC_to_ud" column and use it as a proxy for the absolute inclusion levels. Setting the PSI at timepoint 0 (MSC) is inconsequential for our method of running SOMs, as it normalises the centroid of all PSI values of each isoforms' time series anyways.
+
+```{r}
+
+PSI_levels_timeseries_OB_wide <- wide_table_all_splicemodes_split[, c("Gene", "AS_event_ID", "splicemode", "isoform_number", colnames(wide_table_all_splicemodes_split)[grep(x = colnames(wide_table_all_splicemodes_split), pattern = "(deltaPSI_BM_MSC_to_)(OB)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(.)(BM_MSC_to_ud)")])]
+
+PSI_levels_timeseries_OB_wide <- cbind(PSI_levels_timeseries_OB_wide, MSC = 0)
+
+
+colnames(PSI_levels_timeseries_OB_wide) <- gsub(x = colnames(PSI_levels_timeseries_OB_wide), pattern = "(deltaPSI_BM_MSC_to_)(OB_)([0-9]{1,2}d|[0-9]{1,2}h)(.BM_MSC_to_ud)", replacement = "\\3")
+
+```
+
+### define SOM parameters
+
+```{r}
+
+som_random_number_seed <- 7
+organism <- "MSC_TERT4"
+som_size_x <- 5
+som_size_y <- 5
+
+```
+
+### drawing 5x5 SOM
+
+```{r}
+
+som_5_by_5_OBseries  <- run_soms_analysis(PSI_levels_timeseries_OB_wide, "hsa", expt_label, som_size_x, som_size_y, results_directory_soms, som_random_number_seed)
+
+```
+
+
+
+
+## GENE ONTOLOGY
+### use gene ontology to analyse all the genes which had at least one differential splicing event over all timepoint comparisons
+```{r}
+
+library(biomaRt)
+ensembl_mart = useMart("ensembl",dataset="hsapiens_gene_ensembl")
+
+all_genes_GO_list <- getBM(values = wide_table_of_all_splicemodes_with_na$Gene, filters = "external_gene_name", attributes = c("external_gene_name", "description", "go_id", "name_1006", "definition_1006"), mart = ensembl_mart)
+
+View(all_genes_GO_list)
+
+unique(all_genes_GO_list[, 1:2]) %>% View
+
+
+library("RDAVIDWebService")
+
+```
+
+### p value and FDR (q value) cutoff filtering
+
+In this step: we will use the wide_table_of_all_splicemodes_with_na and filter it for:
+
+a*) At least one pvalue < 0.05, OR IF THE AMOUNT OF GENES AFTER QVALUE FILTERING IS HIGH ENOUGH, 
+a) At least one qvalue < 0.05
+
+FOR 
+
+a) OB timeseries, OR
+b) AD timeseries
+
+POSSIBLY FOR ISOFORMS WHICH HAVE INCLUSION LEVELS WHICH GO
+
+a) UP, OR
+b) DOWN,
+
+for a total of 1* x 2 x 2 = 4 comparisons.
+
+... or maybe we might not do inclusion levels because PSI values going up and down for a particular splicemode means squat for a gene.
+
+```{r}
+
+wide_table_of_all_splicemodes_pvalue_column_numbers <- wide_table_of_all_splicemodes_column_names[grep(wide_table_of_all_splicemodes_column_names, pattern = "pvalue(.*)")]
+
+wide_table_of_all_splicemodes_qvalue_column_numbers <- wide_table_of_all_splicemodes_column_names[grep(wide_table_of_all_splicemodes_column_names, pattern = "qvalue(.*)")]
+
+regex_of_all_comparison_names <- "(pvalue_|qvalue_|deltaPSI_)(BM_MSC_to_|AD_MSC_to_)(AD|OB|ud)(_[0-9]{1,2}d|_[0-9]{1,2}h|)(_vs_|.)(BM_MSC_to_|AD_MSC_to_)(AD|OB|ud)(_[0-9]{1,2}d_vs_|_[0-9]{1,2}h_vs_|)"
+
+# OB SERIES
+
+## filtering the table to include only OB values
+
+wide_table_of_all_splicemodes_with_na_OBseries <- wide_table_of_all_splicemodes_with_na[, -grep(colnames(wide_table_of_all_splicemodes_with_na), pattern = "AD")]
+
+## filtering the table for FDR
+wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_OBseries[apply(wide_table_of_all_splicemodes_with_na_OBseries[, grep(colnames(wide_table_of_all_splicemodes_with_na_OBseries), pattern = "qvalue")], 1, function(x){any(x<0.05)}) == TRUE, ]
+
+wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[apply(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05[, grep(colnames(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05), pattern = "qvalue")], 1, function(x){all(is.na(x))}) == FALSE, ]
+
+rownames(wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05) <- NULL
+
+wide_table_of_all_splicemodes_with_na_OBseries_filtered_qvalue_0.05$Gene %>% unique %>% length %>% paste(., "unique genes differentially spliced during the time course of osteoblastic differentiation with FDR < 0.05") %>% print
+
+## facecheck
+
+# wide_table_of_all_splicemodes_with_na_filtered_qvalue_0.05[, -c(grep(colnames(wide_table_of_all_splicemodes_with_na_filtered_qvalue_0.05), pattern = "pvalue"), grep(colnames(wide_table_of_all_splicemodes_with_na_filtered_qvalue_0.05), pattern = "deltaPSI"))] %>% head %>% print
+
+
+# AD SERIES
+
+## filtering the table to include only AD values
+
+wide_table_of_all_splicemodes_with_na_ADseries <- wide_table_of_all_splicemodes_with_na[, -grep(colnames(wide_table_of_all_splicemodes_with_na), pattern = "OB")]
+
+## filtering the table for FDR
+wide_table_of_all_splicemodes_with_na_ADseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_ADseries[apply(wide_table_of_all_splicemodes_with_na_ADseries[, grep(colnames(wide_table_of_all_splicemodes_with_na_ADseries), pattern = "qvalue")], 1, function(x){any(x<0.05)}) == TRUE, ]
+
+wide_table_of_all_splicemodes_with_na_ADseries_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes_with_na_ADseries_filtered_qvalue_0.05[apply(wide_table_of_all_splicemodes_with_na_ADseries_filtered_qvalue_0.05[, grep(colnames(wide_table_of_all_splicemodes_with_na_ADseries_filtered_qvalue_0.05), pattern = "qvalue")], 1, function(x){all(is.na(x))}) == FALSE, ]
+
+rownames(wide_table_of_all_splicemodes_with_na_ADseries_filtered_qvalue_0.05) <- NULL
+
+wide_table_of_all_splicemodes_with_na_ADseries_filtered_qvalue_0.05$Gene %>% unique %>% length %>% paste(., "unique genes differentially spliced during the time course of adipocytic differentiation with FDR < 0.05") %>% print
+
+```
+

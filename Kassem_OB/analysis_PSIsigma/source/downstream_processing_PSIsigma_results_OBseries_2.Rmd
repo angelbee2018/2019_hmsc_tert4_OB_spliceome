@@ -66,27 +66,24 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-shared_dir <- "/mnt/Tertiary/sharedfolder/"
+# shared_dir <- "/mnt/Tertiary/sharedfolder/"
 # shared_dir <- "Z:/"
 
 # psisigma_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
-psisigma_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
+psisigma_results_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
 
 # R_processing_results_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
-R_processing_results_dir <- "/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
-
-if(! dir.exists(R_processing_results_dir) ) {
-  dir.create(R_processing_results_dir, recursive = TRUE)}
+R_processing_results_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/"
 
 vector_OBseries_timepoints_raw <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
 # vector_of_comparisons_final <- read.delim("Z:/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
-vector_of_comparisons_final <- read.delim("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
+vector_of_comparisons_final <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/list_of_timepoint_comparisons_final.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE) %>% unlist
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
-# tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
-# tibble_recon_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
+tibble_ref_gtf <- rtracklayer::import("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
+tibble_recon_gtf <- rtracklayer::import("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
 
 ```
 
@@ -434,35 +431,39 @@ annotate_differential_exon <- function(list_matched_ref_recon_gtf) {
 
 extract_junction.flanking.exons <- function(query_chr, query_start, query_end, query_strand, tibble_gtf_table, tolerance_left = 1, tolerance_right = 1, tolerance_inside = 1, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon") {
   
-  # DEBUG ###################
-  
-  # query_chr = a1$chr %>% type.convert
-  # query_start = a1$event_region_start %>% type.convert
-  # query_end = a1$event_region_end %>% type.convert
+  # DEBUG ###
+  # query_chr = b1$chr
+  # query_start = b1$diff_exon_start
+  # query_end = b1$diff_exon_end
   # query_strand = "*"
-  # tibble_gtf_table = tibble_ref_gtf
+  # tibble_gtf_table = a2
   # tolerance_left = 0
   # tolerance_right = 0
   # tolerance_inside = 0
   # tolerance_outside = 0
-  # match_consecutive = FALSE
-  # return_type = "exon"
-  
+  # match_consecutive = TRUE
+  # return_type = ".*"
   ###########################
   
   # print(paste("now processing junction number", index))
   
   if (query_strand == "." | query_strand == 0 | query_strand == "*") {
     
-    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% .[.$start <= ((query_end %>% as.numeric) + 1 + tolerance_outside + tolerance_left) & .$end >= ((query_start %>% as.numeric) - 1 - tolerance_outside - tolerance_left), ] %>% .[!(.$start <= ((query_end %>% as.numeric) - tolerance_inside - tolerance_right) & .$end >= ((query_start %>% as.numeric) + tolerance_inside + tolerance_left)), ] %>% .[.$type %in% return_type, ]
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% .[.$start <= ((query_end %>% type.convert) + 1 + tolerance_outside + tolerance_left) & .$end >= ((query_start %>% type.convert) - 1 - tolerance_outside - tolerance_left), ] %>% .[!(.$start <= ((query_end %>% type.convert) - tolerance_inside - tolerance_right) & .$end >= ((query_start %>% type.convert) + tolerance_inside + tolerance_left)), ]
     
   } else if (query_strand == "+" | query_strand == "-") {
     
-    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% .[.$strand == query_strand %>% trimws, ] %>% .[.$start <= ((query_end %>% as.numeric) + 1 + tolerance_right) & .$end >= ((query_start %>% as.numeric) - 1 - tolerance_left), ] %>% .[!(.$start <= ((query_end %>% as.numeric) - tolerance_inside - tolerance_right) & .$end >= ((query_start %>% as.numeric) + tolerance_inside + tolerance_left)), ] %>% .[.$type %in% return_type, ]
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% .[.$strand == query_strand %>% trimws, ] %>% .[.$start <= ((query_end %>% type.convert) + 1 + tolerance_right) & .$end >= ((query_start %>% type.convert) - 1 - tolerance_left), ] %>% .[!(.$start <= ((query_end %>% type.convert) - tolerance_inside - tolerance_right) & .$end >= ((query_start %>% type.convert) + tolerance_inside + tolerance_left)), ]
     
   } else {
     
     stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
+    
+  }
+  
+  if (tibble_gtf_subset_flanking_exons %>% nrow > 0) {
+    
+    tibble_gtf_subset_flanking_exons <- tibble_gtf_subset_flanking_exons %>% dplyr::filter(str_detect(string = `type`, pattern = return_type))
     
   }
   
@@ -473,11 +474,11 @@ extract_junction.flanking.exons <- function(query_chr, query_start, query_end, q
   
   if (match_consecutive == TRUE) {
     
-    list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% as.numeric)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% as.numeric) - (.x[1, "exon_number"] %>% paste %>% as.numeric)) == 1)
+    list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% type.convert)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% type.convert) - (.x[1, "exon_number"] %>% paste %>% type.convert)) == 1)
     
   } else if (match_consecutive == FALSE) {
     
-    list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% as.numeric)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2)
+    list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% type.convert)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2)
     
   }
   
@@ -497,7 +498,7 @@ extract_junction.flanking.exons <- function(query_chr, query_start, query_end, q
 # tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
 # index: loop progress marker to be used with imap
 
-extract_overlapping.exons <- function(query_chr, query_start, query_end, query_strand, tibble_gtf_table, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") {
+extract_matching.exons <- function(query_chr, query_start, query_end, query_strand, tibble_gtf_table, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") {
 
   # DEBUG ###################
   # index <- 1
@@ -535,6 +536,64 @@ extract_overlapping.exons <- function(query_chr, query_start, query_end, query_s
   return(tibble_gtf_subset_overlapping_exons)
   
 }
+
+```
+
+```{r}
+
+extract_overlapping_features <- function(query_chr, query_start, query_end, query_strand, tibble_gtf_table, left_query_shift = 0, right_query_shift = 0, left_tolerance = 0, right_tolerance = 0, return_type) {
+    
+    # DEBUG ###################
+    # index <- 1
+    # spliceregion_list <- wide_tibble_of_all_unique_VSR_and_exon_coords_array.tree_not_IR[[index]]
+    # # tibble_gtf_table <- tibble_ref_gtf
+    # tibble_gtf_table <- tibble_recon_gtf
+    # stranded = FALSE
+    ###########################
+    
+    # cat(query_chr, "\n")
+    # cat(query_start, "\n")
+    # cat(query_end, "\n")
+    # cat(query_strand, "\n")
+    # print(tibble_gtf_table, "\n")
+    # cat(left_query_shift, "\n")
+    # cat(right_query_shift, "\n")
+    # cat(left_tolerance, "\n")
+    # cat(right_tolerance, "\n")
+    
+    # print(paste("now processing junction number", index))
+    
+    # left_query_shift <<- left_query_shift
+    # right_query_shift <<- right_query_shift
+    # left_tolerance <<- left_tolerance
+    # right_tolerance <<- right_tolerance
+    
+    if (!(query_strand == "+" | query_strand == "-")) {
+        
+        # +/- 1 nt tolerance
+        tibble_gtf_subset_matching_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% 
+            .[which(.$end >= ((query_start %>% as.numeric) + left_query_shift - left_tolerance) & .$start <= ((query_end %>% as.numeric) + right_query_shift + right_tolerance)), ]
+        
+    } else if (query_strand == "+" | query_strand == "-") {
+        
+        # +/- 1 nt tolerance
+        tibble_gtf_subset_matching_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws &
+                                                                 tibble_gtf_table$strand == query_strand %>% trimws, ] %>% 
+            .[which(.$end >= ((query_start %>% as.numeric) + left_query_shift - left_tolerance) & .$start <= ((query_end %>% as.numeric) + right_query_shift + right_tolerance)), ]
+        
+    }
+  
+  if (tibble_gtf_subset_matching_exons %>% nrow > 0) {
+    
+    tibble_gtf_subset_matching_exons <- tibble_gtf_subset_matching_exons %>% dplyr::filter(str_detect(string = `type`, pattern = return_type))
+    
+  }
+    
+    return(tibble_gtf_subset_matching_exons)
+    
+}
+
+## END extract_overlapping_features() ###
 
 ```
 
@@ -1135,6 +1194,8 @@ tibble_queryisoforms_chr_strand_start_end_to_annotation_and_proteindomain <- fun
 
 ```{r}
 
+options(mc.cores = 16)
+
 list_of_psisigma_result_tibbles_raw <- future_map(.x = vector_of_comparisons_final, .f = ~read.delim(paste(psisigma_results_dir, .x, "/", .x, "_r1_ir3.sorted.txt", sep = ""), sep = "\t") %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("as_tibble", "psisigma_results_dir")))
 
 ```
@@ -1249,7 +1310,7 @@ list_ref_matching_exon_entries_not_IR <- future_map(.x = wide_tibble_of_all_uniq
   # go to matching by exons only if VSR match failed
   if (length(raw_reference_gtf_match) == 0) {
     
-    list_matched_exon_ref <- extract_overlapping.exons(query_chr = a1$chr %>% type.convert, query_start = a1$diff_exon_start %>% type.convert, query_end = a1$diff_exon_end %>% type.convert, query_strand = "*", tibble_gtf_table = tibble_ref_gtf, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon")
+    list_matched_exon_ref <- extract_matching.exons(query_chr = a1$chr %>% type.convert, query_start = a1$diff_exon_start %>% type.convert, query_end = a1$diff_exon_end %>% type.convert, query_strand = "*", tibble_gtf_table = tibble_ref_gtf, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon")
     
   } else {
     
@@ -1290,7 +1351,7 @@ list_ref_matching_exon_entries_not_IR <- future_map(.x = wide_tibble_of_all_uniq
   # go to matching by exons only if VSR match failed
   if (length(raw_reconstructed_gtf_match) == 0) {
     
-    list_matched_exon_recon <- extract_overlapping.exons(query_chr = a1$chr %>% type.convert, query_start = a1$diff_exon_start %>% type.convert, query_end = a1$diff_exon_end %>% type.convert, query_strand = "*", tibble_gtf_table = tibble_recon_gtf, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon")
+    list_matched_exon_recon <- extract_matching.exons(query_chr = a1$chr %>% type.convert, query_start = a1$diff_exon_start %>% type.convert, query_end = a1$diff_exon_end %>% type.convert, query_strand = "*", tibble_gtf_table = tibble_recon_gtf, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon")
     
   } else {
     
@@ -1332,7 +1393,7 @@ list_ref_matching_exon_entries_not_IR <- future_map(.x = wide_tibble_of_all_uniq
                 "reference_gtf_match" = list(list_matched_exon_ref),
                 "reconstructed_gtf_match" = list(list_matched_exon_recon)))
   
-}, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_overlapping.exons", "extract_junction.flanking.exons")))
+}, .progress = TRUE, .options = future_options(globals = c("tibble_ref_gtf", "tibble_recon_gtf", "extract_matching.exons", "extract_junction.flanking.exons")))
 
 list_ref_matching_exon_entries_not_IR_annotated <- future_imap(.x = list_ref_matching_exon_entries_not_IR, .f = ~annotate_differential_exon(.x) %>% as_tibble, .progress = TRUE, .options = future_options(globals = c("annotate_differential_exon", "as_tibble")))
 
@@ -1389,7 +1450,7 @@ tibble_ref_matching_exon_entries_all_not.IR_summarised[which(tibble_ref_matching
 list_ref_matching_exon_entries_all_array.tree_IR <- tibble_ref_matching_exon_entries_all[row.indices_IR_events, ] %>% array_tree
 
 ## look up the annotation tibble for each AS_event_ID, summarise.
-list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x = list_ref_matching_exon_entries_all_array.tree_IR, .f = function(.x, .y) {
+list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- suppressWarnings(suppressMessages( future_imap(.x = list_ref_matching_exon_entries_all_array.tree_IR, .f = function(.x, .y) {
   
   # message("now processing entry number: ", .y)
   
@@ -1534,13 +1595,13 @@ list_ref_matching_exon_entries_all_array.tree_IR_reannotated <- future_imap(.x =
                               grep(x = .$first_or_last_exon_recon, pattern = "first_exon") %>% na.omit)),
      "any_last_exon" = any(c(grep(x = .$first_or_last_exon_reference, pattern = "last_exon") %>% na.omit, 
                              grep(x = .$first_or_last_exon_recon, pattern = "last_exon") %>% na.omit)),
-     "any_NMD" = any(c(grep(x = .$NMD_reference, pattern = "TRUE") %>% na.omit,
-                       grep(x = .$NMD_recon, pattern = "TRUE") %>% na.omit)), .after = "NMD_flagged_recon")
+     "any_NMD" = any(c(grep(x = .$NMD_flagged_ref, pattern = "TRUE") %>% na.omit,
+                       grep(x = .$NMD_flagged_recon, pattern = "TRUE") %>% na.omit)), .after = "NMD_flagged_recon")
   
   return(summarised_tibble_annotation)
   
 }, .progress = TRUE, .options = future_options(globals = c("as_tibble", "tibble_ref_gtf", "tibble_recon_gtf")))
-
+))
 # tibblize
 tibble_as.event.id_with_summarised_annotation_IR <- list_ref_matching_exon_entries_all_array.tree_IR_reannotated %>% rbindlist(use.names = TRUE, fill = TRUE) %>% as_tibble
 
@@ -2083,7 +2144,7 @@ tibble_poison_exon_finder_results <- read.delim(paste(R_processing_results_dir, 
 # filter for PTC-introducing exons only
 # subset to simplify table
 tibble_poison_exon_finder_results_processed0 <- tibble_poison_exon_finder_results %>%
-  dplyr::mutate("introduces_PTC" = grepl(x = PTC_exists_in_alternative_exon, pattern = "TRUE")) %>%
+  dplyr::mutate("introduces_PTC" = grepl(x = PTC_exists_in_alternative_exon, pattern = "TRUE") == TRUE & grepl(x = alternative_exon_stop_codon_is_premature, pattern = "TRUE") == TRUE) %>%
   dplyr::filter(introduces_PTC == TRUE | has_frameshift == TRUE) %>% 
   dplyr::select(-list_three_frame_translation, -vector_transcript_segment_forward_genome_relative_coords, -list_forward_nucleotides)
 
@@ -5017,7 +5078,7 @@ list_ref_entries_matched_to_exons <- future_map2(
           
           # VSR MATCHING
           # match transcripts to the IR region
-          list_matched_GTF_exon_entries <- extract_overlapping.exons(query_chr = b1$chr, query_start = b1$event_region_start %>% type.convert, query_end = b1$event_region_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+          list_matched_GTF_exon_entries <- extract_matching.exons(query_chr = b1$chr, query_start = b1$event_region_start %>% type.convert, query_end = b1$event_region_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
           # get parent transcript entries
           list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
           
@@ -5064,7 +5125,7 @@ list_ref_entries_matched_to_exons <- future_map2(
         } else if (vector_VSR_exon_coords %>% unique %>% length == 4) {
           
           # exact exon match
-          list_matched_GTF_exon_entries <- extract_overlapping.exons(query_chr = b1$chr, query_start = b1$diff_exon_start %>% type.convert, query_end = b1$diff_exon_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+          list_matched_GTF_exon_entries <- extract_matching.exons(query_chr = b1$chr, query_start = b1$diff_exon_start %>% type.convert, query_end = b1$diff_exon_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
           # get parent transcript entries
           list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
           
@@ -5443,6 +5504,117 @@ tibble_final_annotation_supp <- list_tidied_annotation %>%
 # write table
 write.table(x = tibble_final_annotation_supp, file = paste(R_processing_results_dir, "table_exon_ontology_supporting_info_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
   
+```
+
+## special case: match intron junctions to the reference to see where they are occurring
+
+```{r}
+
+plan(list(tweak(multiprocess, workers = 30),
+          tweak(multiprocess, workers = 8)))
+
+# get IR events only
+tibble_differential_IR_events <- wide_tibble_of_psisigma_results_allcomparisons_differential[grep(x = wide_tibble_of_psisigma_results_allcomparisons_differential$splicemode, pattern = "IR"), ] %>% dplyr::select(event_region_coords, diff_exon_coords, splicemode, matched_gene_names) %>% setNames(c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")) %>% unique
+
+# extract chr start end strand
+tibble_differential_IR_events <- tibble_differential_IR_events %>% 
+  dplyr::mutate(
+    "chr" = gsub(x = `event_region_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\1"),
+    "strand" = "*",
+    "event_region_start" = purrr::map2(.x = gsub(x = `event_region_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                                .y = gsub(x = `event_region_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                                .f = ~min(.x, .y)) %>% unlist,
+    "event_region_end" = purrr::map2(.x = gsub(x = `event_region_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                              .y = gsub(x = `event_region_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                              .f = ~max(.x, .y)) %>% unlist,
+    "diff_exon_start" = purrr::map2(.x = gsub(x = `diff_exon_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                                             .y = gsub(x = `diff_exon_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                                             .f = ~min(.x, .y)) %>% unlist,
+    "diff_exon_end" = purrr::map2(.x = gsub(x = `diff_exon_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\2") %>% type.convert,
+                                           .y = gsub(x = `diff_exon_coords`, pattern = "(.*):(\\d+)-(.*)", replacement = "\\3") %>% type.convert,
+                                           .f = ~max(.x, .y)) %>% unlist
+  )
+
+# list-ify by chromosome 
+list_differential_IR_events_by_chr <- tibble_differential_IR_events %>% 
+  dplyr::group_split(chr) %>% 
+  set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$chr %>% unique) %>% unlist) %>%
+  purrr::map(~.x %>% purrr::array_tree())
+
+# list-ify tibble_ref_gtf
+list_tibble_ref_gtf_by_chr <- tibble_ref_gtf_original %>% 
+  dplyr::group_split(seqnames) %>% 
+  set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$seqnames %>% unique) %>% unlist)
+
+# get chr in common
+vector_chr_in_commmon <- intersect(list_differential_IR_events_by_chr %>% names,
+                                   list_tibble_ref_gtf_by_chr %>% names)
+
+# match IR junctions to reference and annotate with transcript ontology
+list_IR_junctions_matched_to_reference_transcript_ontology <- furrr::future_pmap(
+  .l = list(
+    "a1" = list_differential_IR_events_by_chr[vector_chr_in_commmon],
+    "a2" = list_tibble_ref_gtf_by_chr[vector_chr_in_commmon],
+    "a3" = vector_chr_in_commmon
+  ), 
+  .f = function(a1, a2, a3) {
+    
+    # DEBUG ###
+    # a1 <- list_differential_IR_events_by_chr[[1]]
+    # a2 <- list_tibble_ref_gtf_by_chr[[1]]
+    ###########
+    
+    # cat(a3, "\n")
+    
+    list_L2_matched_ref_tibble_entries <- furrr::future_imap(
+      .x = a1,
+      .f = function(b1, b2) {
+        
+        # DEBUG ###
+        # b1 <- a1[[1]]
+        ###########
+        
+        # cat(b2, "\n")
+        
+        # get list of tibbles of ref exon pairs matched to the IR junction
+        list_tibbles_ref_matched_to_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$diff_exon_start, query_end = b1$diff_exon_end, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon")
+        
+        # get the ENST IDs which contain the IR event region
+        list_ref_entries_containing_IR_event_region <- a2[a2$type == "exon", ] %>% .[which(.$start == b1$event_region_start %>% type.convert | .$end == b1$event_region_end %>% type.convert),] %>% dplyr::group_split(transcript_id) %>% set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+        
+        vector_transcript_ids_matched_to_event_region <- list_ref_entries_containing_IR_event_region %>% purrr::keep(.p = ~.x %>% nrow == 2) %>% names
+
+        if (intersect(vector_transcript_ids_matched_to_event_region, list_tibbles_ref_matched_to_junction %>% names) %>% length > 0) {
+
+          list_tibbles_ref_matched_to_junction <- list_tibbles_ref_matched_to_junction[intersect(vector_transcript_ids_matched_to_event_region, list_tibbles_ref_matched_to_junction %>% names)]
+
+        }
+        
+        # now extract features overlapping with the IR region
+        tibble_overlapping_features_with_IR_region <- extract_overlapping_features(query_chr = b1$chr, query_start = b1$diff_exon_start, query_end = b1$diff_exon_end, query_strand = b1$strand, tibble_gtf_table = a2, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, return_type = ".*") 
+        
+        # filter overlapping features for the transcript_ids with matched exactly to the IR junction
+        tibble_overlapping_features_final <- tibble_overlapping_features_with_IR_region[tibble_overlapping_features_with_IR_region$transcript_id %in% (list_tibbles_ref_matched_to_junction %>% names), ]
+        
+        return(splice(
+          b1,
+          "matched_transcript_type" = tibble_overlapping_features_final$type %>% unique %>% paste(collapse = ","),
+          "matched_transcript_biotype" = tibble_overlapping_features_final$transcript_biotype %>% unique %>% paste(collapse = ",")
+        ))
+        
+      } )
+    
+    return(list_L2_matched_ref_tibble_entries)
+    
+  }, .progress = TRUE)
+
+# rbind and tibblise
+tibble_IR_transcript_ontology <- list_IR_junctions_matched_to_reference_transcript_ontology %>% flatten %>% rbindlist %>% as_tibble
+
+tibble_IR_transcript_ontology$matched_transcript_type %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(value = "transcript_type") %>% dplyr::group_by(transcript_type) %>% dplyr::summarise("tally" = n()) %>% dplyr::arrange(desc(tally))
+
+tibble_IR_transcript_ontology$matched_transcript_biotype %>% strsplit(split = ",") %>% unlist %>% tibble::enframe(value = "transcript_biotype") %>% dplyr::group_by(transcript_biotype) %>% dplyr::summarise("tally" = n()) %>% dplyr::arrange(desc(tally))
+
 ```
 
 ## stats summary of exon ontology

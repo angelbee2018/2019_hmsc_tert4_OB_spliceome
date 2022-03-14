@@ -1,0 +1,30 @@
+# specify directories
+## this contains all the folders of each sample
+fastq_gz_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq_gz/"
+fastq_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq/"
+
+fastqc_path="/mnt/LTS/tools/fastqc_0.11.9/fastqc"
+
+trimmomatic_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/1_trimmomatic/"
+mkdir -p $trimmomatic_output_dir
+
+source_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/source/"
+results_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/results/"
+
+# FASTQC
+parallel -N 1 --round-robin --ungroup -j 24 '{1} {2} --outdir={3}' \
+::: $fastqc_path \
+::: $(ls $fastq_gz_dir*".fastq.gz") \
+::: $results_dir
+
+# TRIMMOMATIC
+
+conda activate trimmomatic
+
+
+parallel -N 1 --round-robin --ungroup -j 24 'trimmomatic PE -threads 8 {1}{2}"_R1.fastq.gz" {1}{2}"_R2.fastq.gz" {3}{2}"_R1_paired.fastq.gz" {3}{2}"_R1_unpaired.fastq.gz" {3}{2}"_R2_paired.fastq.gz" {3}{2}"_R2_unpaired.fastq.gz" CROP:50 MINLEN:50' \
+::: $fastq_gz_dir \
+::: $(cd $fastq_gz_dir; ls | sed 's/_R.\.fastq\.gz//g' | sort -u) \
+::: $trimmomatic_output_dir
+
+

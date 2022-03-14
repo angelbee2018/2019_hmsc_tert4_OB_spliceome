@@ -1,0 +1,39 @@
+# specify directories
+## this contains all the folders of each sample
+fastq_gz_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq_gz/"
+fastq_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq/"
+
+fastqc_path="/mnt/LTS/tools/fastqc_0.11.9/fastqc"
+
+trimmomatic_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/1_trimmomatic/"
+star_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/2_star/"
+mkdir -p $star_output_dir
+
+source_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/source/"
+results_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/results/"
+
+star_genome_dir="/mnt/LTS/reference_data/hg38_ensembl_reference/STAR_index/star_2.7.10a/"
+raw_genome_fasta_path="/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+ensembl_gtf_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+
+ulimit -n 65535
+
+conda activate star_main
+
+# STAR 2.7.10a, samtools 1.9
+
+## generate genome
+STAR --runThreadN 96 --genomeDir $star_genome_dir --runMode genomeGenerate \
+--genomeFastaFiles $raw_genome_fasta_path \
+--sjdbGTFfile $ensembl_gtf_path --sjdbOverhang 99
+
+## splice-aware map
+parallel --link -j 33 --round-robin -N 1 'STAR --readFilesCommand zcat --runThreadN 16 --outSAMtype BAM SortedByCoordinate --outSAMstrandField intronMotif --outSJfilterReads Unique --outFilterIntronMotifs RemoveNoncanonical --outFilterMultimapNmax 1 --genomeDir {4} --twopassMode Basic --readFilesIn {2}{1}"_R1_paired.fastq.gz" {2}{1}"_R2_paired.fastq.gz" --outFileNamePrefix {3}{1}"."; \
+samtools index {3}{1}".Aligned.sortedByCoord.out.bam"' \
+::: $(cd $trimmomatic_output_dir; ls *.fastq.gz | sed 's/\_R..*paired.fastq.gz//g' | sort -u) \
+::: $trimmomatic_output_dir \
+::: $star_output_dir \
+::: $star_genome_dir
+
+
+

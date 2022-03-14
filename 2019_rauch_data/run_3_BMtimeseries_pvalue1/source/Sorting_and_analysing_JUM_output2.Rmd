@@ -1,0 +1,390 @@
+---
+title: "Sorting JUM output files and analysing them"
+author: "Angel Liang"
+date: "10/21/2019"
+output: pdf_document
+---
+
+## Set the running environment
+
+```{r}
+
+library(tidyverse)
+library(dplyr)
+library(purrr)
+library(data.table)
+
+results_dir <- "C:/Users/angel/Documents/run_3_BMtimeseries_pvalue1/results/"
+
+```
+
+## read all the final tables into environment
+
+```{r}
+
+list_of_timepoint_comparisons_final <- read.delim(paste(results_dir, "list_of_timepoint_comparisons_final.txt", sep = ""), stringsAsFactors = FALSE, sep = "\t", header = FALSE, row.names = NULL)
+
+print(head(list_of_timepoint_comparisons_final))
+
+for (comparison in list_of_timepoint_comparisons_final[, 1])
+{
+  
+  for (AS_event in c("A3SS_events", "A5SS_events", "cassette_exon_events", "composite_events", "intron_retention", "MXE_events"))
+  {
+    
+    assign(x = paste(comparison, "_", AS_event, "_simplified", sep = ""), value = read.delim(file = paste(results_dir, "final_JUM_output_", comparison, "/", list.files(path = paste(results_dir, "final_JUM_output_", comparison, "/", sep = ""), pattern = paste("(.)", AS_event, "(.*)simplified.txt", sep = "")), sep = ""), sep = "\t", header = TRUE, stringsAsFactors = FALSE, row.names = NULL, na.strings = c("NONE", "NA", "INF", "Inf"), colClasses = "character"))
+  
+  }
+  
+}
+
+# this must be equal to the total number of comparisons
+
+length(ls(pattern = "(.*)simplified")) / 6
+
+```
+
+## chopping files into a net summary table
+
+note: the final simplified intron retention table outputted by JUM has two header rows. Remove those.
+
+### A3SS
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_A3SS_simplified_output_table_names <- ls(pattern = "(.*)(_)(A3SS_events)(_simplified$)")
+print(paste("There are", length(list_of_A3SS_simplified_output_table_names), "output tables loaded for A3SS events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_A3SS_simplified_output_tables <- purrr::map(list_of_A3SS_simplified_output_table_names, get)
+names(list_of_A3SS_simplified_output_tables) <- list_of_A3SS_simplified_output_table_names
+## subset
+list_of_A3SS_simplified_output_tables_simplified <- purrr::map(list_of_A3SS_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+A3SS_pvalue_column_names <- gsub(x = list_of_A3SS_simplified_output_table_names, pattern = "(.*)_A3SS_events_simplified", replacement = "pvalue_\\1")
+A3SS_qvalue_column_names <- gsub(x = list_of_A3SS_simplified_output_table_names, pattern = "(.*)_A3SS_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A3SS_simplified_output_tables_simplified, A3SS_pvalue_column_names, ~rename(.x, !!.y := 5))
+list_of_A3SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A3SS_simplified_output_tables_shuffled, A3SS_qvalue_column_names, ~rename(.x, !!.y := 6))
+
+print(paste("Shuffled", length(list_of_A3SS_simplified_output_tables_shuffled), "output tables for A3SS events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+A3SS_summary_table <- list_of_A3SS_simplified_output_tables_shuffled %>% reduce(full_join, by = c("common_5_SS_coor", "Gene", "AS_event_ID", "A3SS_coordinates"))
+
+# NOTEEEEEE: further column exclusion later on.
+
+# A3SS_trimmed_table <- A3SS_summary_table[, c(1, 2, 5, 6, 7... to the end)]
+
+```
+
+### A5SS
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_A5SS_simplified_output_table_names <- ls(pattern = "(.*)(_)(A5SS_events)(_simplified$)")
+print(paste("There are", length(list_of_A5SS_simplified_output_table_names), "output tables loaded for A5SS events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_A5SS_simplified_output_tables <- purrr::map(list_of_A5SS_simplified_output_table_names, get)
+names(list_of_A5SS_simplified_output_tables) <- list_of_A5SS_simplified_output_table_names
+
+## subset
+list_of_A5SS_simplified_output_tables_simplified <- purrr::map(list_of_A5SS_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+A5SS_pvalue_column_names <- gsub(x = list_of_A5SS_simplified_output_table_names, pattern = "(.*)_A5SS_events_simplified", replacement = "pvalue_\\1")
+A5SS_qvalue_column_names <- gsub(x = list_of_A5SS_simplified_output_table_names, pattern = "(.*)_A5SS_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_A5SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A5SS_simplified_output_tables_simplified, A5SS_pvalue_column_names, ~rename(.x, !!.y := 5))
+list_of_A5SS_simplified_output_tables_shuffled <- purrr::map2(list_of_A5SS_simplified_output_tables_shuffled, A5SS_qvalue_column_names, ~rename(.x, !!.y := 6))
+
+print(paste("Shuffled", length(list_of_A5SS_simplified_output_tables_shuffled), "output tables for A5SS events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+A5SS_summary_table <- list_of_A5SS_simplified_output_tables_shuffled %>% reduce(full_join, by = c("common_3_SS_coor", "Gene", "AS_event_ID", "A5SS_coordinates"))
+
+
+```
+
+### cassette exon
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_cassette_exon_simplified_output_table_names <- ls(pattern = "(.*)(_)(cassette_exon_events)(_simplified$)")
+print(paste("There are", length(list_of_cassette_exon_simplified_output_table_names), "output tables loaded for cassette exon events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_cassette_exon_simplified_output_tables <- purrr::map(list_of_cassette_exon_simplified_output_table_names, get)
+names(list_of_cassette_exon_simplified_output_tables) <- list_of_cassette_exon_simplified_output_table_names
+
+## subset
+list_of_cassette_exon_simplified_output_tables_simplified <- purrr::map(list_of_cassette_exon_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9, 10, 11))
+## annotating the column names to be comparison name specific
+
+cassette_exon_pvalue_column_names <- gsub(x = list_of_cassette_exon_simplified_output_table_names, pattern = "(.*)_cassette_exon_events_simplified", replacement = "pvalue_\\1")
+cassette_exon_qvalue_column_names <- gsub(x = list_of_cassette_exon_simplified_output_table_names, pattern = "(.*)_cassette_exon_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_cassette_exon_simplified_output_tables_shuffled <- purrr::map2(list_of_cassette_exon_simplified_output_tables_simplified, cassette_exon_pvalue_column_names, ~rename(.x, !!.y := 7))
+list_of_cassette_exon_simplified_output_tables_shuffled <- purrr::map2(list_of_cassette_exon_simplified_output_tables_shuffled, cassette_exon_qvalue_column_names, ~rename(.x, !!.y := 8))
+
+print(paste("Shuffled", length(list_of_cassette_exon_simplified_output_tables_shuffled), "output tables for cassette exon events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+cassette_exon_summary_table <- list_of_cassette_exon_simplified_output_tables_shuffled %>% reduce(full_join, by = c("upstream_exon_end_coor", "downstream_exon_start_coor", "Gene", "AS_event_ID", "cassette_exon_start_coor", "cassette_exon_end_coor"))
+
+
+```
+
+
+
+### MXE events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_MXE_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(MXE_events)(_simplified$)")
+print(paste("There are", length(list_of_MXE_events_simplified_output_table_names), "output tables loaded for MXE events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_MXE_events_simplified_output_tables <- purrr::map(list_of_MXE_events_simplified_output_table_names, get)
+names(list_of_MXE_events_simplified_output_tables) <- list_of_MXE_events_simplified_output_table_names
+
+## subset
+list_of_MXE_events_simplified_output_tables_simplified <- purrr::map(list_of_MXE_events_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8, 9, 10))
+## annotating the column names to be comparison name specific
+
+MXE_events_pvalue_column_names <- gsub(x = list_of_MXE_events_simplified_output_table_names, pattern = "(.*)_MXE_events_simplified", replacement = "pvalue_\\1")
+MXE_events_qvalue_column_names <- gsub(x = list_of_MXE_events_simplified_output_table_names, pattern = "(.*)_MXE_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_MXE_events_simplified_output_tables_shuffled <- purrr::map2(list_of_MXE_events_simplified_output_tables_simplified, MXE_events_pvalue_column_names, ~rename(.x, !!.y := 6))
+list_of_MXE_events_simplified_output_tables_shuffled <- purrr::map2(list_of_MXE_events_simplified_output_tables_shuffled, MXE_events_qvalue_column_names, ~rename(.x, !!.y := 7))
+
+print(paste("Shuffled", length(list_of_MXE_events_simplified_output_tables_shuffled), "output tables for MXE exon events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+MXE_events_summary_table <- list_of_MXE_events_simplified_output_tables_shuffled %>% reduce(full_join, by = c("upstream_exon_end_coor", "downstream_exon_start_coor", "Gene", "AS_event_ID", "MXE_exon_coordinates"))
+
+```
+
+### composite events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_composite_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(composite_events)(_simplified$)")
+print(paste("There are", length(list_of_composite_events_simplified_output_table_names), "output tables loaded for composite events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_composite_events_simplified_output_tables <- purrr::map(list_of_composite_events_simplified_output_table_names, get)
+## subset
+list_of_composite_events_simplified_output_tables_simplified <- purrr::map(list_of_composite_events_simplified_output_tables, ~select(.x, 1, 2, 5, 6, 7, 8))
+## annotating the column names to be comparison name specific
+
+composite_events_pvalue_column_names <- gsub(x = list_of_composite_events_simplified_output_table_names, pattern = "(.*)_composite_events_simplified", replacement = "pvalue_\\1")
+composite_events_qvalue_column_names <- gsub(x = list_of_composite_events_simplified_output_table_names, pattern = "(.*)_composite_events_simplified", replacement = "qvalue_\\1")
+
+
+list_of_composite_events_simplified_output_tables_shuffled <- purrr::map2(list_of_composite_events_simplified_output_tables_simplified, composite_events_pvalue_column_names, ~rename(.x, !!.y := 4))
+list_of_composite_events_simplified_output_tables_shuffled <- purrr::map2(list_of_composite_events_simplified_output_tables_shuffled, composite_events_qvalue_column_names, ~rename(.x, !!.y := 5))
+
+print(paste("Shuffled", length(list_of_composite_events_simplified_output_tables_shuffled), "output tables for composite events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+composite_events_summary_table <- list_of_composite_events_simplified_output_tables_shuffled %>% reduce(full_join, by = c("Composite_coordinates", "Gene", "AS_event_ID"))
+
+```
+
+### IR events
+
+```{r}
+
+# create column containing every simplified output table, subset only the rows of relevance and create summary tables with a full join
+list_of_IR_events_simplified_output_table_names <- ls(pattern = "(.*)(_)(intron_retention)(_simplified$)")
+print(paste("There are", length(list_of_IR_events_simplified_output_table_names), "output tables loaded for IR events:", sep = " "))  
+## convert from column of names to column of dfs
+list_of_IR_events_simplified_output_tables <- purrr::map(list_of_IR_events_simplified_output_table_names, get)
+names(list_of_IR_events_simplified_output_tables) <- list_of_IR_events_simplified_output_table_names
+
+## subset
+list_of_IR_events_simplified_output_tables_simplified <- list_of_IR_events_simplified_output_tables %>% purrr::map(~filter(.x, chromosome != "chromosome", Gene != "", pvalue != ""))
+
+list_of_IR_events_simplified_output_tables_simplified <- purrr::map(list_of_IR_events_simplified_output_tables_simplified, ~select(.x, 1, 2, 5, 6, 7, 8, 9))
+## annotating the column names to be comparison name specific
+
+IR_events_pvalue_column_names <- gsub(x = list_of_IR_events_simplified_output_table_names, pattern = "(.*)_intron_retention_simplified", replacement = "pvalue_\\1")
+IR_events_qvalue_column_names <- gsub(x = list_of_IR_events_simplified_output_table_names, pattern = "(.*)_intron_retention_simplified", replacement = "qvalue_\\1")
+
+
+list_of_IR_events_simplified_output_tables_shuffled <- purrr::map2(list_of_IR_events_simplified_output_tables_simplified, IR_events_pvalue_column_names, ~rename(.x, !!.y := 5))
+list_of_IR_events_simplified_output_tables_shuffled <- purrr::map2(list_of_IR_events_simplified_output_tables_shuffled, IR_events_qvalue_column_names, ~rename(.x, !!.y := 6))
+
+print(paste("Shuffled", length(list_of_IR_events_simplified_output_tables_shuffled), "output tables for IR events:", sep = " "))  
+
+# conduct full join of all the shuffled tables
+
+IR_events_summary_table <- list_of_IR_events_simplified_output_tables_shuffled %>% reduce(full_join, by = c("retained_intron_start", "retained_intron_end", "Gene", "AS_event_ID"))
+
+```
+
+# discard the superfluous columns for each table containing each splice mode
+
+```{r}
+
+# generating the list of tables
+list_of_summary_tables <- list(A3SS_summary_table, A5SS_summary_table, cassette_exon_summary_table, composite_events_summary_table, IR_events_summary_table, MXE_events_summary_table)
+
+# naming the list of tables
+list_of_summary_table_names <- c("A3SS_summary_table", "A5SS_summary_table", "cassette_exon_summary_table", "composite_events_summary_table", "IR_events_summary_table", "MXE_events_summary_table")
+names(list_of_summary_tables) <- list_of_summary_table_names
+
+# remove columns we don't want
+
+list_of_summary_tables_reduced <- list_of_summary_tables
+
+list_of_summary_tables_reduced[[1]] <- list_of_summary_tables_reduced[[1]] %>% select(., -3, -4)
+list_of_summary_tables_reduced[[2]] <- list_of_summary_tables_reduced[[2]] %>% select(., -3, -4)
+list_of_summary_tables_reduced[[3]] <- list_of_summary_tables_reduced[[3]] %>% select(., -(3:6))
+list_of_summary_tables_reduced[[4]] <- list_of_summary_tables_reduced[[4]] %>% select(., -3)
+list_of_summary_tables_reduced[[5]] <- list_of_summary_tables_reduced[[5]] %>% select(., -3, -4)
+list_of_summary_tables_reduced[[6]] <- list_of_summary_tables_reduced[[6]] %>% select(., -(3:5))
+
+# this doesn't work
+
+# list_of_summary_tables <- list(A3SS_summary_table, A5SS_summary_table, cassette_exon_summary_table, composite_events_summary_table, IR_events_summary_table, MXE_events_summary_table)
+# 
+# 
+# functionlist_column_discard_summary_table <- list(~select(., -3, -4),
+#                                                ~select(., -3, -4),
+#                                                ~select(., -(3:6)),
+#                                                ~select(., -3),
+#                                                ~select(., -3, -4),
+#                                                ~select(., -(3:5)))
+
+
+
+```
+
+
+### append the name of the splice mode to each data frame 
+
+
+
+```{r}
+
+splicemode_colname <- rep("splicemode", 6)
+
+column_of_splicemode_names <- gsub(x = list_of_summary_table_names, pattern = "(.*)_summary_table", replacement = "\\1")
+
+list_of_summary_tables_reduced_appendedwithsplicemode <- purrr::map2(.x = list_of_summary_tables_reduced, .y = column_of_splicemode_names, ~cbind(.x, splicemode=.y))
+
+```
+
+### combining the summary tables for each splice mode into a large table
+
+
+```{r}
+
+wide_table_of_all_splicemodes_with_na <-  reduce(.x = list_of_summary_tables_reduced_appendedwithsplicemode, .f = bind_rows) 
+
+wide_table_of_all_splicemodes <- wide_table_of_all_splicemodes_with_na %>% na.omit
+
+wide_table_of_all_splicemodes <- type_convert(wide_table_of_all_splicemodes)
+
+rownames(wide_table_of_all_splicemodes) <- NULL
+
+
+# SPLITTING THE SEMICOLON DELIMITED VALUES INTO NEW ROWS
+
+wide_table_of_all_splicemodes_column_names <- colnames(wide_table_of_all_splicemodes)
+
+wide_table_of_all_splicemodes_dPSI_column_numbers <- wide_table_of_all_splicemodes_column_names %>% grep(., pattern = "deltaPSI(.*)")
+
+# for (i in wide_table_of_all_splicemodes_dPSI_column_numbers)
+# {
+#   
+#   wide_table_of_all_splicemodes[, i] %>% strsplit(., split = ";") %>% unlist %>% wide_table_of_all_splicemodes[, i]
+# 
+#   
+# }
+
+# A. SPLITTING EACH CELL OF DELTAPSI INTO SEPARATE ROWS
+# THIS OUTPUTS A LIST WITH EACH ELEMENT CONTAINING THE VALUES OF EACH ROW
+list_of_all_splicemodes_dPSI_values_only_split <- wide_table_of_all_splicemodes[, wide_table_of_all_splicemodes_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){strsplit(x, split = ";")})
+
+# WE MUST FIRST DEFINE THE FINAL TABLE THEN GO BACK TO FINISHING THE FINAL TABLE BECAUSE IT NEEDS TO SCAFFOLD BASED ON A PREDETERMINED NUMBER OF ROWS IN data.frame(matrix(...))
+
+# B. USE SPLITTING LENGTH FOR EACH ROW TO DETERMINE THE AMOUNT OF TIMES ROWS ARE TO BE REPEATED.
+# THIS OUTPUTS THE SAME DATA.FRAME EXCEPT THE RIGHT COLUMNS ARE REPEATED THE SAME NUMBER OF TIMES AS SEMICOLONS
+wide_table_of_all_splicemodes_non_dPSI_values_only_split <- wide_table_of_all_splicemodes[, -wide_table_of_all_splicemodes_dPSI_column_numbers] %>% apply(., MARGIN = 2, FUN = function(x){rep(x, sapply(list_of_all_splicemodes_dPSI_values_only_split[[1]], length))})
+
+wide_table_all_splicemodes_dPSI_values_only_split <- data.frame(matrix(unlist(list_of_all_splicemodes_dPSI_values_only), nrow = nrow(wide_table_of_all_splicemodes_non_dPSI_values_only_split), byrow = TRUE), stringsAsFactors = FALSE)
+
+colnames(wide_table_all_splicemodes_dPSI_values_only_split) <- names(list_of_all_splicemodes_dPSI_values_only_split)
+
+
+wide_table_all_splicemodes_split <- bind_cols(wide_table_all_splicemodes_dPSI_values_only_split, wide_table_of_all_splicemodes_non_dPSI_values_only_split)
+
+
+
+list_of_all_splicemodes_dPSI_values_only
+
+test <- strsplit(wide_table_of_all_splicemodes$deltaPSI_BM_MSC_to_AD_14d.BM_MSC_to_AD_1d, ";")
+
+
+
+
+
+
+# p value and FDR (q value) cutoff filtering
+
+wide_table_of_all_splicemodes_pvalue_column_numbers <- wide_table_of_all_splicemodes_column_names %>% grep(., pattern = "pvalue(.*)")
+
+wide_table_of_all_splicemodes_qvalue_column_numbers <- wide_table_of_all_splicemodes_column_names %>% grep(., pattern = "qvalue(.*)")
+
+wide_table_of_all_splicemodes_filtered_pvalue_0.05 <- wide_table_of_all_splicemodes[apply(wide_table_of_all_splicemodes[, wide_table_of_all_splicemodes_pvalue_column_numbers], 1, function(x){any(x<0.05)}) == TRUE, ]
+
+rownames(wide_table_of_all_splicemodes_filtered_pvalue_0.05) <- NULL
+
+wide_table_of_all_splicemodes_filtered_qvalue_0.05 <- wide_table_of_all_splicemodes[apply(wide_table_of_all_splicemodes[, wide_table_of_all_splicemodes_qvalue_column_numbers], 1, function(x){any(x<0.05)}) == TRUE, ]
+
+rownames(wide_table_of_all_splicemodes_filtered_qvalue_0.05) <- NULL
+
+
+
+
+# 
+# bind_rows(list_of_summary_tables_reduced_appendedwithsplicemode[[3]], list_of_summary_tables_reduced_appendedwithsplicemode[[4]])
+# 
+# list_of_summary_tables_reduced_appendedwithsplicemode[[4]] %>% na.omit %>% View
+# 
+# data.class(list_of_summary_tables_reduced_appendedwithsplicemode[[4]]$deltaPSI_BM_MSC_to_AD_14d.BM_MSC_to_AD_1d)
+
+```
+
+## GENE ONTOLOGY
+### use gene ontology to analyse all the genes which had at least one differential splicing event over all timepoint comparisons
+```{r}
+
+library(biomaRt)
+ensembl_mart = useMart("ensembl",dataset="hsapiens_gene_ensembl")
+
+all_genes_GO_list <- getBM(values = wide_table_of_all_splicemodes_with_na$Gene, filters = "external_gene_name", attributes = c("external_gene_name", "description", "go_id", "name_1006", "definition_1006"), mart = ensembl_mart)
+
+View(all_genes_GO_list)
+
+unique(all_genes_GO_list[, 1:2]) %>% View
+
+
+library("RDAVIDWebService")
+
+```
+

@@ -1,0 +1,39 @@
+# specify directories
+## this contains all the folders of each sample
+fastq_gz_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq_gz/"
+fastq_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/fastq/"
+
+fastqc_path="/mnt/LTS/tools/fastqc_0.11.9/fastqc"
+
+trimmomatic_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/1_trimmomatic/"
+star_output_dir="/mnt/scratch/jafari_kassem_LGMN_rnaseq/2_star/"
+mkdir -p $star_output_dir
+
+export HTSLIB_LIBRARY_DIR=/home/angel/miniconda3/lib
+export HTSLIB_INCLUDE_DIR=/home/angel/miniconda3/include
+
+conda deactivate
+
+python3 -m venv env
+
+majiq_dir="/mnt/LTS/tools/majiq/"
+
+source $majiq_dir"env/bin/activate"
+
+source_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/source/"
+results_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/results/"
+
+star_genome_dir="/mnt/LTS/reference_data/hg38_ensembl_reference/STAR_index/star_2.7.10a/"
+raw_genome_fasta_path="/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+ensembl_gtf_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+
+ensembl_gff_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gff/Homo_sapiens.GRCh38.98.gff3"
+
+ulimit -n 65535
+
+# STEP 1: the study configuration file should have been made in R already.
+
+# STEP 2: MAJIQ-BUILD
+cd $majiq_output_dir
+
+majiq build $ref_gff_path --minreads 15 --minpos 2 --min-experiments 0.1 --min-denovo 15 --permissive --dump-coverage -c atlas_totalrna_study_configuration.txt --output build_groups -j 96

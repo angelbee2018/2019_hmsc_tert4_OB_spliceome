@@ -78,19 +78,20 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
 
 # DEBUG #######
 
-# reconstructed_gtf_path <- "Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
-# reference_genome_fasta_dir <- "Z:/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-# output_dir <- "Z:/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/"
-# output_name <- "Homo_sapiens.GRCh38.98.gtf_NMD_PTC_E4_test"
+reconstructed_gtf_path <- "/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+reference_genome_fasta_dir <- "/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+output_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/"
+output_name <- "Homo_sapiens.GRCh38.98.gtf_NMD_PTC_E4_test"
 
 # reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
 # reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 # reference_genome_fasta_dir <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
 # output_name <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck.gtf"
 
-# window_size <- 51
-# min_exons_per_transcript <- 4
-# use_start_codon <- TRUE
+window_size <- 51
+min_exons_per_transcript <- 4
+use_start_codon <- TRUE
+number_of_workers <- 32
 
 ###############
 
@@ -196,10 +197,10 @@ label_first_last_exon <- function(tibble_gtf_subset_by_transcript_id) {
 add_first.last.exon_info <- function(input_gtf) {
   
   # add in the first_or_last_exon column
-  input_gtf_2 <- input_gtf %>% add_column("first_or_last_exon" = NA)
+  input_gtf_2 <- input_gtf %>% add_column("first_or_last_exon" = "NA")
   
   # remove rows which have an NA exon number
-  input_gtf_2 <- input_gtf_2[-which(is.na(input_gtf_2$exon_number)), ]
+  input_gtf_2 <- input_gtf_2[!is.na(input_gtf_2$exon_number), ]
   
   # remove rows which don't have strand info
   input_gtf_2 <- input_gtf_2 %>% dplyr::filter(input_gtf_2$strand != "+" | input_gtf_2$strand != "-")
@@ -207,7 +208,9 @@ add_first.last.exon_info <- function(input_gtf) {
   # get all the unique transcript IDs for looping
   list_unique_transcript.ids <- input_gtf_2$transcript_id %>% unique %>% array_tree
   
-  output_gtf <- future_map(.x = list_unique_transcript.ids, .f = ~label_first_last_exon(input_gtf_2[input_gtf_2$transcript_id == .x, ]), .progress = TRUE, .options = future_options(globals = c("input_gtf_2", "label_first_last_exon"))) %>% rbindlist %>% as_tibble
+  output_gtf0 <- furrr::future_map(.x = list_unique_transcript.ids, .f = ~label_first_last_exon(input_gtf_2[input_gtf_2$transcript_id == .x, ]), .progress = TRUE) %>% rbindlist %>% as_tibble
+  
+  output_gtf <- output_gtf0
   
   return(output_gtf)
   
@@ -571,7 +574,7 @@ tibble_ORF_test <- tibble_ORF_test %>% dplyr::mutate_at(.vars = colnames(tibble_
 list_tibble_ORF_test_array.tree <- tibble_ORF_test %>% array_tree
 
 ## subset recon. GTF for exonic entries only
-tibble_reconstructed_gtf_exonic_entries_only <- tibble_reconstructed_gtf %>% dplyr::filter(type == "exon") %>% dplyr::select(transcript_id, type, start, end)
+tibble_reconstructed_gtf_exonic_entries_only <- tibble_reconstructed_gtf %>% dplyr::filter(!type %in% c("gene", "transcript")) %>% dplyr::select(transcript_id, type, start, end)
 ## subset recon. GTF for each element
 list_recon_GTF_matched_to_PTC_per_transcript_id <- future_map(.x = list_tibble_ORF_test_array.tree, .f = function(a1) {
   
@@ -618,8 +621,62 @@ if (save_workspace_when_done == "DEBUG") {
 
 cat("\nlabel first and last exons")
 
-tibble_annotated_recon_gtf_first.last <- tibble_annotated_recon_gtf %>% add_first.last.exon_info
-
+tibble_annotated_recon_gtf_first.last <- furrr::future_imap(
+  .x = tibble_annotated_recon_gtf %>% dplyr::group_split(transcript_id),
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- tibble_annotated_recon_gtf %>% dplyr::group_split(transcript_id) %>% .[[1]]
+    ###########
+    
+    # print(a2)
+    
+    output_gtf0 <- a1 %>% tibble::add_column("first_or_last_exon" = "NA")
+    
+    if (a1$exon_number %>% is.na %>% all == TRUE) {
+      
+      return(output_gtf0)
+      
+    } else {
+      
+      max_exon_number <- max(output_gtf0$exon_number %>% na.omit)
+      
+      if (max_exon_number == 1) {
+        
+        output_gtf0[output_gtf0$exon_number == max_exon_number & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "only_one_exon"
+        
+      }
+      
+      if (any(!a1$strand %in% c("+", "-")) == TRUE) {
+        
+        return(output_gtf0)
+        
+      } else {
+        
+        # account for transcripts which only have one exon
+        if (exon_order == "increasing" & output_gtf0$strand %>% unique == "-") {
+          
+          output_gtf0[output_gtf0$exon_number == max_exon_number & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "first_exon"
+          
+          output_gtf0[output_gtf0$exon_number == 1 & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "last_exon"
+          
+        } else {
+          
+          output_gtf0[output_gtf0$exon_number == max_exon_number & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "last_exon"
+          
+          output_gtf0[output_gtf0$exon_number == 1 & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "first_exon"
+          
+        }
+        
+        return(output_gtf0)
+        
+      }
+      
+    }
+    
+  }, .progress = TRUE) %>%
+  data.table::rbindlist() %>%
+  tibble::as_tibble()
 
 # output_dir <- gsub(x = output_name, pattern = "(.*/)(.*)$", replacement = "\\1")
 # output_name <- gsub(x = output_name, pattern = "(.*/)(.*)$", replacement = "\\2")

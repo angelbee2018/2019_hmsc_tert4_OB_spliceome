@@ -51,7 +51,7 @@ library(gtools)
 # shared_dir <- "Z:/sharedfolder/"
 shared_dir <- "/mnt/Tertiary/sharedfolder/"
 
-R_processing_results_dir <- paste("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
+R_processing_results_dir <- paste("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
 # R_processing_results_dir <- paste("Z:/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", sep = "")
 
 if(! dir.exists(R_processing_results_dir) ) {
@@ -3402,6 +3402,24 @@ list_MQ_scaled_tibbles_matched_to_geneset_per_cluster <- purrr::pmap(
       return
     
   } )
+
+tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster <- purrr::map2(
+  .x = list_MQ_scaled_tibbles_matched_to_geneset_per_cluster,
+  .y = names(list_MQ_scaled_tibbles_matched_to_geneset_per_cluster),
+  .f = function(a1, a2) {
+    
+    purrr::map2(
+      .x = a1,
+      .y = names(a1),
+      .f = function(b1, b2) {
+        
+        return(b1 %>% tibble::add_column("type" = b2))
+        
+      } ) %>% data.table::rbindlist() %>% tibble::as_tibble() %>% tibble::add_column("experiment" = a2) %>% return
+    
+    } ) %>% data.table::rbindlist() %>% tibble::as_tibble()
+
+write.table(x = tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster, file = paste(R_processing_results_dir, "tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 
 ```
 

@@ -5,7 +5,6 @@ date: "16/04/2020"
 output: html_document
 ---
 
-
 # Set the running environment
 
 ## Packages and directories
@@ -542,7 +541,7 @@ logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs_import %>% average_co
 
 ```
 
-## JUM/PSI-Sigma section
+## JUM/PSI-Sigma/MAJIQ section
 
 ### set global vars.
 
@@ -568,8 +567,11 @@ tibble_JUM_5x5_som_clustered <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceom
 # tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_906_differential_VSRs_qvalue0.01_dPSI0.15_timeseries_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_JUM_scaled_PSI_timeseries_wide <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_869_differential_VSRs_qvalue0.01_dPSI0.15_timeseries_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
+load("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_tibble_of_all_detailed_tables_with_na.tibble")
+
 # tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/wide_table_of_983_differential_VSRs_qvalue0.01_dPSI0.15_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
 # fill in the missing sub_junc_coor for cassette and IR events
 tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "sub_junction_start_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\4") %>% type.convert
 tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "sub_junction_end_coor"] <- gsub(x = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$splicemode == "cassette_exon_events", "AS_event_ID"] %>% unlist, pattern = "^([^\\_]+)\\_(\\+|\\-)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)\\_([^\\_]+)$", replacement = "\\5") %>% type.convert
@@ -621,6 +623,24 @@ tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("/mnt/LTS
 # tibble_PSIsigma_all_exons_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 tibble_PSIsigma_all_exons_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_DEXSeq_results.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
+# MAJIQ ###
+tibble_majiq_5x5_som_clustered <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_wide_tibble_5x5_initial_som.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+tibble_majiq_scaled_PSI_timeseries_wide <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_tibble_matrix_psi_differential_scaled.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+tibble_majiq_differential_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_wide_tibble_dpsi_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+# tibble_majiq_differential_with_na_0.8 <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_wide_tibble_dpsi_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# tibble_majiq_differential_with_na_0.95 <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.95_cons0.95_wide_tibble_dpsi_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+tibble_majiq_constitutive <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_wide_tibble_dpsi_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
+# tibble_majiq_differential_dpsi0.10_pvalue0.01_with_na_ud.6h.1d_only <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_wide_tibble_5x5_initial_som.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE, na.strings = c("NA", "n/a", "", "na")) %>% as_tibble
+
+# tibble_majiq_constitutive_dpsi0.10_pvalue0.01_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_wide_tibble_5x5_initial_som.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_majiq_all_lsvs_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_wide_tibble_psi.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
 ```
 
 ### Import gene ontology enrichment tables
@@ -634,6 +654,10 @@ tibble_JUM_differential_dpsi0.15_qvalue0.01_anysig_with_na_PFAM <- read.delim("/
 tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/top_inf_GOterms_OB_series_dPSI_15_anyDEXSeq_padj0.01_1137_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/top_inf_PFAM_families_OB_series_dPSI_15_anyDEXSeq_padj0.01_1137_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+tibble_majiq_differential_dpsi0.10_pvalue0.01_anysig_with_na_all.GO <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_tibble_hypergo_result_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+
+# tibble_majiq_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/top_inf_PFAM_families_OB_series_dPSI_15_anyDEXSeq_padj0.01_1137_genes_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
 
 ```
 
@@ -650,6 +674,8 @@ tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_anysig_with_na_PFAM <- read.del
 tibble_JUM_junction_ontology_supp_info <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/R_processing_results/table_junction_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 # PSI-Sigma ###
 tibble_PSIsigma_exon_ontology_supp_info <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/table_exon_ontology_supporting_info_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+# majiq ###
+tibble_majiq_junction_ontology_supp_info <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_table_junction_ontology_supporting_info.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
 # tibble_PSIsigma_exon_ontology_unmatched_items <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/table_exon_ontology_unmatched_exons_all_differential.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
@@ -684,6 +710,14 @@ tibble_PSIsigma_exon_ontology_PTMs <- read.delim("/mnt/LTS/projects/2019_hmsc_sp
 ### plots for combining
 tibble_PSIsigma_exon_ontology_biomart_plots <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/tally_overlapping_interpro_domains_differential_exons_15_DEXSeq_padj0.01_617_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble %>% dplyr::rename("genes_PSIsigma" = "genes", "tally_PSIsigma" = "tally")
 tibble_PSIsigma_exon_ontology_PTMs_plots <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/tally_overlapping_PTMs_differential_dpsi15_DEXSeq_padj0.01_617_exons_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble %>% dplyr::rename("tally_PSIsigma" = "tally")
+
+# majiq ###
+tibble_majiq_junction_ontology_transcripts <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_table_junction_ontology_matched_transcript_features.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_majiq_junction_ontology_biomart <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_table_junction_ontology_matched_biomart_domains.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+tibble_majiq_junction_ontology_PTMs <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_table_junction_ontology_matched_ptms.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+### plots for combining
+tibble_majiq_junction_ontology_biomart_plots <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_tibble_interpro_id_tally_per_vsr.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble %>% dplyr::rename("genes_PSIsigma" = "genes", "tally_PSIsigma" = "tally")
+tibble_majiq_junction_ontology_PTMs_plots <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_majiq/R_processing_results/2019_msc_spliceome_majiq_diff0.8_cons0.8_tibble_PTM_tally.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble %>% dplyr::rename("tally_PSIsigma" = "tally")
 
 ```
 
@@ -1389,6 +1423,123 @@ load(file = "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/phosphoproteomic_an
 
 list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d <- list_significant_MQ_scaled_tibbles_matched_to_geneset_per_cluster_MSC_6h_1d %>% purrr::map_depth(.depth = 2, .f = ~.x %>% type_convert(na = c("NA", "n/a", "", "na")))
 
+# import the quantitative levels 
+tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster <- data.table::fread(file = paste("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/phosphoproteomic_analysis/analysis_maxquant/results/R_processing_results/", "tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster.txt", sep = ""), sep = "\t", header = TRUE, check.names = FALSE, stringsAsFactors = FALSE) %>% tibble::as_tibble()
+
+```
+
+### Check NMD time series patterns against protein expression
+
+We need to plot the correlation between protein expression and PRODUCTIVE isoform READ COUNTS
+
+where:
+
+productive = NMD_read_count x [(1 - psi_of_NMD)/psi_of_NMD]
+
+have to plot against read count, not just PSI, because the expression of total mRNA can also change on top of the %NMD
+
+```{r}
+
+tibble_jum_psi <- dplyr::bind_rows(
+  wide_tibble_of_all_detailed_tables_with_na[wide_tibble_of_all_detailed_tables_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_ud", ] %>% dplyr::select(-contains(".1"), -contains(".2"), -contains(".3"), -contains("deltaPSI"), -contains("raw_count"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")], pattern = "percentage\\_usage\\.", replacement = "") %>% (function(x) {paste("psi_", type.convert(x) - 3, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  wide_tibble_of_all_detailed_tables_with_na[grep(x = wide_tibble_of_all_detailed_tables_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_ud"), ] %>% dplyr::select(-contains(".4"), -contains(".5"), -contains(".6"), -contains("deltaPSI"), -contains("raw_count"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")], pattern = "percentage\\_usage\\.", replacement = "") %>% (function(x) {paste("psi_", x, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_ud", replacement = "\\1") %>% gsub(pattern = "24h", replacement = "1d"))
+) %>%
+  dplyr::mutate_all(.funs = function(x) {return(gsub(x = x, pattern = "\\%", replacement = ""))} ) %>% 
+  readr::type_convert() %>%
+  (function(x) {x %>% tibble::add_column("psi_avg" = x %>% dplyr::select(contains("psi")) %>% rowMeans(na.rm = TRUE) %>% unlist) %>% return}) %>%
+  readr::type_convert() %>%
+  dplyr::select(-matches("psi\\_\\d")) %>%
+  reshape2::dcast(formula = Gene + AS_event_ID + AS_structure_ID + contributing_junctions + sub_junction_ID + chr + sub_junction_start_coor + sub_junction_end_coor + sub_junction_size + sub_junction_strand ~ comparison, value.var = "psi_avg") %>%
+  as_tibble
+
+tibble_jum_inclusion_read_counts <- dplyr::bind_rows(
+  wide_tibble_of_all_detailed_tables_with_na[wide_tibble_of_all_detailed_tables_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_ud", ] %>% dplyr::select(-contains(".1"), -contains(".2"), -contains(".3"), -contains("deltaPSI"), -contains("percentage_usage"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")], pattern = "raw\\_count\\.", replacement = "") %>% (function(x) {paste("inclusion_reads_", type.convert(x) - 3, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  wide_tibble_of_all_detailed_tables_with_na[grep(x = wide_tibble_of_all_detailed_tables_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_ud"), ] %>% dplyr::select(-contains(".4"), -contains(".5"), -contains(".6"), -contains("deltaPSI"), -contains("percentage_usage"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")], pattern = "raw\\_count\\.", replacement = "") %>% (function(x) {paste("inclusion_reads_", x, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_ud", replacement = "\\1") %>% gsub(pattern = "24h", replacement = "1d"))
+) %>%
+  dplyr::mutate_all(.funs = function(x) {return(gsub(x = x, pattern = "\\%", replacement = ""))} ) %>% 
+  readr::type_convert() %>%
+  (function(x) {x %>% tibble::add_column("inclusion_reads_avg" = x %>% dplyr::select(contains("inclusion_reads")) %>% rowMeans(na.rm = TRUE) %>% unlist) %>% return}) %>%
+  readr::type_convert() %>%
+  dplyr::select(-matches("inclusion\\_reads\\_\\d")) %>%
+  reshape2::dcast(formula = Gene + AS_event_ID + AS_structure_ID + contributing_junctions + sub_junction_ID + chr + sub_junction_start_coor + sub_junction_end_coor + sub_junction_size + sub_junction_strand ~ comparison, value.var = "inclusion_reads_avg") %>%
+  as_tibble
+
+tibble_psisigma_psi <- dplyr::bind_rows(
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_MSC", ] %>% dplyr::select(-contains("comparison.1"), -contains("numerator"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.2\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[grep(x = tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_MSC"), ] %>% dplyr::select(-contains("comparison.2"), -contains("numerator"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.1\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_MSC", replacement = "\\1"))
+) %>%
+  (function(x) {x %>% tibble::add_column("psi_avg" = x %>% dplyr::select(contains("absolute.psi")) %>% rowMeans(na.rm = TRUE) %>% unlist) %>% return}) %>%
+  dplyr::select(-contains("absolute.psi")) %>%
+  reshape2::dcast(formula = database_ID + event_region_coords + diff_exon_coords + splicemode + matched_gene_names ~ comparison, value.var = "psi_avg") %>% 
+  as_tibble
+
+tibble_psisigma_inclusion_read_counts <- dplyr::bind_rows(
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_MSC", ] %>% dplyr::select(-contains("comparison.1"), -contains("psi"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.2\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[grep(x = tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_MSC"), ] %>% dplyr::select(-contains("comparison.2"), -contains("psi"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.1\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_MSC", replacement = "\\1"))
+) %>%
+  (function(x) {x %>% tibble::add_column("numerator_avg" = x %>% dplyr::select(contains("numerator")) %>% rowMeans(na.rm = TRUE) %>% unlist) %>% return}) %>%
+  dplyr::select(-matches("numerator\\_\\d")) %>%
+  reshape2::dcast(formula = database_ID + event_region_coords + diff_exon_coords + splicemode + matched_gene_names ~ comparison, value.var = "numerator_avg") %>% 
+  as_tibble
+
+tibble_jum_productive_read_counts <- tibble_jum_inclusion_read_counts
+tibble_jum_productive_read_counts[, vector_OBseries_timepoints_edited] <- tibble::as_tibble(tibble_jum_inclusion_read_counts[, vector_OBseries_timepoints_edited] * ((100 - tibble_jum_psi[, vector_OBseries_timepoints_edited])/tibble_jum_psi[, vector_OBseries_timepoints_edited]))
+
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_with_productive_read_counts <- dplyr::left_join(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::select(-vector_OBseries_timepoints_edited, -chr) %>% dplyr::rename("contributing_junctions" = "contributing_junction_IDs", "chr" = "AS_event_chr") %>% dplyr::mutate("contributing_junctions" = gsub(x = `contributing_junctions`, pattern = "\\;", replacement = ",")), tibble_jum_productive_read_counts)
+
+tibble_psisigma_productive_read_counts <- tibble_psisigma_inclusion_read_counts
+tibble_psisigma_productive_read_counts[, vector_OBseries_timepoints_edited] <- tibble::as_tibble(tibble_psisigma_inclusion_read_counts[, vector_OBseries_timepoints_edited] * ((100 - tibble_psisigma_psi[, vector_OBseries_timepoints_edited])/tibble_psisigma_psi[, vector_OBseries_timepoints_edited]))
+
+tibble_PSIsigma_scaled_PSI_timeseries_wide_with_productive_read_counts <- dplyr::left_join(tibble_PSIsigma_scaled_PSI_timeseries_wide %>% dplyr::select(-vector_OBseries_timepoints_edited), tibble_psisigma_productive_read_counts)
+
+tibble_jum_nmd_proteome_correlation <- tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster %>%
+  .[.$type == "protein_groups", ] %>% 
+  split_delimited_columns_in_table(target_colname = "Gene.names", split = "\\;") %>% dplyr::rename("Gene" = "Gene.names") %>% 
+  dplyr::left_join(., tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_with_productive_read_counts %>% .[.$NMD_flagged_recon == TRUE | .$contains_PTC_ref == TRUE, c("Gene", "AS_event_ID", "chr", "sub_junction_start_coor", "sub_junction_end_coor", "strand", vector_OBseries_timepoints_edited)]) %>%
+  .[!is.na(.$AS_event_ID), ] %>%
+  .[apply(X = .[, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud", "MSC", "6h", "1d")], MARGIN = 1, FUN = function(X) {all(is.finite(X)) %>% return} ), ]
+
+tibble_jum_allevents_proteome_correlation <- tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster %>%
+  .[.$type == "protein_groups", ] %>% 
+  split_delimited_columns_in_table(target_colname = "Gene.names", split = "\\;") %>% dplyr::rename("Gene" = "Gene.names") %>% 
+  dplyr::left_join(., tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na_with_productive_read_counts %>% .[, c("Gene", "AS_event_ID", "chr", "sub_junction_start_coor", "sub_junction_end_coor", "strand", vector_OBseries_timepoints_edited)]) %>%
+  .[!is.na(.$AS_event_ID), ] %>%
+  .[apply(X = .[, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud", "MSC", "6h", "1d")], MARGIN = 1, FUN = function(X) {all(is.finite(X)) %>% return} ), ]
+
+tibble_psisigma_nmd_proteome_correlation <- tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster %>%
+  .[.$type == "protein_groups", ] %>% 
+  split_delimited_columns_in_table(target_colname = "Gene.names", split = "\\;") %>% dplyr::rename("matched_gene_names" = "Gene.names") %>% 
+  dplyr::left_join(., tibble_PSIsigma_scaled_PSI_timeseries_wide_with_productive_read_counts %>% .[.$NMD_flagged_recon == TRUE | .$contains_PTC_ref == TRUE, c("matched_gene_names", "database_ID", "chr", "diff_exon_start", "diff_exon_end", vector_OBseries_timepoints_edited)]) %>%
+  .[!is.na(.$database_ID), ] %>%
+  .[apply(X = .[, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud", "MSC", "6h", "1d")], MARGIN = 1, FUN = function(X) {all(is.finite(X)) %>% return} ), ]
+
+tibble_psisigma_allevents_proteome_correlation <- tibble_MQ_scaled_tibbles_matched_to_geneset_per_cluster %>%
+  .[.$type == "protein_groups", ] %>% 
+  split_delimited_columns_in_table(target_colname = "Gene.names", split = "\\;") %>% dplyr::rename("matched_gene_names" = "Gene.names") %>% 
+  dplyr::left_join(., tibble_PSIsigma_scaled_PSI_timeseries_wide_with_productive_read_counts %>% .[, c("matched_gene_names", "database_ID", "chr", "diff_exon_start", "diff_exon_end", vector_OBseries_timepoints_edited)]) %>%
+  .[!is.na(.$database_ID), ] %>%
+  .[apply(X = .[, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud", "MSC", "6h", "1d")], MARGIN = 1, FUN = function(X) {all(is.finite(X)) %>% return} ), ]
+
+purrr::map(
+  .x = 1:nrow(tibble_jum_nmd_proteome_correlation),
+  .f = ~cor(x = tibble_jum_nmd_proteome_correlation[.x, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud")] %>% t, tibble_jum_nmd_proteome_correlation[.x, c("MSC", "6h", "1d")] %>% t)
+) %>% unlist %>% density(bw = 0.05) %>% plot(main = "JUM NMD correlation with proteome")
+
+purrr::map(
+  .x = 1:nrow(tibble_jum_allevents_proteome_correlation),
+  .f = ~cor(x = tibble_jum_allevents_proteome_correlation[.x, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud")] %>% t, tibble_jum_allevents_proteome_correlation[.x, c("MSC", "6h", "1d")] %>% t)
+) %>% unlist %>% density(bw = 0.05) %>% plot(main = "JUM all events correlation with proteome")
+
+purrr::map(
+  .x = 1:nrow(tibble_psisigma_nmd_proteome_correlation),
+  .f = ~cor(x = tibble_psisigma_nmd_proteome_correlation[.x, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud")] %>% t, tibble_psisigma_nmd_proteome_correlation[.x, c("MSC", "6h", "1d")] %>% t)
+) %>% unlist %>% density(bw = 0.05) %>% plot(main = "PSI-Sigma NMD correlation with proteome")
+
+purrr::map(
+  .x = 1:nrow(tibble_psisigma_allevents_proteome_correlation),
+  .f = ~cor(x = tibble_psisigma_allevents_proteome_correlation[.x, c("mean|ud_vs_ud", "mean|6h_vs_ud", "mean|1d_vs_ud")] %>% t, tibble_psisigma_allevents_proteome_correlation[.x, c("MSC", "6h", "1d")] %>% t)
+) %>% unlist %>% density(bw = 0.05) %>% plot(main = "PSI-Sigma all events correlation with proteome")
+
 ```
 
 ### Check the residue of dbPTM annotated phosphosites
@@ -1693,7 +1844,187 @@ list_tibble_ebi_gwas_catalog_by_chr <- tibble_ebi_gwas_catalog_deduped %>%
 
 ```
 
-# JUM and PSI-Sigma analysis
+# JUM, PSI-Sigma and MAJIQ analysis
+
+## Get time series profiles and of psi and inclusion reads of validation candidates
+
+```{r}
+
+# find greatest psi differences
+tibble_jum_psi_test <- dplyr::bind_rows(
+  wide_tibble_of_all_detailed_tables_with_na[wide_tibble_of_all_detailed_tables_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_ud", ] %>% dplyr::select(-contains(".1"), -contains(".2"), -contains(".3"), -contains("deltaPSI"), -contains("raw_count"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")], pattern = "percentage\\_usage\\.", replacement = "") %>% (function(x) {paste("psi_", type.convert(x) - 3, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  wide_tibble_of_all_detailed_tables_with_na[grep(x = wide_tibble_of_all_detailed_tables_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_ud"), ] %>% dplyr::select(-contains(".4"), -contains(".5"), -contains(".6"), -contains("deltaPSI"), -contains("raw_count"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "percentage\\_usage\\.")], pattern = "percentage\\_usage\\.", replacement = "") %>% (function(x) {paste("psi_", x, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_ud", replacement = "\\1") %>% gsub(pattern = "24h", replacement = "1d"))
+) %>% 
+  dplyr::mutate_all(.funs = function(x) {return(gsub(x = x, pattern = "\\%", replacement = ""))} ) %>%
+  readr::type_convert() %>%
+  (function(x) {
+    
+    purrr::map(.x = c(1, 2, 3),
+             .f = function(a1) {
+               
+               x %>% 
+                 reshape2::dcast(formula = Gene + AS_event_ID + AS_structure_ID + contributing_junctions + sub_junction_ID + chr + sub_junction_start_coor + sub_junction_end_coor + sub_junction_size + sub_junction_strand ~ paste(comparison, "_", a1, sep = ""), value.var = paste("psi_", a1, sep = "")) %>% 
+                 dplyr::mutate(!!as.name(paste("min_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(min(X %>% na.omit %>% .[is.finite(.)]))}), !!as.name(paste("max_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(max(X %>% na.omit %>% .[is.finite(.)]))})) %>% 
+                 dplyr::mutate(!!as.name(paste("range_", a1, sep = "")) := !!as.name(paste("max_", a1, sep = "")) - !!as.name(paste("min_", a1, sep = ""))) %>% 
+                 return
+               
+             } ) %>% return
+    
+  } ) %>%
+  purrr::reduce(dplyr::left_join) %>%
+  as_tibble %>% 
+  dplyr::select(-contains("max"), -contains("min"), -contains("range")) %>%
+  reshape2::melt(id.vars = c("Gene", "AS_event_ID", "AS_structure_ID", "contributing_junctions", "sub_junction_ID", "chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand"), variable.name = "timepoint_replicate", value.name = "psi") %>%
+  as_tibble %>%
+  tidyr::separate(col = "timepoint_replicate", into = c("timepoint", "replicate"), sep = "\\_")
+
+tibble_jum_psi_ggplot <- tibble_jum_psi_test %>% .[.$Gene %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand, timepoint) %>% dplyr::summarise("psi_avg" = mean(`psi` %>% na.omit)) %>% dplyr::inner_join(., tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[, c("AS_event_ID", "splicemode")])
+
+ggplot2::ggplot() +
+  geom_line(data = tibble_jum_psi_ggplot, mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand))) +
+  facet_wrap( ~ AS_event_ID, scales = "free", labeller = labeller(AS_event_ID = tibble_jum_psi_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$Gene %>% (function(x) {names(x) <- tibble_jum_psi_ggplot$AS_event_ID %>% unique; return(x)} ))) +
+  scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  ggtitle("JUM PSI profiles")
+
+tibble_jum_inclusion_reads_test <- dplyr::bind_rows(
+  wide_tibble_of_all_detailed_tables_with_na[wide_tibble_of_all_detailed_tables_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_ud", ] %>% dplyr::select(-contains(".1"), -contains(".2"), -contains(".3"), -contains("deltaPSI"), -contains("percentage_usage"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")], pattern = "raw\\_count\\.", replacement = "") %>% (function(x) {paste("inclusion_reads_", type.convert(x) - 3, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  wide_tibble_of_all_detailed_tables_with_na[grep(x = wide_tibble_of_all_detailed_tables_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_ud"), ] %>% dplyr::select(-contains(".4"), -contains(".5"), -contains(".6"), -contains("deltaPSI"), -contains("percentage_usage"), -contains("log"), -contains("LRT"), -contains("dispersion"), -contains("BH")) %>% (function(x) {colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")] <- gsub(x = colnames(x)[grepl(x = colnames(x), pattern = "raw\\_count\\.")], pattern = "raw\\_count\\.", replacement = "") %>% (function(x) {paste("inclusion_reads_", x, sep = "") %>% return} ); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_ud", replacement = "\\1") %>% gsub(pattern = "24h", replacement = "1d"))
+) %>% 
+  dplyr::mutate_all(.funs = function(x) {return(gsub(x = x, pattern = "\\%", replacement = ""))} ) %>%
+  readr::type_convert() %>%
+  (function(x) {
+    
+    purrr::map(.x = c(1, 2, 3),
+             .f = function(a1) {
+               
+               x %>% 
+                 reshape2::dcast(formula = Gene + AS_event_ID + AS_structure_ID + contributing_junctions + sub_junction_ID + chr + sub_junction_start_coor + sub_junction_end_coor + sub_junction_size + sub_junction_strand ~ paste(comparison, "_", a1, sep = ""), value.var = paste("inclusion_reads_", a1, sep = "")) %>% 
+                 dplyr::mutate(!!as.name(paste("min_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(min(X %>% na.omit %>% .[is.finite(.)]))}), !!as.name(paste("max_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(max(X %>% na.omit %>% .[is.finite(.)]))})) %>% 
+                 dplyr::mutate(!!as.name(paste("range_", a1, sep = "")) := !!as.name(paste("max_", a1, sep = "")) - !!as.name(paste("min_", a1, sep = ""))) %>% 
+                 return
+               
+             } ) %>% return
+    
+  } ) %>%
+  purrr::reduce(dplyr::left_join) %>%
+  as_tibble %>% 
+  dplyr::select(-contains("max"), -contains("min"), -contains("range")) %>%
+  reshape2::melt(id.vars = c("Gene", "AS_event_ID", "AS_structure_ID", "contributing_junctions", "sub_junction_ID", "chr", "sub_junction_start_coor", "sub_junction_end_coor", "sub_junction_size", "sub_junction_strand"), variable.name = "timepoint_replicate", value.name = "inclusion_reads") %>%
+  as_tibble %>%
+  tidyr::separate(col = "timepoint_replicate", into = c("timepoint", "replicate"), sep = "\\_")
+
+tibble_jum_inclusion_reads_ggplot <- tibble_jum_inclusion_reads_test %>% .[.$Gene %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand, timepoint) %>% dplyr::summarise("inclusion_reads_avg" = mean(`inclusion_reads` %>% na.omit)) %>% dplyr::inner_join(., tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[, c("AS_event_ID", "splicemode")])
+
+ggplot2::ggplot() +
+  geom_line(data = tibble_jum_inclusion_reads_ggplot, mapping = aes(x = `timepoint`, y = `inclusion_reads_avg`, group = paste(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand))) +
+  facet_wrap( ~ AS_event_ID, scales = "free", labeller = labeller(AS_event_ID = tibble_jum_inclusion_reads_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$Gene %>% (function(x) {names(x) <- tibble_jum_inclusion_reads_ggplot$AS_event_ID %>% unique; return(x)} ))) +
+  scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  ggtitle("JUM inclusion reads")
+
+# find greatest psi differences
+tibble_psisigma_psi_test <- dplyr::bind_rows(
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_MSC", ] %>% dplyr::select(-contains("comparison.1"), -contains("numerator"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.2\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[grep(x = tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_MSC"), ] %>% dplyr::select(-contains("comparison.2"), -contains("numerator"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.1\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_MSC", replacement = "\\1"))
+) %>% 
+  (function(x) {
+    
+    purrr::map(.x = c(1, 2, 3),
+             .f = function(a1) {
+               
+               x %>% 
+                 reshape2::dcast(formula = database_ID + event_region_coords + diff_exon_coords + splicemode + matched_gene_names ~ paste(comparison, "_", a1, sep = ""), value.var = paste("absolute.psi_", a1, sep = "")) %>% 
+                 dplyr::mutate(!!as.name(paste("min_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(min(X %>% na.omit %>% .[is.finite(.)]))}), !!as.name(paste("max_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(max(X %>% na.omit %>% .[is.finite(.)]))})) %>% 
+                 dplyr::mutate(!!as.name(paste("range_", a1, sep = "")) := !!as.name(paste("max_", a1, sep = "")) - !!as.name(paste("min_", a1, sep = ""))) %>% 
+                 return
+               
+             } ) %>% return
+    
+  } ) %>%
+  purrr::reduce(dplyr::left_join) %>%
+  as_tibble %>% 
+  dplyr::select(-contains("max"), -contains("min"), -contains("range")) %>%
+  reshape2::melt(id.vars = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names"), variable.name = "timepoint_replicate", value.name = "psi") %>%
+  as_tibble %>%
+  tidyr::separate(col = "timepoint_replicate", into = c("timepoint", "replicate"), sep = "\\_") %>%
+  dplyr::mutate("event_id" = gsub(x = database_ID, pattern = "(.*)_.*$", replacement = "\\1"))
+  
+tibble_psisigma_psi_ggplot <- tibble_psisigma_psi_test %>% .[.$matched_gene_names %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names, timepoint, event_id) %>% dplyr::summarise("psi_avg" = mean(`psi` %>% na.omit))
+
+ggplot2::ggplot() +
+  geom_line(data = tibble_psisigma_psi_ggplot, mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names))) +
+  facet_wrap( ~ event_id, scales = "free", labeller = labeller(event_id = tibble_psisigma_psi_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(event_id, .keep_all = TRUE) %>% .$matched_gene_names %>% (function(x) {names(x) <- tibble_psisigma_psi_ggplot$event_id %>% unique; return(x)} ))) +
+  scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  ggtitle("PSI-Sigma PSI profiles")
+
+tibble_psisigma_numerator_test <- dplyr::bind_rows(
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_MSC", ] %>% dplyr::select(-contains("comparison.1"), -contains("average.psi"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.2\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[grep(x = tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_MSC"), ] %>% dplyr::select(-contains("comparison.2"), -contains("average.psi"), -contains("denominator"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.1\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_MSC", replacement = "\\1"))
+) %>% 
+  (function(x) {
+    
+    purrr::map(.x = c(1, 2, 3),
+             .f = function(a1) {
+               
+               x %>% 
+                 reshape2::dcast(formula = database_ID + event_region_coords + diff_exon_coords + splicemode + matched_gene_names ~ paste(comparison, "_", a1, sep = ""), value.var = paste("numerator_", a1, sep = "")) %>% 
+                 dplyr::mutate(!!as.name(paste("min_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(min(X %>% na.omit %>% .[is.finite(.)]))}), !!as.name(paste("max_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(max(X %>% na.omit %>% .[is.finite(.)]))})) %>% 
+                 dplyr::mutate(!!as.name(paste("range_", a1, sep = "")) := !!as.name(paste("max_", a1, sep = "")) - !!as.name(paste("min_", a1, sep = ""))) %>% 
+                 return
+               
+             } ) %>% return
+    
+  } ) %>%
+  purrr::reduce(dplyr::left_join) %>%
+  as_tibble %>% 
+  dplyr::select(-contains("max"), -contains("min"), -contains("range")) %>%
+  reshape2::melt(id.vars = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names"), variable.name = "timepoint_replicate", value.name = "psi") %>%
+  as_tibble %>%
+  tidyr::separate(col = "timepoint_replicate", into = c("timepoint", "replicate"), sep = "\\_") %>%
+  dplyr::mutate("event_id" = gsub(x = database_ID, pattern = "(.*)_.*$", replacement = "\\1"))
+  
+tibble_psisigma_numerator_ggplot <- tibble_psisigma_numerator_test %>% .[.$matched_gene_names %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names, timepoint, event_id) %>% dplyr::summarise("psi_avg" = mean(`psi` %>% na.omit))
+
+ggplot2::ggplot() +
+  geom_line(data = tibble_psisigma_numerator_ggplot, mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names))) +
+  facet_wrap( ~ event_id, scales = "free", labeller = labeller(event_id = tibble_psisigma_numerator_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(event_id, .keep_all = TRUE) %>% .$matched_gene_names %>% (function(x) {names(x) <- tibble_psisigma_numerator_ggplot$event_id %>% unique; return(x)} ))) +
+  scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  ggtitle("PSI-Sigma inclusion + exclusion read counts")
+
+tibble_psisigma_denominator_test <- dplyr::bind_rows(
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_MSC", ] %>% dplyr::select(-contains("comparison.1"), -contains("numerator"), -contains("average.psi"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.2\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),
+  tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[grep(x = tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison, pattern = ".*\\_vs\\_BM\\_MSC\\_to\\_OB\\_MSC"), ] %>% dplyr::select(-contains("comparison.2"), -contains("numerator"), -contains("average.psi"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.1\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = gsub(x = `comparison`, pattern = "BM_MSC_to_OB_(.*)_vs_BM_MSC_to_OB_MSC", replacement = "\\1"))
+) %>% 
+  (function(x) {
+    
+    purrr::map(.x = c(1, 2, 3),
+             .f = function(a1) {
+               
+               x %>% 
+                 reshape2::dcast(formula = database_ID + event_region_coords + diff_exon_coords + splicemode + matched_gene_names ~ paste(comparison, "_", a1, sep = ""), value.var = paste("denominator_", a1, sep = "")) %>% 
+                 dplyr::mutate(!!as.name(paste("min_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(min(X %>% na.omit %>% .[is.finite(.)]))}), !!as.name(paste("max_", a1, sep = "")) := apply(X = .[, paste(c("MSC", "1d", "6h", "12h", "3d", "6d", "9d", "12d"), "_", a1, sep = "")], MARGIN = 1, FUN = function(X) {return(max(X %>% na.omit %>% .[is.finite(.)]))})) %>% 
+                 dplyr::mutate(!!as.name(paste("range_", a1, sep = "")) := !!as.name(paste("max_", a1, sep = "")) - !!as.name(paste("min_", a1, sep = ""))) %>% 
+                 return
+               
+             } ) %>% return
+    
+  } ) %>%
+  purrr::reduce(dplyr::left_join) %>%
+  as_tibble %>% 
+  dplyr::select(-contains("max"), -contains("min"), -contains("range")) %>%
+  reshape2::melt(id.vars = c("database_ID", "event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names"), variable.name = "timepoint_replicate", value.name = "psi") %>%
+  as_tibble %>%
+  tidyr::separate(col = "timepoint_replicate", into = c("timepoint", "replicate"), sep = "\\_") %>%
+  dplyr::mutate("event_id" = gsub(x = database_ID, pattern = "(.*)_.*$", replacement = "\\1"))
+  
+tibble_psisigma_denominator_ggplot <- tibble_psisigma_denominator_test %>% .[.$matched_gene_names %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names, timepoint, event_id) %>% dplyr::summarise("psi_avg" = mean(`psi` %>% na.omit))
+
+ggplot2::ggplot() +
+  geom_line(data = tibble_psisigma_denominator_ggplot, mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names))) +
+  facet_wrap( ~ event_id, scales = "free", labeller = labeller(event_id = tibble_psisigma_denominator_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(event_id, .keep_all = TRUE) %>% .$matched_gene_names %>% (function(x) {names(x) <- tibble_psisigma_denominator_ggplot$event_id %>% unique; return(x)} ))) +
+  scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
+  ggtitle("PSI-Sigma inclusion read counts")
+
+```
 
 ## Calculate the number of junction/exons found in common
 
@@ -1746,6 +2077,34 @@ PSIsigma_diff.exon.coords_to_chr_strand_start_end <- function(tibble) {
   vec_end <- gsub(x = vec_event.region.coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})$", replacement = "\\3")
   
   vec_identifier <- paste(vec_chr, ":", vec_start, "-", vec_end, ":", vec_strand, sep = "")
+    
+  return(tibble("identifier" = vec_identifier,
+                "chr" = vec_chr,
+                "strand" = vec_strand,
+                "start" = vec_start,
+                "end" = vec_end) %>% unique)
+  
+}
+
+```
+
+#### FUNCTION TO CONVERT MAJIQ VSR_COORDS TO CHR STRAND START END
+
+- will drop non-unique entries
+- f: tibble => tibble
+
+```{r}
+
+majiq_junc_coords_to_chr_strand_start_end <- function(tibble) {
+  
+  vector_vsr_coords <- tibble$VSR_coords
+  
+  vec_chr <- gsub(x = vector_vsr_coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})\\:(.*)$", replacement = "\\1")
+  vec_strand <- gsub(x = vector_vsr_coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})\\:(.*)$", replacement = "\\4")
+  vec_start <- gsub(x = vector_vsr_coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})\\:(.*)$", replacement = "\\2")
+  vec_end <- gsub(x = vector_vsr_coords, pattern = "^([^\\:]+)\\:([0-9]{1,10})\\-([0-9]{1,10})\\:(.*)$", replacement = "\\3")
+  
+  vec_identifier <- vector_vsr_coords
     
   return(tibble("identifier" = vec_identifier,
                 "chr" = vec_chr,
@@ -1858,6 +2217,41 @@ JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_p
 
 cat(magenta("JUM constitutive (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma constitutive, (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
 
+# majiq differential vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_differential_with_na %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq differential (", majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# majiq differential vs. JUM differential/dpsi0.15/qvalue0.01/with_na
+majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_differential_with_na %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq differential (", majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_1, ") vs. JUM differential/dpsi0.15/qvalue0.01/with_na, (", majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# majiq constitutive vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+majiq_constitutive_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_constitutive %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq constitutive (", majiq_constitutive_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", majiq_constitutive_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", majiq_constitutive_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# majiq constitutive vs. JUM differential/dpsi0.15/qvalue0.01/with_na
+majiq_constitutive_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_constitutive %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na %>% JUM_AS.event.ID_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq constitutive (", majiq_constitutive_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_1, ") vs. JUM differential/dpsi0.15/qvalue0.01/with_na, (", majiq_constitutive_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons found in common are: ", majiq_constitutive_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# three way overlap
+regioneR::overlapRegions(A = regioneR::commonRegions(A = tibble_majiq_differential_with_na %>% majiq_junc_coords_to_chr_strand_start_end %>% .$identifier %>% gsub(pattern = "^(.*)\\:.*", replacement = "\\1") %>% regioneR::toGRanges(), B = tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end %>% .$identifier %>% gsub(pattern = "^(.*)\\:.*", replacement = "\\1") %>% regioneR::toGRanges()), B = tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% JUM_AS.event.ID_to_chr_strand_start_end %>% .$identifier %>% gsub(pattern = "^(.*)\\:.*", replacement = "\\1") %>% regioneR::toGRanges()) %>% nrow
+
 ```
 
 #### repeat the intersections with only genes in common
@@ -1902,6 +2296,38 @@ JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_p
 
 cat(magenta("JUM constitutive (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_1, ") vs. PSIsigma constitutive, (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na_common.genes$number_of_common_entries, "\n"))
 
+# majiq differential vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_differential_with_na %>% dplyr::rename("matched_gene_names" = "gene_name") %>% dplyr::semi_join(., tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[, "matched_gene_names"]) %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% dplyr::rename("gene_name" = "matched_gene_names") %>% dplyr::semi_join(., tibble_majiq_differential_with_na[, "gene_name"]) %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq differential (", majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", majiq_differential_vs_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# majiq differential vs. JUM differential/dpsi0.15/qvalue0.01/with_na
+majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_differential_with_na %>% dplyr::rename("Gene" = "gene_name") %>% dplyr::semi_join(., tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[, "Gene"]) %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dplyr::rename("gene_name" = "Gene") %>% dplyr::semi_join(., tibble_majiq_differential_with_na[, "gene_name"]) %>% JUM_AS.event.ID_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq differential (", majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_1, ") vs. JUM differential/dpsi0.15/qvalue0.01/with_na, (", majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", majiq_differential_vs_JUM_differential_dpsi0.15_qvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# majiq constitutive vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na
+majiq_constitutive_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_constitutive %>% dplyr::rename("matched_gene_names" = "gene_name") %>% dplyr::semi_join(., tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na[, "matched_gene_names"]) %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na %>% dplyr::rename("gene_name" = "matched_gene_names") %>% dplyr::semi_join(., tibble_majiq_constitutive[, "gene_name"]) %>% PSIsigma_diff.exon.coords_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq differential (", majiq_constitutive_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_1, ") vs. PSIsigma differential/dpsi0.10/pvalue0.01/with_na, (", majiq_constitutive_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", majiq_constitutive_vs_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na$number_of_common_entries, "\n"))
+
+# majiq constitutive vs. JUM differential/dpsi0.15/qvalue0.01/with_na
+majiq_constitutive_vs_JUM_constitutive_dpsi0.15_qvalue0.01_with_na <-
+  calculate_intersections_from_chr_strand_start_end(tibble_majiq_constitutive %>% dplyr::rename("Gene" = "gene_name") %>% dplyr::semi_join(., tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na[, "Gene"]) %>% majiq_junc_coords_to_chr_strand_start_end,
+                                                    tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na %>% dplyr::rename("gene_name" = "Gene") %>% dplyr::semi_join(., tibble_majiq_constitutive[, "gene_name"]) %>% JUM_AS.event.ID_to_chr_strand_start_end, 
+                                                    tibble_1_tolerance_left = 2, tibble_1_tolerance_right = 2)
+
+cat(magenta("majiq constitutive (", majiq_constitutive_vs_JUM_constitutive_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_1, ") vs. JUM differential/dpsi0.15/qvalue0.01/with_na, (", majiq_constitutive_vs_JUM_constitutive_dpsi0.15_qvalue0.01_with_na$number_of_entries_tibble_2, ") , the number of junctions/exons IN COMMON GENES found in common are: ", majiq_constitutive_vs_JUM_constitutive_dpsi0.15_qvalue0.01_with_na$number_of_common_entries, "\n"))
+
 ```
 
 ### Calculate gene-level spliceome intersections with expression
@@ -1912,6 +2338,7 @@ cat(magenta("JUM constitutive (", JUM_constitutive_dpsi0.15_qvalue0.01_with_na_v
 cat(magenta("\nRSEM/EdgeR differential genes: ", logCPM_OBseries_anysig_DEGs$external_gene_name %>% unique %>% length))
 cat(magenta("\nJUM differential genes: ", tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene %>% unique %>% length))
 cat(magenta("\nPSI-Sigma differential genes: ", tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names %>% unique %>% length))
+cat(magenta("\nmajiq differential genes: ", tibble_majiq_differential_with_na$gene_name %>% unique %>% length))
 
 # JUM diff spliced vs. diff. expression
 cat(magenta("\nJUM differential genes vs. diff. expressed genes: ", intersect(logCPM_OBseries_anysig_DEGs$external_gene_name, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene) %>% unique %>% length))
@@ -1919,8 +2346,17 @@ cat(magenta("\nJUM differential genes vs. diff. expressed genes: ", intersect(lo
 # PSI-Sigma diff spliced vs. diff. expression
 cat(magenta("\nPSI-Sigma differential genes vs. diff. expressed genes: ", intersect(logCPM_OBseries_anysig_DEGs$external_gene_name, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names) %>% unique %>% length))
 
+# MAJIQ diff spliced vs. diff. expression
+cat(magenta("\nmajiq differential genes vs. diff. expressed genes: ", intersect(logCPM_OBseries_anysig_DEGs$external_gene_name, tibble_majiq_differential_with_na$gene_name) %>% unique %>% length))
+
 # JUM diff spliced vs. PSI-Sigma diff spliced
 cat(magenta("\nJUM differential genes vs. PSI-Sigma differential genes: ", intersect(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names) %>% unique %>% length))
+
+# majiq diff spliced vs. jum diff
+cat(magenta("\nmajiq differential genes vs. jum differential genes: ", intersect(tibble_majiq_differential_with_na$gene_name, tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene) %>% unique %>% length))
+
+# majiq spliced vs. PSI-Sigma diff spliced
+cat(magenta("\nmajiq differential genes vs. PSI-Sigma differential genes: ", intersect(tibble_majiq_differential_with_na$gene_name, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names) %>% unique %>% length))
 
 # fetch list of ALWAYS differentially spliced genes vs. ALWAYS constitutively spliced genes
 vector_genes_differentially_spliced <- c(tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na$Gene, tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$matched_gene_names) %>% unique

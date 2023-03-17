@@ -1881,7 +1881,7 @@ tibble_jum_psi_test <- dplyr::bind_rows(
 tibble_jum_psi_ggplot <- tibble_jum_psi_test %>% .[.$Gene %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand, timepoint) %>% dplyr::summarise("psi_avg" = mean(`psi` %>% na.omit)) %>% dplyr::inner_join(., tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[, c("AS_event_ID", "splicemode")])
 
 ggplot2::ggplot() +
-  geom_line(data = tibble_jum_psi_ggplot, mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand))) +
+  geom_line(data = tibble_jum_psi_ggplot %>% .[.$AS_structure_ID == "3_Junction_498051_Junction_498064_Junction_498073_Junction_498081_Junction_498086_Junction_498089_Junction_498091" & .$sub_junction_start_coor == 54229415 & .$sub_junction_end_coor == 54258755, ], mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand))) +
   facet_wrap( ~ AS_event_ID, scales = "free", labeller = labeller(AS_event_ID = tibble_jum_psi_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$Gene %>% (function(x) {names(x) <- tibble_jum_psi_ggplot$AS_event_ID %>% unique; return(x)} ))) +
   scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   ggtitle("JUM PSI profiles")
@@ -1916,7 +1916,7 @@ tibble_jum_inclusion_reads_test <- dplyr::bind_rows(
 tibble_jum_inclusion_reads_ggplot <- tibble_jum_inclusion_reads_test %>% .[.$Gene %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand, timepoint) %>% dplyr::summarise("inclusion_reads_avg" = mean(`inclusion_reads` %>% na.omit)) %>% dplyr::inner_join(., tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na[, c("AS_event_ID", "splicemode")])
 
 ggplot2::ggplot() +
-  geom_line(data = tibble_jum_inclusion_reads_ggplot, mapping = aes(x = `timepoint`, y = `inclusion_reads_avg`, group = paste(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand))) +
+  geom_line(data = tibble_jum_inclusion_reads_ggplot %>% .[.$AS_structure_ID == "3_Junction_498051_Junction_498064_Junction_498073_Junction_498081_Junction_498086_Junction_498089_Junction_498091" & .$sub_junction_start_coor == 54229415 & .$sub_junction_end_coor == 54258755, ], mapping = aes(x = `timepoint`, y = `inclusion_reads_avg`, group = paste(Gene, AS_event_ID, AS_structure_ID, contributing_junctions, sub_junction_ID, chr, sub_junction_start_coor, sub_junction_end_coor, sub_junction_size, sub_junction_strand))) +
   facet_wrap( ~ AS_event_ID, scales = "free", labeller = labeller(AS_event_ID = tibble_jum_inclusion_reads_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(AS_event_ID, .keep_all = TRUE) %>% .$Gene %>% (function(x) {names(x) <- tibble_jum_inclusion_reads_ggplot$AS_event_ID %>% unique; return(x)} ))) +
   scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   ggtitle("JUM inclusion reads")
@@ -1951,7 +1951,7 @@ tibble_psisigma_psi_test <- dplyr::bind_rows(
 tibble_psisigma_psi_ggplot <- tibble_psisigma_psi_test %>% .[.$matched_gene_names %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names, timepoint, event_id) %>% dplyr::summarise("psi_avg" = mean(`psi` %>% na.omit))
 
 ggplot2::ggplot() +
-  geom_line(data = tibble_psisigma_psi_ggplot, mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names))) +
+  geom_line(data = tibble_psisigma_psi_ggplot %>% .[.$database_ID == "14_24376555_24377637_S_TSS.ENST00000250373_1", ], mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names))) +
   facet_wrap( ~ event_id, scales = "free", labeller = labeller(event_id = tibble_psisigma_psi_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(event_id, .keep_all = TRUE) %>% .$matched_gene_names %>% (function(x) {names(x) <- tibble_psisigma_psi_ggplot$event_id %>% unique; return(x)} ))) +
   scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
   ggtitle("PSI-Sigma PSI profiles")
@@ -1985,10 +1985,10 @@ tibble_psisigma_numerator_test <- dplyr::bind_rows(
 tibble_psisigma_numerator_ggplot <- tibble_psisigma_numerator_test %>% .[.$matched_gene_names %in% c("DNM2", "SEC16A", "ACIN1", "PDGFRA", "NFATC4", "HMGA1", "TEAD1", "RUNX2", "TCF3", "SFPQ", "KIF13A", "MBNL1", "MACF1", "KAT2A", "CTNNB1"), ] %>% dplyr::group_by(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names, timepoint, event_id) %>% dplyr::summarise("psi_avg" = mean(`psi` %>% na.omit))
 
 ggplot2::ggplot() +
-  geom_line(data = tibble_psisigma_numerator_ggplot, mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names))) +
+  geom_line(data = tibble_psisigma_numerator_ggplot %>% .[.$database_ID == "14_24376555_24377637_S_TSS.ENST00000250373_1", ], mapping = aes(x = `timepoint`, y = `psi_avg`, group = paste(database_ID, event_region_coords, diff_exon_coords, splicemode, matched_gene_names))) +
   facet_wrap( ~ event_id, scales = "free", labeller = labeller(event_id = tibble_psisigma_numerator_ggplot %>% dplyr::ungroup() %>% dplyr::distinct(event_id, .keep_all = TRUE) %>% .$matched_gene_names %>% (function(x) {names(x) <- tibble_psisigma_numerator_ggplot$event_id %>% unique; return(x)} ))) +
   scale_x_discrete(breaks = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), limits = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d"), labels = c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")) +
-  ggtitle("PSI-Sigma inclusion + exclusion read counts")
+  ggtitle("PSI-Sigma inclusion read counts")
 
 tibble_psisigma_denominator_test <- dplyr::bind_rows(
   tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na[tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na$comparison == "BM_MSC_to_OB_9d_vs_BM_MSC_to_OB_MSC", ] %>% dplyr::select(-contains("comparison.1"), -contains("numerator"), -contains("average.psi"), -contains("_ER_")) %>% (function(x) {colnames(x) <- gsub(x = colnames(x), pattern = "comparison.2\\_", replacement = ""); return(x)} ) %>% dplyr::mutate("comparison" = "MSC"),

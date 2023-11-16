@@ -9,6 +9,8 @@ NMD candidature is flagged in the \"PTC\" entry of the GTF. First/last exon is f
 
 Recommended system requirements: 6 threads/64GB memory. Minimum system requirements: 1 thread/16GB memory"
 
+source("/mnt/LTS/tools/angel_suite/source/main_source.R")
+
 # print the arguments received by the R script
 cat("Arguments input:", commandArgs(), sep = "\n")
 args = 
@@ -49,21 +51,22 @@ list_input_arg_info = list(
                     help = "Optional. Number of cores to use. possible inputs: numbers 1 to any integer. By default, uses all cores (ncores = 0).", metavar = "integer"),
   "6" = make_option(c("-S", "--use_start_codon"), type = "character", default = "YES", 
                     help = "Optional but you should really choose the right option. This option tells the program whether or not there are start codons provided for each transcript (where available). It's useful if you want to re-annotate e.g. the reference Ensembl GTF for the presence of PTCs, so that the program will not consider all 3 translation frames but only consider the frame containing the annotated start codon. If for any reason a transcript doesn't have an associated start codon, the program will revert to considering all 3 frames. By default, start codons are used where applicable.", metavar = "logical"),
-  "7" = make_option(c("-R", "--return_frames"), type = "character", default = "3FT_aggregate", 
-                    help = "Optional. Changes how NMD prediction is reported. 3FT_aggregate: requires that all THREE frames have a stop codon in the required window - extremely conservative. per_frame: reports on whether there is a PTC per reading frame (relative to the chromosome) - chrframe 1: 1st nt, chrframe 2: 2nd nt, chrframe 3: 3rd nt (from the 5' end of the chromosome for + strand and from the 3' end for - strand", metavar = "logical"),
-  "8" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
+  "7" = make_option(c("-H", "--chrmode"), type = "integer", default = 0, 
                     help = "Optional. Specifies which chromosomes to do: select what chromosomes you want translated. possible inputs: numbers 0-2. 0 (default): nuclear chromosomes only i,e, 1:22, X & Y. 1: nuclear + mitochondrial i.e. 1:22, X & Y, M. 2: everything including haplotype/fusion chromosomes etc... this is possible provided the chromosome names.", metavar = "integer"),
-  "9" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
+  "8" = make_option(c("-N", "--nonchrname"), type = "character", default = NULL, 
                     help = "Compulsory only if you have specified \"--chrmode 2\". nonchromosomal file name. if you want to consider haplotypes, please specify what the reference genome FASTA file for it is called or the script won't know. This single FASTA file must contain all the haplotype information. The program won't try to search for a second file. In ensembl, this file is called something like \"Homo_sapiens.GRCh38.dna.nonchromosomal.fa\" or more generally, \"*nonchromosomal.fa\". So if you want to use that file, then for this option, you would specify \"--nonchrname nonchromosomal\".", metavar = "character"),
-  "10" = make_option(c("-W", "--checking_window_size"), type = "double", default = 51,
+  "9" = make_option(c("-W", "--checking_window_size"), type = "double", default = 51,
                     help = "ADVANCED. Use this parameter to change the nucleotide window from the default of 51. 
                     DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double"),
-  "11" = make_option(c("-E", "--min_exons_per_transcript"), type = "integer", default = 3,
+  "10" = make_option(c("-E", "--min_exons_per_transcript"), type = "integer", default = 3,
                     help = "ADVANCED. Use this parameter to change the minimum number of exons that a transcript must have in order to be flagged for NMD. As a general rule of thumb, the false positive rate:false negative rate ratio will decrease as you increase this parameter. Default is 3, meaning 2-exon transcripts and below will not be considered for NMD. 
                     DO NOT CHANGE THIS UNLESS YOU REALLY WANT TO CHECK USING A DIFFERENT WINDOW SIZE. SUBOPTIMAL RESULTS MAY BE GENERATED AS A RESULT.", metavar = "double"),
-  "12" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
+  "11" = make_option(c("-V", "--save_workspace_when_done"), type = "character", default = FALSE,
                      help = "Turn this on if you want to save the R workspace in the same name as the --output_name. YES: saves at the end. DEBUG: saves at each critical step. NO: doesn't save.", metavar = "character")
 )
+
+# "7" = make_option(c("-R", "--return_frames"), type = "character", default = "3FT_aggregate", 
+#                   help = "Optional. Changes how NMD prediction is reported. 3FT_aggregate: requires that all THREE frames have a stop codon in the required window - extremely conservative. per_frame: reports on whether there is a PTC per reading frame (relative to the chromosome) - chrframe 1: 1st nt, chrframe 2: 2nd nt, chrframe 3: 3rd nt (from the 5' end of the chromosome for + strand and from the 3' end for - strand", metavar = "logical"),
 
 input_arg_info <- OptionParser(option_list = list_input_arg_info, description = script_description)
 input_args <- input_arg_info %>% parse_args
@@ -80,10 +83,10 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
 
 # DEBUG #######
 
-reconstructed_gtf_path <- "/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+reconstructed_gtf_path <- "/mnt/scratch/2023_hmsc_ob_ont/3_stringtie/PKVPXF230199_pass_barcode01.trimmed.mixed_pgnexus.gtf"
 reference_genome_fasta_dir <- "/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
 output_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/"
-output_name <- "Homo_sapiens.GRCh38.98.gtf_NMD_PTC_E4_test"
+output_name <- "2023_hmsc_ob_ont_barcode01_NMD_PTC_E4"
 
 # reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
 # reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
@@ -91,8 +94,8 @@ output_name <- "Homo_sapiens.GRCh38.98.gtf_NMD_PTC_E4_test"
 # output_name <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck.gtf"
 
 window_size <- 51
-min_exons_per_transcript <- 4
-use_start_codon <- "YES"
+min_exons_per_transcript <- 3
+use_start_codon <- "NO"
 number_of_workers <- 32
 
 ###############
@@ -105,14 +108,14 @@ window_size <- input_args$checking_window_size
 min_exons_per_transcript <- input_args$min_exons_per_transcript
 use_start_codon <- input_args$use_start_codon
 save_workspace_when_done <- input_args$save_workspace_when_done
-return_frames <- input_args$return_frames
+# return_frames <- input_args$return_frames
 
 cat("reconstructed_gtf_path:", reconstructed_gtf_path, "\n")
 cat("reference_genome_fasta_dir:", reference_genome_fasta_dir, "\n")
 cat("output_name:", output_name, "\n")
 cat("window_size:", window_size, "\n")
 cat("min_exons_per_transcript:", min_exons_per_transcript, "\n")
-cat("return_frames:", return_frames, "\n")
+# cat("return_frames:", return_frames, "\n")
 
 # if(!dir.exists(output_name) ) {
 #   dir.create(output_name, recursive = TRUE)}
@@ -225,29 +228,31 @@ add_first.last.exon_info <- function(input_gtf) {
 cat("import reconstructed transcriptome GTF\n")
 tibble_reconstructed_gtf <- rtracklayer::import(reconstructed_gtf_path) %>% as_tibble %>% dplyr::mutate_if(is.factor, as.character)
 
+tibble_reconstructed_gtf_no_asterisk <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$strand %in% c("+", "-"), ]
+
 vector_ref_genome_paths_by_chr <- paste(reference_genome_fasta_dir, list.files(reference_genome_fasta_dir)[list.files(reference_genome_fasta_dir) %>% grep(., pattern = ".*.fa$")], sep = "")
 
 # automatically detect if exons are always numbered in increasing order regardless of strand (common for recon. transcripts)
 ## sample the first transcript on the negative strand with more than 1 exon
 temp_number <- 1
 
-first_transcript_id <- tibble_reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+first_transcript_id <- tibble_reconstructed_gtf_no_asterisk$transcript_id %>% unique %>% na.omit %>% .[temp_number]
 
-while (tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
-       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
-       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
-       tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
+while (tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$transcript_id == first_transcript_id, "exon_number"] %>% nrow == 1 | 
+       tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "+" | 
+       tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "." | 
+       tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$transcript_id == first_transcript_id, "strand"] %>% unlist %>% unique %>% na.omit %>% paste == "*") {
   
   temp_number <- temp_number + 1
   
-  first_transcript_id <- tibble_reconstructed_gtf$transcript_id %>% unique %>% na.omit %>% .[temp_number]
+  first_transcript_id <- tibble_reconstructed_gtf_no_asterisk$transcript_id %>% unique %>% na.omit %>% .[temp_number]
   
 }
 
 # the test condition
-max_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
-max_exon_start_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id & tibble_reconstructed_gtf$exon_number == max_test, "start"] %>% na.omit %>% paste
-min_exon_start_test <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$transcript_id == first_transcript_id & tibble_reconstructed_gtf$exon_number == 1, "start"] %>% na.omit %>% paste
+max_test <- tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$transcript_id == first_transcript_id, "exon_number"] %>% unlist %>% na.omit %>% max
+max_exon_start_test <- tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$transcript_id == first_transcript_id & tibble_reconstructed_gtf_no_asterisk$exon_number == max_test, "start"] %>% na.omit %>% paste
+min_exon_start_test <- tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$transcript_id == first_transcript_id & tibble_reconstructed_gtf_no_asterisk$exon_number == 1, "start"] %>% na.omit %>% paste
 
 exon_order <- NULL
 
@@ -300,20 +305,20 @@ for (chr in chr_to_run) {
   cat("temporary allocation to ref genome fasta list\n")
   reference_genome_fasta_chr_temp <- seqinr::read.fasta(file = paste(vector_ref_genome_paths_by_chr[vector_ref_genome_paths_by_chr_position]), forceDNAtolower = FALSE)
   
-  tibble_reconstructed_gtf_tempchr <- tibble_reconstructed_gtf[tibble_reconstructed_gtf$seqnames == chr, ]
+  tibble_reconstructed_gtf_no_asterisk_tempchr <- tibble_reconstructed_gtf_no_asterisk[tibble_reconstructed_gtf_no_asterisk$seqnames == chr, ]
   
   cat("subset reconstructed transcriptome GTF by filtering for exon entries only.\n")
   # leave aside the remaining entries for later inclusion
   ## rows which do not describe an exon or start_codon entry
-  row_indices_recon.gtf_non.exon.entries <- which(tibble_reconstructed_gtf_tempchr$type != "exon" & tibble_reconstructed_gtf_tempchr$type != "start_codon")
+  row_indices_recon.gtf_non.exon.entries <- which(tibble_reconstructed_gtf_no_asterisk_tempchr$type != "exon" & tibble_reconstructed_gtf_no_asterisk_tempchr$type != "start_codon")
   ## rows where the transcript_id is NA
-  row_indices_recon.gtf_na.transcript.id.entries <- which(is.na(tibble_reconstructed_gtf_tempchr$transcript_id))
+  row_indices_recon.gtf_na.transcript.id.entries <- which(is.na(tibble_reconstructed_gtf_no_asterisk_tempchr$transcript_id))
   
-  row_indices_recon.gtf_exon.entries.only <- which(tibble_reconstructed_gtf_tempchr$type == "exon" | tibble_reconstructed_gtf_tempchr$type == "start_codon")
-  reconstructed_gtf_exon.entries.only <- tibble_reconstructed_gtf_tempchr[row_indices_recon.gtf_exon.entries.only, ]
+  row_indices_recon.gtf_exon.entries.only <- which(tibble_reconstructed_gtf_no_asterisk_tempchr$type == "exon" | tibble_reconstructed_gtf_no_asterisk_tempchr$type == "start_codon")
+  reconstructed_gtf_exon.entries.only <- tibble_reconstructed_gtf_no_asterisk_tempchr[row_indices_recon.gtf_exon.entries.only, ]
   
   # generate list of all 'transcript_id's to loop thru
-  list_transcript_ids <- tibble_reconstructed_gtf_tempchr$transcript_id %>% unique %>% na.omit %>% array_tree
+  list_transcript_ids <- tibble_reconstructed_gtf_no_asterisk_tempchr$transcript_id %>% unique %>% na.omit %>% array_tree
   
   cat("load the exon entries of the recon. GTF table into the list\n")
   list_reconstructed_gtf_exon.entries.only_by_transcript_id <- future_map(.x = list_transcript_ids, .f = ~reconstructed_gtf_exon.entries.only[reconstructed_gtf_exon.entries.only$transcript_id == .x, ], .progress = TRUE) %>% set_names(list_transcript_ids %>% unlist)
@@ -421,7 +426,7 @@ for (chr in chr_to_run) {
   list_transcript_3FT <- future_imap(.x = list_transcript_fwd_nts, .f = function(a1, a2) {
     
     # DEBUG ###
-    # a1 <- list_transcript_fwd_nts[[1]]
+    # a1 <- list_transcript_fwd_nts[[79]]
     # a2 <- 1
     ###########
     
@@ -489,17 +494,20 @@ for (chr in chr_to_run) {
       genome_relative_start_coding_sequence_frame0_ATGonly <- NA
       genome_relative_end_coding_sequence_frame0_ATGonly <- NA
       has_ptc_frame0_ATGonly <- NA
+      genome_relative_stop_codon_frame0_ATGonly <- NA
       length_longest_coding_sequence_frame1_ATGonly <- NA
       genome_relative_start_coding_sequence_frame1_ATGonly <- NA
       genome_relative_end_coding_sequence_frame1_ATGonly <- NA 
       has_ptc_frame1_ATGonly <- NA
+      genome_relative_stop_codon_frame1_ATGonly <- NA
       length_longest_coding_sequence_frame2_ATGonly <- NA
       genome_relative_start_coding_sequence_frame2_ATGonly <- NA
       genome_relative_end_coding_sequence_frame2_ATGonly <- NA
       has_ptc_frame2_ATGonly <- NA
+      genome_relative_stop_codon_frame2_ATGonly <- NA
       
       length_longest_coding_sequence_frame0_noncanonical <- length(updated_list_temp$forward_CDS_nucleotides)
-      genome_relative_start_coding_sequence_frame0_noncanonical <- unlist(strsplit(updated_list_temp$forward_coords, split = ","))[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon] %>% type.convert(as.is = TRUE)
+      genome_relative_start_coding_sequence_frame0_noncanonical <- updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon] %>% type.convert(as.is = TRUE)
       genome_relative_end_coding_sequence_frame0_noncanonical <- if (updated_list_temp$strand == "+") {
         c(updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3],
           updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
@@ -508,11 +516,21 @@ for (chr in chr_to_run) {
         updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
       }
       
+      genome_relative_stop_codon_frame0_noncanonical <- if (updated_list_temp$strand == "+") {
+        c(updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3)] %>% (function(x){return((x+1):(x+3))}) %>% paste(collapse = ","),
+          updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
+      } else if (updated_list_temp$strand == "-") {
+        c(updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3)] %>% (function(x){return((x-1):(x-3))}) %>% paste(collapse = ","),
+          updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
+      }
+      
       has_ptc_frame0_noncanonical <- any(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))
+      genome_relative_stop_codon_frame1_noncanonical <- genome_relative_stop_codon_frame0_noncanonical
       length_longest_coding_sequence_frame1_noncanonical <- length_longest_coding_sequence_frame0_noncanonical
       genome_relative_start_coding_sequence_frame1_noncanonical <- genome_relative_start_coding_sequence_frame0_noncanonical
       genome_relative_end_coding_sequence_frame1_noncanonical <- genome_relative_end_coding_sequence_frame0_noncanonical
       has_ptc_frame1_noncanonical <- has_ptc_frame0_noncanonical
+      genome_relative_stop_codon_frame2_noncanonical <- genome_relative_stop_codon_frame0_noncanonical
       length_longest_coding_sequence_frame2_noncanonical <- length_longest_coding_sequence_frame0_noncanonical
       genome_relative_start_coding_sequence_frame2_noncanonical <- genome_relative_start_coding_sequence_frame0_noncanonical
       genome_relative_end_coding_sequence_frame2_noncanonical <- genome_relative_end_coding_sequence_frame0_noncanonical
@@ -531,9 +549,9 @@ for (chr in chr_to_run) {
       length_longest_coding_sequence_frame0_ATGonly <- list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist %>% max
       
       genome_relative_start_coding_sequence_frame0_ATGonly <- if (updated_list_temp$strand == "+") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 0)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 + 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + ((updated_list_temp$frame_adjust + 0)%%3)]
       } else if (updated_list_temp$strand == "-") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 0)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 - 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - ((updated_list_temp$frame_adjust + 0)%%3)]
       }
       genome_relative_end_coding_sequence_frame0_ATGonly <- if (updated_list_temp$strand == "+") {
         updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 0)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3]
@@ -547,16 +565,22 @@ for (chr in chr_to_run) {
         
         has_ptc_frame0_ATGonly <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_ATGonly) < (floor(updated_list_temp$forwards_coords_relative_junction_position) - window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_ATGonly) == length(updated_list_temp$forward_coords)) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_ATGonly) >= (length(updated_list_temp$forward_coords) - 2)) {
           has_ptc_frame0_ATGonly <- "nostop"
+          genome_relative_stop_codon_frame0_ATGonly <- NA
+        } else {
+          genome_relative_stop_codon_frame0_ATGonly <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 0)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x+1):(x+3))})] %>% paste(collapse = ",")
         }
         
       } else if (updated_list_temp$strand == "-") {
         
         has_ptc_frame0_ATGonly <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_ATGonly) > (ceiling(updated_list_temp$forwards_coords_relative_junction_position) + window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_ATGonly) == 1) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_ATGonly) <= 3) {
           has_ptc_frame0_ATGonly <- "nostop"
+          genome_relative_stop_codon_frame0_ATGonly <- NA
+        } else {
+          genome_relative_stop_codon_frame0_ATGonly <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 0)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x-1):(x-3))})] %>% paste(collapse = ",")
         }
         
       }
@@ -565,11 +589,14 @@ for (chr in chr_to_run) {
       
     } else {
       
+      has_ptc_frame0_ATGonly <- "nostart"
+      
       length_longest_coding_sequence_frame0_ATGonly <- 0
       
       genome_relative_start_coding_sequence_frame0_ATGonly <- NA
       genome_relative_end_coding_sequence_frame0_ATGonly <- NA
-      has_ptc_frame0_ATGonly <- "nostart"
+      
+      genome_relative_stop_codon_frame0_ATGonly <- NA
       
     }
     
@@ -580,40 +607,50 @@ for (chr in chr_to_run) {
       length_longest_coding_sequence_frame1_ATGonly <- list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist %>% max
       
       genome_relative_start_coding_sequence_frame1_ATGonly <- if (updated_list_temp$strand == "+") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 1)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 + 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + ((updated_list_temp$frame_adjust + 1)%%3)]
       } else if (updated_list_temp$strand == "-") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 1)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 - 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - ((updated_list_temp$frame_adjust + 1)%%3)]
       }
       genome_relative_end_coding_sequence_frame1_ATGonly <- if (updated_list_temp$strand == "+") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 1)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 1)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3] %>% paste(collapse = ",")
       } else if (updated_list_temp$strand == "-") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 1)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 1)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3] %>% paste(collapse = ",")
       }
       
       if (updated_list_temp$strand == "+") {
         
         has_ptc_frame1_ATGonly <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_ATGonly) < (floor(updated_list_temp$forwards_coords_relative_junction_position) - window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_ATGonly) == length(updated_list_temp$forward_coords)) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_ATGonly) >= (length(updated_list_temp$forward_coords) - 2)) {
           has_ptc_frame1_ATGonly <- "nostop"
+          genome_relative_stop_codon_frame1_ATGonly <- NA
+        } else {
+          genome_relative_stop_codon_frame1_ATGonly <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 1)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x+1):(x+3))})] %>% paste(collapse = ",")
         }
         
       } else if (updated_list_temp$strand == "-") {
         
         has_ptc_frame1_ATGonly <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_ATGonly) > (ceiling(updated_list_temp$forwards_coords_relative_junction_position) + window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_ATGonly) == 1) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_ATGonly) <= 3) {
           has_ptc_frame1_ATGonly <- "nostop"
+          genome_relative_stop_codon_frame1_ATGonly <- NA
+        } else {
+          genome_relative_stop_codon_frame1_ATGonly <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 1)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x-1):(x-3))})] %>% paste(collapse = ",")
         }
         
       }
       
     } else {
         
+      has_ptc_frame1_ATGonly <- "nostart"
+      
       length_longest_coding_sequence_frame1_ATGonly <- 0
       
       genome_relative_start_coding_sequence_frame1_ATGonly <- NA
       genome_relative_end_coding_sequence_frame1_ATGonly <- NA
+      
+      genome_relative_stop_codon_frame1_ATGonly <- NA
       
     }
     
@@ -624,9 +661,9 @@ for (chr in chr_to_run) {
       length_longest_coding_sequence_frame2_ATGonly <- list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist %>% max
       
       genome_relative_start_coding_sequence_frame2_ATGonly <- if (updated_list_temp$strand == "+") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 2)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 + 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + ((updated_list_temp$frame_adjust + 2)%%3)]
       } else if (updated_list_temp$strand == "-") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 2)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 - 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - ((updated_list_temp$frame_adjust + 2)%%3)]
       }
       genome_relative_end_coding_sequence_frame2_ATGonly <- if (updated_list_temp$strand == "+") {
         updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 2)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3]
@@ -638,26 +675,36 @@ for (chr in chr_to_run) {
         
         has_ptc_frame2_ATGonly <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_ATGonly) < (floor(updated_list_temp$forwards_coords_relative_junction_position) - window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_ATGonly) == length(updated_list_temp$forward_coords)) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_ATGonly) >= (length(updated_list_temp$forward_coords) - 2)) {
           has_ptc_frame2_ATGonly <- "nostop"
+          genome_relative_stop_codon_frame2_ATGonly <- NA
+        } else {
+          genome_relative_stop_codon_frame2_ATGonly <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 2)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x+1):(x+3))})] %>% paste(collapse = ",")
         }
         
       } else if (updated_list_temp$strand == "-") {
         
         has_ptc_frame2_ATGonly <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_ATGonly) > (ceiling(updated_list_temp$forwards_coords_relative_junction_position) + window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_ATGonly) == 1) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_ATGonly) <= 3) {
           has_ptc_frame2_ATGonly <- "nostop"
+          genome_relative_stop_codon_frame2_ATGonly <- NA
+        } else {
+          genome_relative_stop_codon_frame2_ATGonly <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 2)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_ATGonly %>% purrr::map(~length(which(.x %in% "ATG")[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_ATGonly)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x-1):(x-3))})] %>% paste(collapse = ",")
         }
         
       }
       
     } else {
       
+      has_ptc_frame2_ATGonly <- "nostart"
+      
       length_longest_coding_sequence_frame2_ATGonly <- 0
       
       genome_relative_start_coding_sequence_frame2_ATGonly <- NA
       genome_relative_end_coding_sequence_frame2_ATGonly <- NA
+      
+      genome_relative_stop_codon_frame2_ATGonly <- NA
       
     }
     
@@ -667,10 +714,10 @@ for (chr in chr_to_run) {
       
       length_longest_coding_sequence_frame0_noncanonical <- list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist %>% max
       
-      c <- if (updated_list_temp$strand == "+") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 0)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 + 1]
+      genome_relative_start_coding_sequence_frame0_noncanonical <- if (updated_list_temp$strand == "+") {
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + ((updated_list_temp$frame_adjust + 0)%%3)]
       } else if (updated_list_temp$strand == "-") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 0)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 - 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - ((updated_list_temp$frame_adjust + 0)%%3)]
       }
       genome_relative_end_coding_sequence_frame0_noncanonical <- if (updated_list_temp$strand == "+") {
         updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 0)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3]
@@ -682,26 +729,36 @@ for (chr in chr_to_run) {
         
         has_ptc_frame0_noncanonical <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_noncanonical) < (floor(updated_list_temp$forwards_coords_relative_junction_position) - window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_noncanonical) == length(updated_list_temp$forward_coords)) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_noncanonical) >= (length(updated_list_temp$forward_coords) - 2)) {
           has_ptc_frame0_noncanonical <- "nostop"
+          genome_relative_stop_codon_frame0_noncanonical <- NA
+        } else {
+          genome_relative_stop_codon_frame0_noncanonical <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 0)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x+1):(x+3))})] %>% paste(collapse = ",")
         }
         
       } else if (updated_list_temp$strand == "-") {
         
         has_ptc_frame0_noncanonical <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_noncanonical) > (ceiling(updated_list_temp$forwards_coords_relative_junction_position) + window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_noncanonical) == 1) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame0_noncanonical) <= 3) {
           has_ptc_frame0_noncanonical <- "nostop"
+          genome_relative_stop_codon_frame0_noncanonical <- NA
+        } else {
+          genome_relative_stop_codon_frame0_noncanonical <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 0)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame0_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x-1):(x-3))})] %>% paste(collapse = ",")
         }
         
       }
       
     } else {
       
+      has_ptc_frame0_noncanonical <- "nostart"
+      
       length_longest_coding_sequence_frame0_noncanonical <- 0
       
       genome_relative_start_coding_sequence_frame0_noncanonical <- NA
       genome_relative_end_coding_sequence_frame0_noncanonical <- NA
+      
+      genome_relative_stop_codon_frame0_noncanonical <- NA
       
     }
     
@@ -712,9 +769,9 @@ for (chr in chr_to_run) {
       length_longest_coding_sequence_frame1_noncanonical <- list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist %>% max
       
       genome_relative_start_coding_sequence_frame1_noncanonical <- if (updated_list_temp$strand == "+") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 1)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 + 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + ((updated_list_temp$frame_adjust + 1)%%3)]
       } else if (updated_list_temp$strand == "-") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 1)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 - 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - ((updated_list_temp$frame_adjust + 1)%%3)]
       }
       genome_relative_end_coding_sequence_frame1_noncanonical <- if (updated_list_temp$strand == "+") {
         updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 1)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3]
@@ -726,39 +783,49 @@ for (chr in chr_to_run) {
         
         has_ptc_frame1_noncanonical <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_noncanonical) < (floor(updated_list_temp$forwards_coords_relative_junction_position) - window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_noncanonical) == length(updated_list_temp$forward_coords)) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_noncanonical) >= (length(updated_list_temp$forward_coords) - 2)) {
           has_ptc_frame1_noncanonical <- "nostop"
+          genome_relative_stop_codon_frame1_noncanonical <- NA
+        } else {
+          genome_relative_stop_codon_frame1_noncanonical <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 1)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x+1):(x+3))})] %>% paste(collapse = ",")
         }
         
       } else if (updated_list_temp$strand == "-") {
         
         has_ptc_frame1_noncanonical <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_noncanonical) > (ceiling(updated_list_temp$forwards_coords_relative_junction_position) + window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_noncanonical) == 1) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame1_noncanonical) <= 3) {
           has_ptc_frame1_noncanonical <- "nostop"
+          genome_relative_stop_codon_frame1_noncanonical <- NA
+        } else {
+          genome_relative_stop_codon_frame1_noncanonical <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 1)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_1_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame1_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x-1):(x-3))})] %>% paste(collapse = ",")
         }
         
       }
       
     } else {
       
+      has_ptc_frame1_noncanonical <- "nostart"
+      
       length_longest_coding_sequence_frame1_noncanonical <- 0
       
       genome_relative_start_coding_sequence_frame1_noncanonical <- NA
       genome_relative_end_coding_sequence_frame1_noncanonical <- NA
       
+      genome_relative_stop_codon_frame1_noncanonical <- NA
+      
     }
     
     list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical <- list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon %>% purrr::keep(.p = ~any(grepl(x = .x, pattern = "ATG|CTG|TTG|GTG|ACG|ATA|ATT")) == TRUE)
     
-    if (length(list_stranded_CDS_nucleotides_codonised_frame_0_splitbystopcodon_hasstartsonly_ATGonly) > 0) {
+    if (length(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical) > 0) {
       
       length_longest_coding_sequence_frame2_noncanonical <- list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist %>% max
       
       genome_relative_start_coding_sequence_frame2_noncanonical <- if (updated_list_temp$strand == "+") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 2)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 + 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + ((updated_list_temp$frame_adjust + 2)%%3)]
       } else if (updated_list_temp$strand == "-") {
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 2)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE) - 1)] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3 - 1]
+        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - ((updated_list_temp$frame_adjust + 2)%%3)]
       }
       genome_relative_end_coding_sequence_frame2_noncanonical <- if (updated_list_temp$strand == "+") {
         updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 2)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3]
@@ -770,26 +837,36 @@ for (chr in chr_to_run) {
         
         has_ptc_frame2_noncanonical <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_noncanonical) < (floor(updated_list_temp$forwards_coords_relative_junction_position) - window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_noncanonical) == length(updated_list_temp$forward_coords)) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_noncanonical) >= (length(updated_list_temp$forward_coords) - 2)) {
           has_ptc_frame2_noncanonical <- "nostop"
+          genome_relative_stop_codon_frame2_noncanonical <- NA
+        } else {
+          genome_relative_stop_codon_frame2_noncanonical <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + ((updated_list_temp$frame_adjust + 2)%%3) + (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x+1):(x+3))})] %>% paste(collapse = ",")
         }
         
       } else if (updated_list_temp$strand == "-") {
         
         has_ptc_frame2_noncanonical <- which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_noncanonical) > (ceiling(updated_list_temp$forwards_coords_relative_junction_position) + window_size)
         
-        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_noncanonical) == 1) {
+        if (which(updated_list_temp$forward_coords == genome_relative_end_coding_sequence_frame2_noncanonical) <= 3) {
           has_ptc_frame2_noncanonical <- "nostop"
+          genome_relative_stop_codon_frame2_noncanonical <- NA
+        } else {
+          genome_relative_stop_codon_frame2_noncanonical <- updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - ((updated_list_temp$frame_adjust + 2)%%3) - (list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon[1:(which(list_stranded_CDS_nucleotides_codonised_frame_2_splitbystopcodon_hasstartsonly_noncanonical %>% purrr::map(~length(which(.x %in% c("ATG", "CTG", "TTG", "GTG", "ACG", "ATA", "ATT"))[1]:length(.x))) %>% unlist == length_longest_coding_sequence_frame2_noncanonical)[1] %>% names %>% type.convert(as.is = TRUE))] %>% purrr::map(~.x %>% length) %>% purrr::reduce(sum)) * 3) %>% (function(x){return((x-1):(x-3))})] %>% paste(collapse = ",")
         }
         
       }
       
     } else {
       
+      has_ptc_frame2_noncanonical <- "nostart"
+      
       length_longest_coding_sequence_frame2_noncanonical <- 0
       
       genome_relative_start_coding_sequence_frame2_noncanonical <- NA
       genome_relative_end_coding_sequence_frame2_noncanonical <- NA
+      
+      genome_relative_stop_codon_frame2_noncanonical <- NA
       
     }
     
@@ -803,41 +880,41 @@ for (chr in chr_to_run) {
       "genome_relative_start_coding_sequence_frame0_ATGonly" = genome_relative_start_coding_sequence_frame0_ATGonly,
       "genome_relative_end_coding_sequence_frame0_ATGonly" = genome_relative_end_coding_sequence_frame0_ATGonly,
       "has_ptc_frame0_ATGonly" = has_ptc_frame0_ATGonly,
+      "genome_relative_stop_codon_frame0_ATGonly" = genome_relative_stop_codon_frame0_ATGonly,
       "length_longest_coding_sequence_frame1_ATGonly" = length_longest_coding_sequence_frame1_ATGonly,
       "genome_relative_start_coding_sequence_frame1_ATGonly" = genome_relative_start_coding_sequence_frame1_ATGonly,
       "genome_relative_end_coding_sequence_frame1_ATGonly" = genome_relative_end_coding_sequence_frame1_ATGonly,
       "has_ptc_frame1_ATGonly" = has_ptc_frame1_ATGonly,
+      "genome_relative_stop_codon_frame1_ATGonly" = genome_relative_stop_codon_frame1_ATGonly,
       "length_longest_coding_sequence_frame2_ATGonly" = length_longest_coding_sequence_frame2_ATGonly,
       "genome_relative_start_coding_sequence_frame2_ATGonly" = genome_relative_start_coding_sequence_frame2_ATGonly,
       "genome_relative_end_coding_sequence_frame2_ATGonly" = genome_relative_end_coding_sequence_frame2_ATGonly,
       "has_ptc_frame2_ATGonly" = has_ptc_frame2_ATGonly,
+      "genome_relative_stop_codon_frame2_ATGonly" = genome_relative_stop_codon_frame2_ATGonly,
       
       "length_longest_coding_sequence_frame0_noncanonical" = length_longest_coding_sequence_frame0_noncanonical,
       "genome_relative_start_coding_sequence_frame0_noncanonical" = genome_relative_start_coding_sequence_frame0_noncanonical,
       "genome_relative_end_coding_sequence_frame0_noncanonical" = genome_relative_end_coding_sequence_frame0_noncanonical,
       "has_ptc_frame0_noncanonical" = has_ptc_frame1_noncanonical,
+      "genome_relative_stop_codon_frame0_noncanonical" = genome_relative_stop_codon_frame0_noncanonical,
       "length_longest_coding_sequence_frame1_noncanonical" = length_longest_coding_sequence_frame1_noncanonical,
       "genome_relative_start_coding_sequence_frame1_noncanonical" = genome_relative_start_coding_sequence_frame1_noncanonical,
       "genome_relative_end_coding_sequence_frame1_noncanonical" = genome_relative_end_coding_sequence_frame1_noncanonical,
       "has_ptc_frame1_noncanonical" = has_ptc_frame2_noncanonical,
+      "genome_relative_stop_codon_frame1_noncanonical" = genome_relative_stop_codon_frame1_noncanonical,
       "length_longest_coding_sequence_frame2_noncanonical" = length_longest_coding_sequence_frame2_noncanonical,
       "genome_relative_start_coding_sequence_frame2_noncanonical" = genome_relative_start_coding_sequence_frame2_noncanonical,
       "genome_relative_end_coding_sequence_frame2_noncanonical" = genome_relative_end_coding_sequence_frame2_noncanonical,
-      "has_ptc_frame2_noncanonical" = has_ptc_frame2_noncanonical
+      "has_ptc_frame2_noncanonical" = has_ptc_frame2_noncanonical,
+      "genome_relative_stop_codon_frame2_noncanonical" = genome_relative_stop_codon_frame2_noncanonical
     )
     
-    # collapse the vectors into string format
-    ## commas to separate numbers
-    updated_list_temp <- purrr::modify_at(.x = updated_list_temp, .at = c("forward_coords", names(updated_list_temp)[grep(x = names(updated_list_temp), pattern = "coords_first_M.S_stop_codon")], names(updated_list_temp)[grep(x = names(updated_list_temp), pattern = "coords_all_stop_codons")]), .f = ~paste(.x, collapse = ","))
-    ## nothing to separate nt. and AA sequences.
-    updated_list <- purrr::modify_at(.x = updated_list_temp, .at = c("CDS_nucleotides", "translation_frame_0", "translation_frame_1", "translation_frame_2"), .f = ~paste(.x, collapse = ""))
-    
-    return(updated_list)
+    return(updated_list_temp)
     
   }, .progress = TRUE)
   
   # tibblise
-  tibble_transcript_3FT <- purrr::map2(
+  list_transcript_3FT_tibblised <- purrr::map2(
     .x = list_transcript_3FT,
     .y = names(list_transcript_3FT),
     .f = function(a1, a2) {
@@ -855,7 +932,7 @@ for (chr in chr_to_run) {
     } )
   
   # collapse and tibblise in preparation for left joins
-  tibble_NMD_result_per_chr <- tibble_transcript_3FT %>% rbindlist(use.names = TRUE) %>% type_convert(col_types = cols(.default = col_character()), na = c("", "na", "NA")) %>% as_tibble
+  tibble_NMD_result_per_chr <- list_transcript_3FT_tibblised %>% rbindlist(use.names = TRUE, fill = TRUE) %>% type_convert(col_types = cols(.default = col_character()), na = c("", "na", "NA")) %>% as_tibble
   
   # assign into the temporary tibble by chromosome
   assign(x = paste("tibble_NMD_result_per_chr_", chr, sep = ""), 
@@ -876,9 +953,9 @@ for (chr in chr_to_run) {
 # trim off all those elements (per chromosome) that did not have any 3FT result.
 list_NMD_results <- ls(pattern = "tibble_NMD_result_per_chr_") %>% array_tree %>% purrr::map(.x = ., .f = ~get(.x)) %>% compact
 # rbindlist into a tibble
-tibble_NMD_results <- list_NMD_results %>% rbindlist(use.names = TRUE) %>% as_tibble
+tibble_NMD_results <- list_NMD_results %>% rbindlist(use.names = TRUE, fill = TRUE) %>% as_tibble
 # table join for final annotated reconstructed GTF
-tibble_annotated_recon_gtf <- dplyr::left_join(x = tibble_reconstructed_gtf, y = tibble_NMD_results, by = "transcript_id")
+tibble_recon_gtf_nmd <- dplyr::left_join(x = tibble_reconstructed_gtf, y = tibble_NMD_results, by = "transcript_id")
 
 # SAVE WORKSPACE NOW IF DEBUGGING
 if (save_workspace_when_done == "DEBUG") {
@@ -887,54 +964,84 @@ if (save_workspace_when_done == "DEBUG") {
   
 }
 
-cat("Annotate poison exons/PTC-containing exons")
-## un-stringsplit each row of genome relative coords
-## turn the tibble_ORF_test into array_tree
-## subset the GTF table for each array_tree element (GTF table should have been subsetted for exons only)
-## rbind and tibblise
-## rejoin onto the NMD-candidate-annotated reference GTF
-tibble_ORF_test <- tibble_ORF_test %>% dplyr::mutate_at(.vars = colnames(tibble_ORF_test)[grep(x = colnames(tibble_ORF_test), pattern = "genome_relative_coords.*stop_codon")], .funs = function(x) {strsplit(x, split = ",") %>% purrr::map(~.x %>% type.convert) %>% return} )
+cat("Annotate exons where stop codons reside")
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame0_ATGonly"] <- furrr::future_pmap(
+  .l = list(
+    "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
+    "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
+    "a3" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$genome_relative_stop_codon_frame0_ATGonly
+  ), 
+  .f = function(a1, a2, a3) {
+    
+    any((a1 < (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE))) & (a2 > (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE)))) %>%
+      return
+    
+  }, .progress = TRUE ) %>% unlist
 
-list_tibble_ORF_test_array.tree <- tibble_ORF_test %>% array_tree
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame1_ATGonly"] <- furrr::future_pmap(
+  .l = list(
+    "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
+    "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
+    "a3" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$genome_relative_stop_codon_frame1_ATGonly
+  ), 
+  .f = function(a1, a2, a3) {
+    
+    any((a1 < (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE))) & (a2 > (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE)))) %>%
+      return
+    
+  }, .progress = TRUE ) %>% unlist
 
-## subset recon. GTF for exonic entries only
-tibble_reconstructed_gtf_exonic_entries_only <- tibble_reconstructed_gtf %>% dplyr::filter(!type %in% c("gene", "transcript")) %>% dplyr::select(transcript_id, type, start, end)
-## subset recon. GTF for each element
-list_recon_GTF_matched_to_PTC_per_transcript_id <- future_map(.x = list_tibble_ORF_test_array.tree, .f = function(a1) {
-  
-  # DEBUG ###
-  # a1 <- list_tibble_ORF_test_array.tree[[1]]
-  ###########
-  
-  # pool together the poison exon PTC coords
-  vector_poison_exon_PTC_coords <- a1[grep(x = names(a1), pattern = "first_M.S")] %>% unlist %>% sort
-  # pool together all the PTC coords.
-  vector_all_PTC_coords <- a1[grep(x = names(a1), pattern = "all_stop_codons")] %>% unlist %>% sort
-  
-  # select for transcript_id we're currently up to
-  tibble_subset_recon.GTF_for_transcript_id <- tibble_reconstructed_gtf_exonic_entries_only %>% dplyr::filter(transcript_id == a1$transcript_id)
-  # select for exonic range
-  ## get the row indices of poison-exon candiates in the subset reference GTF
-  row.indices_of_subset_GTF_which_are_poison_exons <- purrr::map2(.x = tibble_subset_recon.GTF_for_transcript_id$start, .y = tibble_subset_recon.GTF_for_transcript_id$end, .f = ~intersect(.x:.y, vector_poison_exon_PTC_coords) %>% length > 0) %>% unlist %>% which
-  ## get the row indices of all PTC-containing exons in the subset reference GTF
-  row.indices_of_subset_GTF_which_are_PTC_containing_exons <- purrr::map2(.x = tibble_subset_recon.GTF_for_transcript_id$start, .y = tibble_subset_recon.GTF_for_transcript_id$end, .f = ~intersect(.x:.y, vector_all_PTC_coords) %>% length > 0) %>% unlist %>% which
-  
-  # pre-allocate rows and annotate
-  tibble_subset_recon.GTF_for_transcript_id_annotated <- tibble_subset_recon.GTF_for_transcript_id %>% 
-    add_column("poison_exon_candidate" = "FALSE", "contains_PTC" = "FALSE")
-  
-  tibble_subset_recon.GTF_for_transcript_id_annotated[row.indices_of_subset_GTF_which_are_poison_exons, "poison_exon_candidate"] <- "TRUE"
-  tibble_subset_recon.GTF_for_transcript_id_annotated[row.indices_of_subset_GTF_which_are_PTC_containing_exons, "contains_PTC"] <- "TRUE"
-  
-  return(tibble_subset_recon.GTF_for_transcript_id_annotated)
-  
-  }, .progress = TRUE)
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame2_ATGonly"] <- furrr::future_pmap(
+  .l = list(
+    "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
+    "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
+    "a3" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$genome_relative_stop_codon_frame2_ATGonly
+  ), 
+  .f = function(a1, a2, a3) {
+    
+    any((a1 < (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE))) & (a2 > (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE)))) %>%
+      return
+    
+  }, .progress = TRUE ) %>% unlist
 
-## rbind and tibblise
-tibble_subset_recon_GTF_matched_to_PTC_per_transcript_id <- list_recon_GTF_matched_to_PTC_per_transcript_id %>% rbindlist(use.names = TRUE) %>% as_tibble
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame0_noncanonical"] <- furrr::future_pmap(
+  .l = list(
+    "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
+    "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
+    "a3" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$genome_relative_stop_codon_frame0_noncanonical
+  ), 
+  .f = function(a1, a2, a3) {
+    
+    any((a1 < (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE))) & (a2 > (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE)))) %>%
+      return
+    
+  }, .progress = TRUE ) %>% unlist
 
-## table join onto the main GTF table. then  we are finished.
-tibble_annotated_recon_gtf <- dplyr::left_join(tibble_annotated_recon_gtf, tibble_subset_recon_GTF_matched_to_PTC_per_transcript_id, by = c("transcript_id", "type", "start", "end"))
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame1_noncanonical"] <- furrr::future_pmap(
+  .l = list(
+    "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
+    "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
+    "a3" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$genome_relative_stop_codon_frame1_noncanonical
+  ), 
+  .f = function(a1, a2, a3) {
+    
+    any((a1 < (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE))) & (a2 > (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE)))) %>%
+      return
+    
+  }, .progress = TRUE ) %>% unlist
+
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame2_noncanonical"] <- furrr::future_pmap(
+  .l = list(
+    "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
+    "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
+    "a3" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$genome_relative_stop_codon_frame2_noncanonical
+  ), 
+  .f = function(a1, a2, a3) {
+    
+    any((a1 < (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE))) & (a2 > (a3 %>% strsplit(split = "\\,") %>% unlist %>% type.convert(as.is = TRUE)))) %>%
+      return
+    
+  }, .progress = TRUE ) %>% unlist
 
 # SAVE WORKSPACE NOW IF DEBUGGING
 if (save_workspace_when_done == "DEBUG") {
@@ -945,8 +1052,9 @@ if (save_workspace_when_done == "DEBUG") {
 
 cat("\nlabel first and last exons")
 
-tibble_annotated_recon_gtf_first.last <- furrr::future_imap(
-  .x = tibble_annotated_recon_gtf %>% dplyr::group_split(transcript_id),
+tibble_recon_gtf_nmd_first.last <- furrr::future_map2(
+  .x = tibble_recon_gtf_nmd %>% dplyr::group_split(transcript_id),
+  .y = 1:length(tibble_recon_gtf_nmd %>% dplyr::group_split(transcript_id)),
   .f = function(a1, a2) {
     
     # DEBUG ###
@@ -1015,14 +1123,7 @@ if (save_workspace_when_done == "YES" | save_workspace_when_done == "DEBUG") {
 }
 
 # write GTF
-rtracklayer::export(tibble_annotated_recon_gtf_first.last, con = paste(output_dir, "/", output_name, ".gtf", sep = ""), format = "gtf")
-
-# write stats summary
-fileConn <- file(paste(output_dir, "/", output_name, "_stats_summary.txt", sep = ""))
-writeLines(paste("number of transcripts identified as NMD:", length(tibble_ORF_test$transcript_id %>% unique), "\n", sep = ""), con = fileConn)
-writeLines(paste("number of transcripts which were in the GTF:", length(tibble_reconstructed_gtf$transcript_id %>% unique), "\n", sep = ""), con = fileConn)
-writeLines(paste("percentage of transcripts identified as NMD candidates:", ((length(tibble_ORF_test$transcript_id %>% unique)) / (length(tibble_reconstructed_gtf$transcript_id %>% unique))) * 100, "%\n", sep = ""), con = fileConn)
-close(fileConn)
+rtracklayer::export(tibble_recon_gtf_nmd_first.last, con = paste(output_dir, "/", output_name, ".gtf", sep = ""), format = "gtf")
 
 # finish counting
 tictoc::toc()

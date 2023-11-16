@@ -33,7 +33,7 @@ library(svglite)
 library(scales)
 library(furrr)
 options(future.globals.maxSize = 30000000000, future.fork.enable = TRUE)
-plan(multiprocess)
+plan(multicore)
 memory.limit(100000)
 library(data.table)
 
@@ -550,7 +550,7 @@ logCPM_OBseries_anysig_DEGs <- logCPM_OBseries_anysig_DEGs_import %>% average_co
 vector_OBseries_timepoints_raw <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
 
-UNION_junc_coor_path <- "/mnt/4tb_ironwolf/PGNEXUS_OBseries/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
+UNION_junc_coor_path <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_JUM/run_2_PGNEXUS_OBseries_readlength100/JUM_diff/UNION_junc_coor_with_junction_ID_more_than_5_read_in_at_least_3_samples.txt"
 
 tibble_RSEM_edgeR_DEGs_all_GO <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_RSEM/run_1_original/R_processing_results/table_hypergoresult_allDEGs_allGO.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
@@ -8612,4 +8612,89 @@ list_JUM_diff_junctions_array.tree <- tibble_JUM_differential_dpsi0.15_qvalue0.0
 
 ```
 
+# ONT long read analysis
+
+## Import files
+
+```{r}
+
+source("/mnt/LTS/tools/angel_suite/source/main_source.R")
+
+# tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na
+# tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na
+# 
+# tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na
+# tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na
+# 
+# tibble_majiq_differential_with_na
+# tibble_majiq_constitutive
+
+list_2023_hmsc_ob_ont_gtf <- furrr::future_map2(
+  .x = list.files("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/", pattern = "2023\\_hmsc\\_ob\\_ont\\_barcode0.\\_NMD\\_PTC\\_E4\\.gtf", full.names = TRUE),
+  .y = c("MSC", "6h", "1d", "3d", "9d", "12d"),
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- list.files("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/", pattern = "2023\\_hmsc\\_ob\\_ont\\_barcode0.\\_NMD\\_PTC\\_E4\\.gtf", full.names = TRUE) %>% .[[1]]
+    # a2 <- "MSC"
+    ###########
+    
+    tibble_gtf <- rtracklayer::import(con = a1) %>% tibble::as_tibble() %>% dplyr::mutate_if(is.factor, as.character) %>% dplyr::mutate("timepoint" = a2)
+    
+  }, .progress = TRUE ) 
+
+tibble_2023_hmsc_ob_ont_gtf <- list_2023_hmsc_ob_ont_gtf %>% data.table::rbindlist(use.names=TRUE) %>% tibble::as_tibble()
+
+```
+
+## Validate/filter DS events with the ONT data
+
+```{r}
+
+list_majiq_differential_with_na_matched_to_ont <- furrr::future_map(
+  .x = tibble_majiq_differential_with_na %>% dplyr::rowwise() %>% dplyr::group_split(),
+  .f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- tibble_majiq_differential_with_na %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[1]]
+    # a1 <- tibble_majiq_differential_with_na %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[14]]
+    ###########
+    
+    if (a1$junc_or_IR == "junc") {
+      
+      list_matched_ont_exon_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_end = max(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_strand = a1$strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      list_matched_ont_transcript_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$transcript_id %in% names(list_matched_ont_exon_entries)) & (tibble_2023_hmsc_ob_ont_gtf$type == "transcript"), ]
+      
+    } else if (a1$junc_or_IR == "IR") {
+      
+      list_matched_ont_junction_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_end = max(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_strand = a1$strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      if (length(list_matched_ont_junction_entries) > 0) {
+        
+        # if junction match exists, then find all transcripts with completely overlapping exon
+        list_matched_ont_exon_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$start <= (min(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)) - 1)) & (tibble_2023_hmsc_ob_ont_gtf$end >= (max(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)) + 1)) & tibble_2023_hmsc_ob_ont_gtf$type == "exon", ] %>% dplyr::group_by(transcript_id) %>% dplyr::group_split() %>% purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+        
+        list_matched_ont_transcript_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$transcript_id %in% names(list_matched_ont_exon_entries)) & (tibble_2023_hmsc_ob_ont_gtf$type == "transcript"), ]
+        
+      } else {
+        list_matched_ont_exon_entries <- list()
+        list_matched_ont_transcript_entries <- list()
+      }
+      
+    }
+    
+    list_L1_result <- list(
+      "majiq_data" = a1,
+      "list_matched_ont_exon_entries" = list_matched_ont_exon_entries,
+      "list_matched_ont_transcript_entries" = list_matched_ont_transcript_entries
+    )
+      
+    return(list_L1_result)
+    
+  }, .progress = TRUE )
+
+
+
+```
 

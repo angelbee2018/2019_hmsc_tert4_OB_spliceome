@@ -8643,11 +8643,190 @@ list_2023_hmsc_ob_ont_gtf <- furrr::future_map2(
     
   }, .progress = TRUE ) 
 
-tibble_2023_hmsc_ob_ont_gtf <- list_2023_hmsc_ob_ont_gtf %>% data.table::rbindlist(use.names=TRUE) %>% tibble::as_tibble()
+tibble_2023_hmsc_ob_ont_gtf <- list_2023_hmsc_ob_ont_gtf %>% data.table::rbindlist(use.names = TRUE) %>% tibble::as_tibble()
 
 ```
 
 ## Validate/filter DS events with the ONT data
+
+### match psi-sigma differential events to ONT
+
+```{r}
+
+list_psisigma_differential_with_na_matched_to_ont <- furrr::future_map(
+  .x = tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% dplyr::rowwise() %>% dplyr::group_split(),
+  .f = function(a1) {
+    
+    # DEBUG ###
+    a1 <- tibble_PSIsigma_all_exons_with_na %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[3]]
+    ###########
+    
+    if (a1$splicemode %>% grepl(pattern = "IR")) {
+      
+      # match the junction
+      list_matched_ont_junction_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$diff_exon_start, a1$diff_exon_end)), query_end = max(c(a1$diff_exon_start, a1$diff_exon_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      if (length(list_matched_ont_junction_entries) > 0) {
+        
+        # if junction match exists, then find all transcripts with completely overlapping exon
+        list_matched_ont_exon_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$start <= (min(c(a1$diff_exon_start, a1$diff_exon_end)) - 1)) & (tibble_2023_hmsc_ob_ont_gtf$end >= (max(c(a1$diff_exon_start, a1$diff_exon_end)) + 1)) & tibble_2023_hmsc_ob_ont_gtf$type == "exon", ] %>% 
+          dplyr::group_by(transcript_id) %>% 
+          dplyr::group_split() %>% 
+          purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+        
+        list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+          purrr::set_names(nm = names(list_matched_ont_exon_entries))
+        
+        list_L1_result <- list(
+          "majiq_data" = a1,
+          "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
+          "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
+          "list_matched_ont_exclusion_entries" = list_matched_ont_junction_entries
+        )
+        
+      } else {
+        list_L1_result <- list(
+          "majiq_data" = a1,
+          "list_matched_ont_inclusion_entries" = list(),
+          "list_matched_ont_inclusion_transcript_entries" = list(),
+          "list_matched_ont_exclusion_entries" = list()
+        )
+      }
+      
+    } else if (a1$splicemode %>% grepl(pattern = "A.SS")) {
+      
+      # match event region
+      list_matched_event_region <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$event_region_start, a1$event_region_end)), query_end = max(c(a1$event_region_start, a1$event_region_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      # match alternative bit
+      # ENHANCED EXON EXTENSION MATCHING
+      # Strategy: 
+      # 1. Determine the common VSR and exon coord.
+      # 2. Calculate the genomic coord of the DR + 1 nucleotide.
+      # This is done using the equation: genome_coord_first_nucleotide_extending_into_common_region = common + (common_coord-VSR_only_coord)/(abs(common_coord-VSR_only_coord))
+      # 3. Find the CONSTITUTIVE (native, non-extended) exon by requiring no overlap with the DR but has either the start or end coord = the DR + 1 nucleotide.
+      # 4. The exonic matches are any exon which overlaps the region of the constitutive span AND contains the WHOLE DR on the same strand.
+      common_coord <- intersect(c(a1$event_region_start %>% type.convert(as.is = TRUE), a1$event_region_end %>% type.convert(as.is = TRUE)), 
+                                c(a1$diff_exon_start %>% type.convert(as.is = TRUE), a1$diff_exon_end %>% type.convert(as.is = TRUE)))
+      event_region_only_coord <- setdiff(c(a1$event_region_start %>% type.convert(as.is = TRUE), a1$event_region_end %>% type.convert(as.is = TRUE)), common_coord)
+      exon_only_coord <- setdiff(c(a1$diff_exon_start %>% type.convert(as.is = TRUE), a1$diff_exon_end %>% type.convert(as.is = TRUE)), common_coord)
+      genome_coord_second_nucleotide_extending_into_junction = exon_only_coord - 2*((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
+      genome_coord_second_nucleotide_extending_into_common_region = common_coord + 2*((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
+      
+      tibble_GTF_exons_with_DR_extended_into_junction <- extract_overlapping_features(query_chr = a1$chr, query_start = min(c(common_coord, genome_coord_second_nucleotide_extending_into_junction)), query_end = max(c(common_coord, genome_coord_second_nucleotide_extending_into_junction)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 0, right_tolerance = 0, return_type = "exon", complete_overlap = TRUE)
+      
+      tibble_GTF_exons_with_DR_extended_into_constitutive_region <- extract_overlapping_features(query_chr = a1$chr, query_start = min(c(exon_only_coord, genome_coord_second_nucleotide_extending_into_common_region)), query_end = max(c(exon_only_coord, genome_coord_second_nucleotide_extending_into_common_region)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, return_type = "exon", complete_overlap = TRUE)
+      
+      list_matched_ont_exon_entries <- dplyr::anti_join(tibble_GTF_exons_with_DR_extended_into_constitutive_region, tibble_GTF_exons_with_DR_extended_into_junction, by = c("transcript_id", "timepoint")) %>% 
+        dplyr::group_by(transcript_id) %>% 
+        dplyr::group_split() %>% 
+        purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+      
+      list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+        purrr::set_names(nm = names(list_matched_ont_exon_entries))
+      
+      list_L1_result <- list(
+          "majiq_data" = a1,
+          "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
+          "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
+          "list_matched_ont_exclusion_entries" = list_matched_event_region
+        )
+      
+    } else {
+      
+      list_matched_event_region <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$event_region_start, a1$event_region_end)), query_end = max(c(a1$event_region_start, a1$event_region_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      list_matched_ont_exon_entries <- purrr::map2(
+        .x = a1$alternative_exon_starts %>% strsplit(split = ";") %>% unlist,
+        .y = a1$alternative_exon_ends %>% strsplit(split = ";") %>% unlist, 
+        .f = ~extract_matching.exons(query_chr = a1$chr, query_start = min(c(.x, .y)), query_end = max(c(.x, .y)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, return_type = "exon"))
+      
+      # to account for multiple matches from MES exons, we need to find the transcripts with all matching exons.
+      tibble_transcripts_with_all_matched_exons <- list_matched_ont_exon_entries %>% purrr::map(~.x[, c("transcript_id", "timepoint")]) %>% purrr::reduce(dplyr::inner_join, by = c("transcript_id", "timepoint"))
+      
+      # filter matched exon entries by transcripts containing all exons
+      list_matched_ont_exon_entries_filtered_by_correct_transcripts <- list_matched_ont_exon_entries %>% purrr::map(~dplyr::inner_join(.x, tibble_transcripts_with_all_matched_exons, by = c("transcript_id", "timepoint"))) %>% 
+        data.table::rbindlist() %>%
+        tibble::as_tibble() %>%
+        dplyr::group_by(transcript_id) %>% 
+        dplyr::group_split() %>% 
+        purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+      
+      list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries_filtered_by_correct_transcripts), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+        purrr::set_names(nm = names(list_matched_ont_exon_entries_filtered_by_correct_transcripts))
+      
+      list_L1_result <- list(
+          "majiq_data" = a1,
+          "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries_filtered_by_correct_transcripts,
+          "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
+          "list_matched_ont_exclusion_entries" = list_matched_event_region
+        )
+      
+    }
+    
+    return(list_L1_result)
+    
+  }, .progress = TRUE )
+
+```
+
+### match psi-sigma constitutive events to ONT
+
+```{r}
+
+list_psisigma_constitutive_matched_to_ont <- furrr::future_map(
+  .x = tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na %>% dplyr::rowwise() %>% dplyr::group_split(),
+  .f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- tibble_PSIsigma_all_exons_with_na %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[1]]
+    ###########
+    
+    if (a1$splicemode %>% grepl(pattern = "IR")) {
+      
+      # match the junction
+      list_matched_ont_junction_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$diff_exon_start, a1$diff_exon_end)), query_end = max(c(a1$diff_exon_start, a1$diff_exon_end)), query_strand = a1$strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      if (length(list_matched_ont_junction_entries) > 0) {
+        
+        # if junction match exists, then find all transcripts with completely overlapping exon
+        list_matched_ont_exon_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$start <= (min(c(a1$diff_exon_start, a1$diff_exon_end)) - 1)) & (tibble_2023_hmsc_ob_ont_gtf$end >= (max(c(a1$diff_exon_start, a1$diff_exon_end)) + 1)) & tibble_2023_hmsc_ob_ont_gtf$type == "exon", ] %>% dplyr::group_by(transcript_id) %>% dplyr::group_split() %>% purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+        
+        list_matched_ont_transcript_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$transcript_id %in% names(list_matched_ont_exon_entries)) & (tibble_2023_hmsc_ob_ont_gtf$type == "transcript"), ]
+        
+        list_L1_result <- list(
+          "majiq_data" = a1,
+          "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
+          "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
+          "list_matched_ont_exclusion_entries" = list_matched_ont_junction_entries
+        )
+        
+      } else {
+        list_L1_result <- list(
+          "majiq_data" = a1,
+          "list_matched_ont_inclusion_entries" = list(),
+          "list_matched_ont_inclusion_transcript_entries" = list(),
+          "list_matched_ont_exclusion_entries" = list()
+        )
+      }
+      
+    } else if (a1$splicemode %>% grepl(pattern = "A.SS")) {
+      
+      list_matched_ont_exon_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_end = max(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_strand = a1$strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      list_matched_ont_transcript_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$transcript_id %in% names(list_matched_ont_exon_entries)) & (tibble_2023_hmsc_ob_ont_gtf$type == "transcript"), ]
+      
+    } else {
+      
+    }
+    
+    return(list_L1_result)
+    
+  }, .progress = TRUE )
+
+```
+
+### match majiq differential events to ONT
 
 ```{r}
 
@@ -8686,15 +8865,61 @@ list_majiq_differential_with_na_matched_to_ont <- furrr::future_map(
     
     list_L1_result <- list(
       "majiq_data" = a1,
-      "list_matched_ont_exon_entries" = list_matched_ont_exon_entries,
-      "list_matched_ont_transcript_entries" = list_matched_ont_transcript_entries
+      "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
+      "list_matched_ont_exclusion_entries" = list_matched_ont_transcript_entries
     )
       
     return(list_L1_result)
     
   }, .progress = TRUE )
 
-
-
 ```
 
+### match majiq constitutive events to ONT
+
+```{r}
+
+list_majiq_constitutive_with_na_matched_to_ont <- furrr::future_map(
+  .x = tibble_majiq_constitutive %>% dplyr::rowwise() %>% dplyr::group_split(),
+  .f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- tibble_majiq_constitutive %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[1]]
+    # a1 <- tibble_majiq_differential_with_na %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[14]]
+    ###########
+    
+    if (a1$junc_or_IR == "junc") {
+      
+      list_matched_ont_exon_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_end = max(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_strand = a1$strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      list_matched_ont_transcript_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$transcript_id %in% names(list_matched_ont_exon_entries)) & (tibble_2023_hmsc_ob_ont_gtf$type == "transcript"), ]
+      
+    } else if (a1$junc_or_IR == "IR") {
+      
+      list_matched_ont_junction_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_end = max(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)), query_strand = a1$strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      if (length(list_matched_ont_junction_entries) > 0) {
+        
+        # if junction match exists, then find all transcripts with completely overlapping exon
+        list_matched_ont_exon_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$start <= (min(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)) - 1)) & (tibble_2023_hmsc_ob_ont_gtf$end >= (max(c(a1$junc_IR_coords_start, a1$junc_IR_coords_end)) + 1)) & tibble_2023_hmsc_ob_ont_gtf$type == "exon", ] %>% dplyr::group_by(transcript_id) %>% dplyr::group_split() %>% purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+        
+        list_matched_ont_transcript_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$transcript_id %in% names(list_matched_ont_exon_entries)) & (tibble_2023_hmsc_ob_ont_gtf$type == "transcript"), ]
+        
+      } else {
+        list_matched_ont_exon_entries <- list()
+        list_matched_ont_transcript_entries <- list()
+      }
+      
+    }
+    
+    list_L1_result <- list(
+      "majiq_data" = a1,
+      "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
+      "list_matched_ont_exclusion_entries" = list_matched_ont_transcript_entries
+    )
+      
+    return(list_L1_result)
+    
+  }, .progress = TRUE )
+
+```

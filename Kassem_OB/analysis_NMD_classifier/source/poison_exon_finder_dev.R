@@ -513,7 +513,7 @@ if (save_workspace_when_done == "DEBUG") {
 # prune L1 elements which don't have VSR matches.
 list_GTF_entries_matched_to_VSRs_pruned <- list_GTF_entries_matched_to_VSRs %>% purrr::discard(.p = ~length(.x$list_tibbles_GTF_entries_matched_to_VSR) == 0)
 
-save(list_GTF_entries_matched_to_VSRs_pruned, file = paste(output_dir, "list_GTF_entries_matched_to_VSRs_pruned.Rlist", sep = ""), compress = FALSE)
+# save(list_GTF_entries_matched_to_VSRs_pruned, file = paste(output_dir, "list_GTF_entries_matched_to_VSRs_pruned.Rlist", sep = ""), compress = FALSE)
 # load(file = paste(output_dir, "list_GTF_entries_matched_to_VSRs_pruned.Rlist", sep = ""))
 
 if (save_workspace_when_done == "DEBUG") {
@@ -711,7 +711,7 @@ if (save_workspace_when_done == "DEBUG") {
 # drop elements which dont have any more valid transcript segments
 list_modified_reference_transcript_segments_pruned <- list_modified_reference_transcript_segments %>% purrr::discard(.p = ~.x$list_transcript_segments %>% purrr::map(~length(.x) == 0 | length(.x) == 1) %>% unlist %>% all == TRUE)
 
-save(list_modified_reference_transcript_segments_pruned, file = paste(output_dir, "list_modified_reference_transcript_segments_pruned.Rlist", sep = ""), compress = FALSE)
+# save(list_modified_reference_transcript_segments_pruned, file = paste(output_dir, "list_modified_reference_transcript_segments_pruned.Rlist", sep = ""), compress = FALSE)
 # load(file = paste(output_dir, "list_modified_reference_transcript_segments_pruned.Rlist", sep = ""))
 
 if (save_workspace_when_done == "DEBUG") {
@@ -992,7 +992,7 @@ if (save_workspace_when_done == "DEBUG") {
 # prune L1 elements which don't have VSR matches remaining in the event that the start codon was knocked out.
 list_genome_relative_positions_of_transcript_segments_pruned <- list_genome_relative_positions_of_transcript_segments %>% purrr::discard(.p = ~length(.x$list_tibbles_GTF_entries_matched_to_VSR) == 0)
 
-save(list_genome_relative_positions_of_transcript_segments_pruned, file = paste(output_dir, "list_genome_relative_positions_of_transcript_segments_pruned.Rlist", sep = ""), compress = FALSE)
+# save(list_genome_relative_positions_of_transcript_segments_pruned, file = paste(output_dir, "list_genome_relative_positions_of_transcript_segments_pruned.Rlist", sep = ""), compress = FALSE)
 # load(file = paste(output_dir, "list_genome_relative_positions_of_transcript_segments_pruned.Rlist", sep = ""))
 
 if (save_workspace_when_done == "DEBUG") {
@@ -1015,7 +1015,7 @@ if (save_workspace_when_done == "DEBUG") {
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
 }
 
-save(list_genome_relative_positions_of_transcript_segments_split_by_chr, file = paste(output_dir, "list_genome_relative_positions_of_transcript_segments_split_by_chr.Rlist", sep = ""), compress = FALSE)
+# save(list_genome_relative_positions_of_transcript_segments_split_by_chr, file = paste(output_dir, "list_genome_relative_positions_of_transcript_segments_split_by_chr.Rlist", sep = ""), compress = FALSE)
 # load(file = paste(output_dir, "list_genome_relative_positions_of_transcript_segments_split_by_chr.Rlist", sep = ""))
 
 options(mc.cores = 8)
@@ -1071,7 +1071,7 @@ list_genome_forward_genomic_nucleotides <- purrr::map2(.x = list_genome_relative
                                                          
                                                        } ) %>% flatten
 
-save(list_genome_forward_genomic_nucleotides, file = paste(output_dir, "list_genome_forward_genomic_nucleotides.Rlist", sep = ""), compress = FALSE)
+# save(list_genome_forward_genomic_nucleotides, file = paste(output_dir, "list_genome_forward_genomic_nucleotides.Rlist", sep = ""), compress = FALSE)
 # load(file = paste(output_dir, "list_genome_forward_genomic_nucleotides.Rlist", sep = ""))
 
 if (save_workspace_when_done == "DEBUG") {
@@ -1083,84 +1083,120 @@ options(mc.cores = 8)
 cat("three-frame translation\n")
 # after translation, find location of stop codon
 # if there are stop codons in the alternative exon, then it's a poison exon (introduces PTC)
-list_three_frame_translation <- purrr::imap(.x = list_genome_forward_genomic_nucleotides, 
-                                            .f = function(a1, a2) {
-                                              
-                                              # DEBUG ###
-                                              # a1 <- list_genome_forward_genomic_nucleotides[["749"]]
-                                              ##########
-                                              
-                                              cat(a2, "\n")
-                                              
-                                              if (save_workspace_when_done == "DEBUG") {
-                                                cat(a2, "\n")
-                                              }
-                                              
-                                              list_three_frame_translation <- purrr::pmap(
-                                                .l = list("b1" = a1$list_forward_nucleotides,
-                                                          "b2" = a1$list_tibbles_GTF_entries_parent_transcript,
-                                                          "b3" = a1$transcript_segment_relative_first_nt_of_start_codon_position,
-                                                          "b4" = a1$list_logical_start_codon_present),
-                                                .f = function(b1, b2, b3, b4) {
-                                                  
-                                                  # DEBUG ###
-                                                  # b1 <- a1$list_forward_nucleotides %>% .[[8]]
-                                                  # b2 <- a1$list_tibbles_GTF_entries_parent_transcript %>% .[[8]]
-                                                  # b3 <- a1$transcript_segment_relative_first_nt_of_start_codon_position %>% .[[8]]
-                                                  # b4 <- a1$list_logical_start_codon_present %>% .[[8]]
-                                                  ###########
-                                                  
-                                                  transcript_segment_forward_nucleotides <- b1
-                                                  
-                                                  transcript_segment_relative_first_nt_of_start_codon_position <- b3
-                                                  
-                                                  # get the current strand
-                                                  current_strand <- b2$strand %>% unique
-                                                  
-                                                  # subset the forward nucleotides from the start of the start codon
-                                                  if (transcript_segment_relative_first_nt_of_start_codon_position[[1]][1] %>% is.character() == TRUE) {
-                                                    list_raw_3FT_results <- transcript_segment_relative_first_nt_of_start_codon_position
-                                                  } else if (is.na(transcript_segment_forward_nucleotides[[1]][1]) == TRUE) {
-                                                    return(NA)
-                                                    # list("translation_frame_0" = "*",
-                                                    #      "translation_frame_1" = "*",
-                                                    #      "translation_frame_2" = "*")
-                                                  } else if (current_strand == "+") {
-                                                    list_raw_3FT_results <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = transcript_segment_forward_nucleotides[transcript_segment_relative_first_nt_of_start_codon_position:length(transcript_segment_forward_nucleotides)], strand = "+")
-                                                    # if start codon was present, then all frames = 0th frame
-                                                    if (b4[[1]][1] == TRUE) {
-                                                      list_raw_3FT_results <- list_raw_3FT_results %>% purrr::map(.f = ~list_raw_3FT_results[[1]])
-                                                    }
-                                                  } else if (current_strand == "-") {
-                                                    list_raw_3FT_results <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = transcript_segment_forward_nucleotides %>% rev %>% .[transcript_segment_relative_first_nt_of_start_codon_position:length(transcript_segment_forward_nucleotides)] %>% seqinr::comp(seq = ., forceToLower = FALSE), strand = "+")
-                                                    # if start codon was present, then all frames = 0th frame
-                                                    if (b4[[1]][1] == TRUE) {
-                                                      list_raw_3FT_results <- list_raw_3FT_results %>% purrr::map(.f = ~list_raw_3FT_results[[1]])
-                                                    }
-                                                  }
-                                                  
-                                                  return(list_raw_3FT_results)
-                                                  
-                                                } ) # L2
-                                              
-                                              updated_L2_list <- splice(a1,
-                                                                        "list_three_frame_translation" = list(list_three_frame_translation))
-                                              
-                                              # we need to commonise the lists to have the same length
-                                              commonised_L2_list <- splice(
-                                                updated_L2_list %>% purrr::discard(.p = ~.x %>% data.class == "list"),
-                                                updated_L2_list %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% commonise_lists
-                                              )
-                                              
-                                              return(commonised_L2_list)
-                                              
-                                            } )
+list_three_frame_translation <- round_robin_pmap_callr(
+  .l = list(
+    "_a1" = purrr::map(.x = parallel::splitIndices(nx = length(list_genome_forward_genomic_nucleotides), ncl = 88), .f = ~list_genome_forward_genomic_nucleotides[.x]),
+    "_a2" = purrr::map(.x = parallel::splitIndices(nx = length(list_genome_forward_genomic_nucleotides), ncl = 88), .f = ~names(list_genome_forward_genomic_nucleotides)[.x])
+  ), 
+  .num_workers = 88,
+  .temp_path = "/mnt/scratch/temp/PEF_2019_hmsc_list_three_frame_translation.rdata",
+  .temp_dir = "/mnt/scratch/temp/",
+  .re_export = TRUE,
+  .env_flag = "user",
+  .objects = c("save_workspace_when_done", "nt.sequence_strand_threeframetranslate", "commonise_lists"),
+  .status_messages_dir = "/mnt/scratch/temp/",
+  .job_name = "PEF_2019_hmsc_list_three_frame_translation",
+  .result_mode = "ordered",
+  .keep_intermediate_files = FALSE,
+  .f = function(`_a1`, `_a2`) {
+    
+    # DEBUG ###
+    # a1 <- list_genome_forward_genomic_nucleotides[["749"]]
+    ##########
+    
+    library(seqinr)
+    library(tidyverse)
+    library(purrr)
+    library(furrr)
+    library(dplyr)
+    library(rtracklayer)
+    library(data.table)
+    library(optparse)
+    
+    library(tictoc)
+    
+    list_result <- purrr::map2(
+      .x = `_a1`,
+      .y = `_a2`,
+      .f = function(a1, a2) {
+        
+        cat(a2, "\n")
+        
+        if (save_workspace_when_done == "DEBUG") {
+          cat(a2, "\n")
+        }
+        
+        list_three_frame_translation <- purrr::pmap(
+          .l = list("b1" = a1$list_forward_nucleotides,
+                    "b2" = a1$list_tibbles_GTF_entries_parent_transcript,
+                    "b3" = a1$transcript_segment_relative_first_nt_of_start_codon_position,
+                    "b4" = a1$list_logical_start_codon_present),
+          .f = function(b1, b2, b3, b4) {
+            
+            # DEBUG ###
+            # b1 <- a1$list_forward_nucleotides %>% .[[8]]
+            # b2 <- a1$list_tibbles_GTF_entries_parent_transcript %>% .[[8]]
+            # b3 <- a1$transcript_segment_relative_first_nt_of_start_codon_position %>% .[[8]]
+            # b4 <- a1$list_logical_start_codon_present %>% .[[8]]
+            ###########
+            
+            transcript_segment_forward_nucleotides <- b1
+            
+            transcript_segment_relative_first_nt_of_start_codon_position <- b3
+            
+            # get the current strand
+            current_strand <- b2$strand %>% unique
+            
+            # subset the forward nucleotides from the start of the start codon
+            if (transcript_segment_relative_first_nt_of_start_codon_position[[1]][1] %>% is.character() == TRUE) {
+              list_raw_3FT_results <- transcript_segment_relative_first_nt_of_start_codon_position
+            } else if (is.na(transcript_segment_forward_nucleotides[[1]][1]) == TRUE) {
+              return(NA)
+              # list("translation_frame_0" = "*",
+              #      "translation_frame_1" = "*",
+              #      "translation_frame_2" = "*")
+            } else if (current_strand == "+") {
+              list_raw_3FT_results <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = transcript_segment_forward_nucleotides[transcript_segment_relative_first_nt_of_start_codon_position:length(transcript_segment_forward_nucleotides)], strand = "+")
+              # if start codon was present, then all frames = 0th frame
+              if (b4[[1]][1] == TRUE) {
+                list_raw_3FT_results <- list_raw_3FT_results %>% purrr::map(.f = ~list_raw_3FT_results[[1]])
+              }
+            } else if (current_strand == "-") {
+              list_raw_3FT_results <- nt.sequence_strand_threeframetranslate(vector_forward_nucleotides = transcript_segment_forward_nucleotides %>% rev %>% .[transcript_segment_relative_first_nt_of_start_codon_position:length(transcript_segment_forward_nucleotides)] %>% seqinr::comp(seq = ., forceToLower = FALSE), strand = "+")
+              # if start codon was present, then all frames = 0th frame
+              if (b4[[1]][1] == TRUE) {
+                list_raw_3FT_results <- list_raw_3FT_results %>% purrr::map(.f = ~list_raw_3FT_results[[1]])
+              }
+            }
+            
+            return(list_raw_3FT_results)
+            
+          } ) # L2
+        
+        updated_L2_list <- splice(a1,
+                                  "list_three_frame_translation" = list(list_three_frame_translation))
+        
+        # we need to commonise the lists to have the same length
+        commonised_L2_list <- splice(
+          updated_L2_list %>% purrr::discard(.p = ~.x %>% data.class == "list"),
+          updated_L2_list %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% commonise_lists
+        )
+        
+        return(commonised_L2_list)
+        
+      } )
+    
+    return(list_result)
+    
+  } )
+
+list_three_frame_translation <- list_three_frame_translation %>% purrr::flatten()
 
 # last prune for elements without any valid forward genome coords.
 list_three_frame_translation_pruned <- list_three_frame_translation %>% purrr::discard(.p = ~.x$list_forward_nucleotides %>% purrr::map(~is.na(.x)) %>% unlist %>% all == TRUE)
 
-save(list_three_frame_translation_pruned, file = paste(output_dir, "list_three_frame_translation_pruned.Rlist", sep = ""), compress = FALSE)
-# load(file = paste(output_dir, "list_three_frame_translation_pruned.Rlist", sep = ""))
+# save(list_three_frame_translation_pruned, file = paste(output_dir, "list_three_frame_translation_pruned_callr.Rlist", sep = ""), compress = FALSE)
+# load(file = paste(output_dir, "list_three_frame_translation_pruned_callr.Rlist", sep = ""))
 
 if (save_workspace_when_done == "DEBUG") {
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
@@ -1169,156 +1205,189 @@ if (save_workspace_when_done == "DEBUG") {
 options(mc.cores = 4)
 
 cat("finally test for the presence of a stop codon in the alternative exon.\n")
-list_test_for_PTC <- purrr::map2(
-  .x = list_three_frame_translation_pruned,
-  .y = 1:length(list_three_frame_translation_pruned),
-  .f = function(a1, a2) {
+list_test_for_PTC <- round_robin_pmap_callr(
+  .l = list(
+    "_a1" = purrr::map(.x = parallel::splitIndices(nx = length(list_three_frame_translation_pruned), ncl = 88), .f = ~list_three_frame_translation_pruned[.x]),
+    "_a2" = purrr::map(.x = parallel::splitIndices(nx = length(list_three_frame_translation_pruned), ncl = 88), .f = ~names(list_three_frame_translation_pruned)[.x])
+  ), 
+  .num_workers = 88,
+  .temp_path = "/mnt/scratch/temp/PEF_2019_hmsc_list_test_for_PTC.rdata",
+  .temp_dir = "/mnt/scratch/temp/",
+  .re_export = TRUE,
+  .env_flag = "user",
+  .objects = c("save_workspace_when_done", "nt.sequence_strand_threeframetranslate", "commonise_lists"),
+  .status_messages_dir = "/mnt/scratch/temp/",
+  .job_name = "PEF_2019_hmsc_list_test_for_PTC",
+  .result_mode = "ordered",
+  .keep_intermediate_files = FALSE,
+  .f = function(`_a1`, `_a2`) {
     
-    # DEBUG ###
-    # a1 <- list_three_frame_translation_pruned[["749"]]
-    ###########
+    library(seqinr)
+    library(tidyverse)
+    library(purrr)
+    library(furrr)
+    library(dplyr)
+    library(rtracklayer)
+    library(data.table)
+    library(optparse)
     
-    cat(a2, "\n")
+    library(tictoc)
     
-    # create a list of PTC testing information:
-    ## coords of stop 
-    list_PTC_testing_info <- purrr::pmap(
-      .l = a1 %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% set_names(x = ., nm = paste("b", 1:length(.), sep = "")),
-      # list("b1" = a1$list_three_frame_translation_pruned,
-      #      "b2" = a1$transcript_segment_relative_first_nt_of_start_codon_position,
-      #      "b3" = a1$transcript_segment_relative_first_nt_of_alternative_exon,
-      #      "b4" = a1$vector_transcript_segment_forward_genome_relative_coords,
-      #      "b5" = a1$list_tibbles_GTF_entries_parent_transcript)
-      .f = function(b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14) {
+    list_result <- purrr::map2(
+      .x = `_a1`,
+      .y = `_a2`,
+      .f = function(a1, a2) {
         
         # DEBUG ###
-        # i <- 1
-        # for (i in c(1:(a1 %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% length))) {
-        # 
-        #   assign(paste("b", i, sep = ""), a1 %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% .[[i]] %>% .[[1]])
-        # 
-        # }
-        
-        # b1 <- a1$list_three_frame_translation_pruned %>% .[[1]]
-        # b2 <- a1$transcript_segment_relative_first_nt_of_start_codon_position %>% .[[1]]
-        # b3 <- a1$transcript_segment_relative_first_nt_of_alternative_exon %>% .[[1]]
-        # b4 <- a1$vector_transcript_segment_forward_genome_relative_coords %>% .[[1]]
-        # b5 <- a1$list_tibbles_GTF_entries_parent_transcript %>% .[[1]]
+        # a1 <- list_three_frame_translation_pruned[["749"]]
         ###########
         
-        L2_list_tibbles_GTF_entries_parent_transcript <- b2
-        L2_list_logical_start_codon_present <- b3
-        L2_list_logical_stop_codon_present <- b4
-        L2_vector_transcript_segment_forward_genome_relative_coords <- b8
-        L2_transcript_segment_relative_first_nt_of_start_codon_position <- b9
-        L2_transcript_segment_relative_first_nt_of_stop_codon_position <- b10
-        L2_transcript_segment_relative_first_nt_of_alternative_exon <- b11
-        L2_list_three_frame_translation <- b14
+        cat(a2, "\n")
         
-        current_strand <- L2_list_tibbles_GTF_entries_parent_transcript$strand %>% unique
-        
-        # retrieve all translation-relative coords of all stop codons form the transcript segment
-        list_translation_relative_stop_codon_positions_transcript_segment <- L2_list_three_frame_translation %>% purrr::map(~which(.x == "*"))
-        
-        # convert translation-relative coords of all stop codons to transcript-segment-relative coords.
-        ## only take the last nt. for simplicity of deteremining whether it lies in the alternative exon.
-        ## 3x-2 and 3x
-        list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment <- purrr::map(
-          .x = list_translation_relative_stop_codon_positions_transcript_segment,
-          .f = function(c1) {
-            if (c1 %>% length == 0) {
-              return(NA)
-            } else {
-              return(c1*3 + L2_transcript_segment_relative_first_nt_of_start_codon_position - 1)
-            }
-          } )
-        
-        # finally test for PTC in the alternative exon
-        list_logical_PTC_exists_in_alternative_exon_transcript_segment <- purrr::map(
-          .x = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
-          .f = function(c1) {
-            if (is.na(c1)[[1]][1]) {
-              return(FALSE)
-            } else {
-              return(c1 >= L2_transcript_segment_relative_first_nt_of_alternative_exon)
-            }
-          } )
-        
-        # return list of genomic coords of stop codons
-        list_genome_relative_coords_of_stop_codons <- purrr::map2(
-          .x = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
-          .y = list_logical_PTC_exists_in_alternative_exon_transcript_segment,
-          .f = function(c1, c2) {
-            if (all(c2 == FALSE) == TRUE) {
-              return(NA)
-            } else {
-              # depending on strand, look-up the genome-relative forward coords of each transcript segment.
-              if (current_strand == "+") {
-                vector_all_genome_relative_stop_codon_positions <- L2_vector_transcript_segment_forward_genome_relative_coords[c(c1, c1 - 1, c1 - 2)] %>% sort
-                return(vector_all_genome_relative_stop_codon_positions)
-              } else if (current_strand == "-") {
-                vector_all_genome_relative_stop_codon_positions <- L2_vector_transcript_segment_forward_genome_relative_coords %>% rev %>% .[c(c1, c1 - 1, c1 - 2)] %>% sort(decreasing = TRUE)
-                return(vector_all_genome_relative_stop_codon_positions)
-              }
-            }
-          } ) # L3
-        
-        # test for whether stop codon in the alternative exon occurs before the annotated stop codon (where available)
-        if (L2_list_logical_stop_codon_present == FALSE) {
-          
-          list_alternative_exon_stop_codon_is_premature <- list(
-            "translation_frame_0" = "no_annotated_stop_codon",
-            "translation_frame_1" = "no_annotated_stop_codon",
-            "translation_frame_2" = "no_annotated_stop_codon")
-          
-        } else {
-          
-          list_alternative_exon_stop_codon_is_premature <- purrr::pmap(
-            .l = list(
-              "c1" = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
-              "c2" = list_logical_PTC_exists_in_alternative_exon_transcript_segment,
-              "c3" = L2_transcript_segment_relative_first_nt_of_stop_codon_position
-            ),
-            .f = function(c1, c2, c3) {
+        # create a list of PTC testing information:
+        ## coords of stop 
+        list_PTC_testing_info <- purrr::pmap(
+          .l = a1 %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% set_names(x = ., nm = paste("b", 1:length(.), sep = "")),
+          # list("b1" = a1$list_three_frame_translation_pruned,
+          #      "b2" = a1$transcript_segment_relative_first_nt_of_start_codon_position,
+          #      "b3" = a1$transcript_segment_relative_first_nt_of_alternative_exon,
+          #      "b4" = a1$vector_transcript_segment_forward_genome_relative_coords,
+          #      "b5" = a1$list_tibbles_GTF_entries_parent_transcript)
+          .f = function(b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14) {
+            
+            # DEBUG ###
+            # i <- 1
+            # for (i in c(1:(a1 %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% length))) {
+            # 
+            #   assign(paste("b", i, sep = ""), a1 %>% purrr::keep(.p = ~.x %>% data.class == "list") %>% .[[i]] %>% .[[1]])
+            # 
+            # }
+            
+            # b1 <- a1$list_three_frame_translation_pruned %>% .[[1]]
+            # b2 <- a1$transcript_segment_relative_first_nt_of_start_codon_position %>% .[[1]]
+            # b3 <- a1$transcript_segment_relative_first_nt_of_alternative_exon %>% .[[1]]
+            # b4 <- a1$vector_transcript_segment_forward_genome_relative_coords %>% .[[1]]
+            # b5 <- a1$list_tibbles_GTF_entries_parent_transcript %>% .[[1]]
+            ###########
+            
+            L2_list_tibbles_GTF_entries_parent_transcript <- b2
+            L2_list_logical_start_codon_present <- b3
+            L2_list_logical_stop_codon_present <- b4
+            L2_vector_transcript_segment_forward_genome_relative_coords <- b8
+            L2_transcript_segment_relative_first_nt_of_start_codon_position <- b9
+            L2_transcript_segment_relative_first_nt_of_stop_codon_position <- b10
+            L2_transcript_segment_relative_first_nt_of_alternative_exon <- b11
+            L2_list_three_frame_translation <- b14
+            
+            current_strand <- L2_list_tibbles_GTF_entries_parent_transcript$strand %>% unique
+            
+            # retrieve all translation-relative coords of all stop codons form the transcript segment
+            list_translation_relative_stop_codon_positions_transcript_segment <- L2_list_three_frame_translation %>% purrr::map(~which(.x == "*"))
+            
+            # convert translation-relative coords of all stop codons to transcript-segment-relative coords.
+            ## only take the last nt. for simplicity of deteremining whether it lies in the alternative exon.
+            ## 3x-2 and 3x
+            list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment <- purrr::map(
+              .x = list_translation_relative_stop_codon_positions_transcript_segment,
+              .f = function(c1) {
+                if (c1 %>% length == 0) {
+                  return(NA)
+                } else {
+                  return(c1*3 + L2_transcript_segment_relative_first_nt_of_start_codon_position - 1)
+                }
+              } )
+            
+            # finally test for PTC in the alternative exon
+            list_logical_PTC_exists_in_alternative_exon_transcript_segment <- purrr::map(
+              .x = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
+              .f = function(c1) {
+                if (is.na(c1)[[1]][1]) {
+                  return(FALSE)
+                } else {
+                  return(c1 >= L2_transcript_segment_relative_first_nt_of_alternative_exon)
+                }
+              } )
+            
+            # return list of genomic coords of stop codons
+            list_genome_relative_coords_of_stop_codons <- purrr::map2(
+              .x = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
+              .y = list_logical_PTC_exists_in_alternative_exon_transcript_segment,
+              .f = function(c1, c2) {
+                if (all(c2 == FALSE) == TRUE) {
+                  return(NA)
+                } else {
+                  # depending on strand, look-up the genome-relative forward coords of each transcript segment.
+                  if (current_strand == "+") {
+                    vector_all_genome_relative_stop_codon_positions <- L2_vector_transcript_segment_forward_genome_relative_coords[c(c1, c1 - 1, c1 - 2)] %>% sort
+                    return(vector_all_genome_relative_stop_codon_positions)
+                  } else if (current_strand == "-") {
+                    vector_all_genome_relative_stop_codon_positions <- L2_vector_transcript_segment_forward_genome_relative_coords %>% rev %>% .[c(c1, c1 - 1, c1 - 2)] %>% sort(decreasing = TRUE)
+                    return(vector_all_genome_relative_stop_codon_positions)
+                  }
+                }
+              } ) # L3
+            
+            # test for whether stop codon in the alternative exon occurs before the annotated stop codon (where available)
+            if (L2_list_logical_stop_codon_present == FALSE) {
               
-              # DEBUG ###
-              # c1 <- list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment[[1]]
-              # c2 <- list_logical_PTC_exists_in_alternative_exon_transcript_segment[[1]]
-              # c3 <- L2_transcript_segment_relative_first_nt_of_stop_codon_position[[1]]
-              ###########
+              list_alternative_exon_stop_codon_is_premature <- list(
+                "translation_frame_0" = "no_annotated_stop_codon",
+                "translation_frame_1" = "no_annotated_stop_codon",
+                "translation_frame_2" = "no_annotated_stop_codon")
               
-              # retrieve the transcript segment relative positions of the stop codons inside the alternative exon
-              vector_transcript_segment_relative_alternative_exon_stop_codons <- c1[which(c2 == TRUE)]
+            } else {
               
-              # test for whether ANY stop codons in the alternative exon occur before the annotated stop codon but after the start codon
-              if (L2_list_logical_start_codon_present == TRUE) {
-                logical_alternative_exon_stop_codon_is_before_annotated_stop <- 
-                  any(vector_transcript_segment_relative_alternative_exon_stop_codons < L2_transcript_segment_relative_first_nt_of_stop_codon_position) & 
-                  any(vector_transcript_segment_relative_alternative_exon_stop_codons > L2_transcript_segment_relative_first_nt_of_start_codon_position)
-              } else
-                logical_alternative_exon_stop_codon_is_before_annotated_stop <- 
-                  any(vector_transcript_segment_relative_alternative_exon_stop_codons < L2_transcript_segment_relative_first_nt_of_stop_codon_position)
-            } )
-          
-        }
+              list_alternative_exon_stop_codon_is_premature <- purrr::pmap(
+                .l = list(
+                  "c1" = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
+                  "c2" = list_logical_PTC_exists_in_alternative_exon_transcript_segment,
+                  "c3" = L2_transcript_segment_relative_first_nt_of_stop_codon_position
+                ),
+                .f = function(c1, c2, c3) {
+                  
+                  # DEBUG ###
+                  # c1 <- list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment[[1]]
+                  # c2 <- list_logical_PTC_exists_in_alternative_exon_transcript_segment[[1]]
+                  # c3 <- L2_transcript_segment_relative_first_nt_of_stop_codon_position[[1]]
+                  ###########
+                  
+                  # retrieve the transcript segment relative positions of the stop codons inside the alternative exon
+                  vector_transcript_segment_relative_alternative_exon_stop_codons <- c1[which(c2 == TRUE)]
+                  
+                  # test for whether ANY stop codons in the alternative exon occur before the annotated stop codon but after the start codon
+                  if (L2_list_logical_start_codon_present == TRUE) {
+                    logical_alternative_exon_stop_codon_is_before_annotated_stop <- 
+                      any(vector_transcript_segment_relative_alternative_exon_stop_codons < L2_transcript_segment_relative_first_nt_of_stop_codon_position) & 
+                      any(vector_transcript_segment_relative_alternative_exon_stop_codons > L2_transcript_segment_relative_first_nt_of_start_codon_position)
+                  } else
+                    logical_alternative_exon_stop_codon_is_before_annotated_stop <- 
+                      any(vector_transcript_segment_relative_alternative_exon_stop_codons < L2_transcript_segment_relative_first_nt_of_stop_codon_position)
+                } )
+              
+            }
+            
+            return(list(
+              "matched_strand" = current_strand,
+              "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment" = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
+              "list_logical_PTC_exists_in_alternative_exon_transcript_segment" = list_logical_PTC_exists_in_alternative_exon_transcript_segment,
+              "list_genome_relative_coords_of_stop_codons" = list_genome_relative_coords_of_stop_codons,
+              "list_alternative_exon_stop_codon_is_premature" = list_alternative_exon_stop_codon_is_premature
+            ))
+            
+          } ) # L2
         
-        return(list(
-          "matched_strand" = current_strand,
-          "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment" = list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment,
-          "list_logical_PTC_exists_in_alternative_exon_transcript_segment" = list_logical_PTC_exists_in_alternative_exon_transcript_segment,
-          "list_genome_relative_coords_of_stop_codons" = list_genome_relative_coords_of_stop_codons,
-          "list_alternative_exon_stop_codon_is_premature" = list_alternative_exon_stop_codon_is_premature
-        ))
+        return(splice(a1[which(!names(a1) %in% c("vector_transcript_segment_forward_genome_relative_coords", "list_forward_nucleotides"))],
+                      "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment" = list_PTC_testing_info %>% purrr::map(~.x$list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment) %>% list,
+                      "list_logical_PTC_exists_in_alternative_exon_transcript_segment" = list_PTC_testing_info %>% purrr::map(~.x$list_logical_PTC_exists_in_alternative_exon_transcript_segment) %>% list,
+                      "list_genome_relative_coords_of_stop_codons" = list_PTC_testing_info %>% purrr::map(~.x$list_genome_relative_coords_of_stop_codons) %>% list,
+                      "list_alternative_exon_stop_codon_is_premature" = list_PTC_testing_info %>% purrr::map(~.x$list_alternative_exon_stop_codon_is_premature) %>% list))
         
-      } ) # L2
+      } )
     
-    return(splice(a1[which(!names(a1) %in% c("vector_transcript_segment_forward_genome_relative_coords", "list_forward_nucleotides"))],
-                  "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment" = list_PTC_testing_info %>% purrr::map(~.x$list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment) %>% list,
-                  "list_logical_PTC_exists_in_alternative_exon_transcript_segment" = list_PTC_testing_info %>% purrr::map(~.x$list_logical_PTC_exists_in_alternative_exon_transcript_segment) %>% list,
-                  "list_genome_relative_coords_of_stop_codons" = list_PTC_testing_info %>% purrr::map(~.x$list_genome_relative_coords_of_stop_codons) %>% list,
-                  "list_alternative_exon_stop_codon_is_premature" = list_PTC_testing_info %>% purrr::map(~.x$list_alternative_exon_stop_codon_is_premature) %>% list))
-    
-  }) # L1
+  } )
+
+
+list_test_for_PTC <- list_test_for_PTC %>% purrr::flatten()
 
 if (save_workspace_when_done == "DEBUG") {
   save(list_test_for_PTC, file = paste(output_dir, "/", output_name, ".Rlist", sep = ""))
@@ -1330,99 +1399,132 @@ if (save_workspace_when_done == "DEBUG") {
 
 # list_test_for_PTC_pruned <- list_test_for_PTC[vector_list_indices_without_valid_fwd_genome_coords]
 
-save(list_test_for_PTC, file = paste(output_dir, "list_test_for_PTC.Rlist", sep = ""), compress = FALSE)
-load(file = paste(output_dir, "list_test_for_PTC.Rlist", sep = ""))
+# save(list_test_for_PTC, file = paste(output_dir, "list_test_for_PTC.Rlist", sep = ""), compress = FALSE)
+# load(file = paste(output_dir, "list_test_for_PTC.Rlist", sep = ""))
 
 options(mc.cores = 24)
 
 cat("percolate and tibblise the results.\n")
 
-list_results <- purrr::map2(
-  .x = list_test_for_PTC,
-  .y = 1:length(list_test_for_PTC),
-  .f = function(a1, a2) {
+list_results <- round_robin_pmap_callr(
+  .l = list(
+    "_a1" = purrr::map(.x = parallel::splitIndices(nx = length(list_test_for_PTC), ncl = 88), .f = ~list_test_for_PTC[.x]),
+    "_a2" = purrr::map(.x = parallel::splitIndices(nx = length(list_test_for_PTC), ncl = 88), .f = ~names(list_test_for_PTC)[.x])
+  ), 
+  .num_workers = 88,
+  .temp_path = "/mnt/scratch/temp/PEF_2019_hmsc_list_results.rdata",
+  .temp_dir = "/mnt/scratch/temp/",
+  .re_export = TRUE,
+  .env_flag = "user",
+  .objects = c("save_workspace_when_done", "nt.sequence_strand_threeframetranslate", "commonise_lists"),
+  .status_messages_dir = "/mnt/scratch/temp/",
+  .job_name = "PEF_2019_hmsc_list_results",
+  .result_mode = "ordered",
+  .keep_intermediate_files = FALSE,
+  .f = function(`_a1`, `_a2`) {
     
-    # DEBUG ###
-    # a1 <- list_test_for_PTC[["749"]]
-    ##########
+    library(seqinr)
+    library(tidyverse)
+    library(purrr)
+    library(furrr)
+    library(dplyr)
+    library(rtracklayer)
+    library(data.table)
+    library(optparse)
     
-    cat(a2, "\n")
+    library(tictoc)
     
-    if (save_workspace_when_done == "DEBUG") {
-      cat(a2, "\n")
-    }
+    list_result <- purrr::map2(
+      .x = `_a1`,
+      .y = `_a2`,
+      .f = function(a1, a2) {
+        
+        # DEBUG ###
+        # a1 <- list_test_for_PTC[["749"]]
+        ##########
+        
+        cat(a2, "\n")
+        
+        if (save_workspace_when_done == "DEBUG") {
+          cat(a2, "\n")
+        }
+        
+        # test line
+        # a1$list_logical_PTC_exists_in_alternative_exon_transcript_segment %>% purrr::map_depth(.depth = 2, .f = ~.x %>% paste(collapse = ",")) %>% purrr::map(~ .x %>% as_tibble %>% t %>% (function(x) {tibble <- x; colnames(tibble) <- c("PTC_exists_in_alternative_exon"); return(tibble)} ) %>% as_tibble(rownames = "translation_frame"))
+        
+        # tibblise...
+        ## it seems the easiest to go from the roots-up, since we collect the loosest ends first and work our way back up to a common format.
+        
+        # concatenate the three-frame translation results
+        a1 <- a1 %>% purrr::map_at(.at = "list_three_frame_translation", .f = ~purrr::map_depth(.x = .x, .depth = 2, .ragged = TRUE, .f = ~.x %>% paste(collapse = "")))
+        # concatenate the three-frame translation-related elements
+        a1 <- a1 %>% purrr::map_at(.at = c("list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "list_logical_PTC_exists_in_alternative_exon_transcript_segment", "list_genome_relative_coords_of_stop_codons", "list_alternative_exon_stop_codon_is_premature"), .f = ~purrr::map_depth(.x = .x, .depth = 2, .f = ~.x %>% paste(collapse = ",")))
+        
+        # tibblise the three-frame translation elements
+        list_three_frame_translation_elements0 <- purrr::map2(.x = a1[c("list_three_frame_translation", "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "list_logical_PTC_exists_in_alternative_exon_transcript_segment", "list_genome_relative_coords_of_stop_codons", "list_alternative_exon_stop_codon_is_premature")],
+                                                              .y = c("list_three_frame_translation", "transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "PTC_exists_in_alternative_exon", "genome_relative_coords_of_stop_codons", "alternative_exon_stop_codon_is_premature"),
+                                                              .f = function(b1, b2) {
+                                                                
+                                                                # DEBUG ###
+                                                                # b1 <- a1[c("list_three_frame_translation", "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "list_logical_PTC_exists_in_alternative_exon_transcript_segment", "list_genome_relative_coords_of_stop_codons")] %>% .[[1]]
+                                                                # b2 <- c("three_frame_translation_result", "transcript_segment_relative_last_nt_of_stop_codon_positions", "PTC_exists_in_alternative_exon", "genome_relative_coords_of_stop_codons") %>% .[[1]]
+                                                                ##########
+                                                                
+                                                                list_tibblised_elements <- b1 %>% purrr::discard(.p = ~length(.x) == 1) %>% purrr::map(~.x %>% as_tibble %>% t %>% (function(x) {tibble <- x; colnames(tibble) <- b2; return(tibble)} ) %>% as_tibble(rownames = "translation_frame"))
+                                                                
+                                                                return(list_tibblised_elements)
+                                                                
+                                                              } )
+        
+        # because the test for prematurity was done in a different way, we have to filter out the matched transcripts with no stop codons at all.
+        list_three_frame_translation_elements0[["list_alternative_exon_stop_codon_is_premature"]] <- list_three_frame_translation_elements0[["list_alternative_exon_stop_codon_is_premature"]][names(list_three_frame_translation_elements0$list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment)]
+        
+        # table join
+        list_three_frame_translation_elements1 <- list_three_frame_translation_elements0 %>% purrr::pmap(.l = ., .f = ~list(...) %>% purrr::reduce(dplyr::left_join) %>% suppressMessages())
+        # add matched transcript_id as a column for each element, then rbind, tibblise
+        tibble_three_frame_translation_elements <- purrr::map2(.x = list_three_frame_translation_elements1,
+                                                               .y = names(list_three_frame_translation_elements1), 
+                                                               .f = ~.x %>% add_column("matched_transcript_id" = .y)) %>% rbindlist(use.names = TRUE) %>% as_tibble
+        
+        # now tibblise each matched transcript element
+        list_matched_transcript_elements0 <- purrr::map2(.x = a1[c("list_logical_start_codon_present", "list_logical_stop_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon")],
+                                                         .y = c("list_logical_start_codon_present", "list_logical_stop_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon"),
+                                                         .f = function(b1, b2) {
+                                                           
+                                                           # DEBUG ###
+                                                           # b1 <- a1[c("list_logical_start_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon")] %>% .[[4]]
+                                                           # b2 <- c("list_logical_start_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon") %>% .[[4]]
+                                                           ##########
+                                                           
+                                                           list_tibblised_elements <- b1 %>% purrr::map(~.x %>% paste(collapse = ",")) %>% as_tibble %>% t %>% (function(x) {tibble <- x; colnames(tibble) <- b2; return(tibble)} ) %>% as_tibble(rownames = "matched_transcript_id")
+                                                           
+                                                         } )
+        
+        # join each element onto tibble_three_frame_translation_elements by matched_transcript_id
+        tibble_3FT_and_transcript_elements_joined <- purrr::splice(tibble_three_frame_translation_elements, list_matched_transcript_elements0) %>% purrr::reduce(dplyr::left_join) %>% suppressMessages()
+        
+        # finally tibblise with the exon/VSR information
+        tibble_all_elements_combined <- purrr::splice(a1[c("chr", "VSR_start", "VSR_end", "alternative_exon_starts", "alternative_exon_ends", "strand", "splicemode")], tibble_3FT_and_transcript_elements_joined) %>% flatten %>% as_tibble
+        
+        return(tibble_all_elements_combined)
+        
+      } )
     
-    # test line
-    # a1$list_logical_PTC_exists_in_alternative_exon_transcript_segment %>% purrr::map_depth(.depth = 2, .f = ~.x %>% paste(collapse = ",")) %>% purrr::map(~ .x %>% as_tibble %>% t %>% (function(x) {tibble <- x; colnames(tibble) <- c("PTC_exists_in_alternative_exon"); return(tibble)} ) %>% as_tibble(rownames = "translation_frame"))
-    
-    # tibblise...
-    ## it seems the easiest to go from the roots-up, since we collect the loosest ends first and work our way back up to a common format.
-    
-    # concatenate the three-frame translation results
-    a1 <- a1 %>% purrr::map_at(.at = "list_three_frame_translation", .f = ~purrr::map_depth(.x = .x, .depth = 2, .ragged = TRUE, .f = ~.x %>% paste(collapse = "")))
-    # concatenate the three-frame translation-related elements
-    a1 <- a1 %>% purrr::map_at(.at = c("list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "list_logical_PTC_exists_in_alternative_exon_transcript_segment", "list_genome_relative_coords_of_stop_codons", "list_alternative_exon_stop_codon_is_premature"), .f = ~purrr::map_depth(.x = .x, .depth = 2, .f = ~.x %>% paste(collapse = ",")))
-    
-    # tibblise the three-frame translation elements
-    list_three_frame_translation_elements0 <- purrr::map2(.x = a1[c("list_three_frame_translation", "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "list_logical_PTC_exists_in_alternative_exon_transcript_segment", "list_genome_relative_coords_of_stop_codons", "list_alternative_exon_stop_codon_is_premature")],
-                                                          .y = c("list_three_frame_translation", "transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "PTC_exists_in_alternative_exon", "genome_relative_coords_of_stop_codons", "alternative_exon_stop_codon_is_premature"),
-                                                          .f = function(b1, b2) {
-                                                            
-                                                            # DEBUG ###
-                                                            # b1 <- a1[c("list_three_frame_translation", "list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment", "list_logical_PTC_exists_in_alternative_exon_transcript_segment", "list_genome_relative_coords_of_stop_codons")] %>% .[[1]]
-                                                            # b2 <- c("three_frame_translation_result", "transcript_segment_relative_last_nt_of_stop_codon_positions", "PTC_exists_in_alternative_exon", "genome_relative_coords_of_stop_codons") %>% .[[1]]
-                                                            ##########
-                                                            
-                                                            list_tibblised_elements <- b1 %>% purrr::discard(.p = ~length(.x) == 1) %>% purrr::map(~.x %>% as_tibble %>% t %>% (function(x) {tibble <- x; colnames(tibble) <- b2; return(tibble)} ) %>% as_tibble(rownames = "translation_frame"))
-                                                            
-                                                            return(list_tibblised_elements)
-                                                            
-                                                          } )
-    
-    # because the test for prematurity was done in a different way, we have to filter out the matched transcripts with no stop codons at all.
-    list_three_frame_translation_elements0[["list_alternative_exon_stop_codon_is_premature"]] <- list_three_frame_translation_elements0[["list_alternative_exon_stop_codon_is_premature"]][names(list_three_frame_translation_elements0$list_transcript_segment_relative_last_nt_of_stop_codon_positions_transcript_segment)]
-    
-    # table join
-    list_three_frame_translation_elements1 <- list_three_frame_translation_elements0 %>% purrr::pmap(.l = ., .f = ~list(...) %>% purrr::reduce(dplyr::left_join) %>% suppressMessages())
-    # add matched transcript_id as a column for each element, then rbind, tibblise
-    tibble_three_frame_translation_elements <- purrr::map2(.x = list_three_frame_translation_elements1,
-                                                           .y = names(list_three_frame_translation_elements1), 
-                                                           .f = ~.x %>% add_column("matched_transcript_id" = .y)) %>% rbindlist(use.names = TRUE) %>% as_tibble
-    
-    # now tibblise each matched transcript element
-    list_matched_transcript_elements0 <- purrr::map2(.x = a1[c("list_logical_start_codon_present", "list_logical_stop_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon")],
-                                                     .y = c("list_logical_start_codon_present", "list_logical_stop_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon"),
-                                                     .f = function(b1, b2) {
-                                                       
-                                                       # DEBUG ###
-                                                       # b1 <- a1[c("list_logical_start_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon")] %>% .[[4]]
-                                                       # b2 <- c("list_logical_start_codon_present", "list_ref_exon_numbers_overlapping_alternative_exon", "has_frameshift", "transcript_segment_relative_first_nt_of_start_codon_position", "transcript_segment_relative_first_nt_of_alternative_exon") %>% .[[4]]
-                                                       ##########
-                                                       
-                                                       list_tibblised_elements <- b1 %>% purrr::map(~.x %>% paste(collapse = ",")) %>% as_tibble %>% t %>% (function(x) {tibble <- x; colnames(tibble) <- b2; return(tibble)} ) %>% as_tibble(rownames = "matched_transcript_id")
-                                                       
-                                                     } )
-    
-    # join each element onto tibble_three_frame_translation_elements by matched_transcript_id
-    tibble_3FT_and_transcript_elements_joined <- purrr::splice(tibble_three_frame_translation_elements, list_matched_transcript_elements0) %>% purrr::reduce(dplyr::left_join) %>% suppressMessages()
-    
-    # finally tibblise with the exon/VSR information
-    tibble_all_elements_combined <- purrr::splice(a1[c("chr", "VSR_start", "VSR_end", "alternative_exon_starts", "alternative_exon_ends", "strand", "splicemode")], tibble_3FT_and_transcript_elements_joined) %>% flatten %>% as_tibble
-    
-    return(tibble_all_elements_combined)
+    return(list_result)
     
   } )
-
-
+  
 if (save_workspace_when_done == "YES" | save_workspace_when_done == "DEBUG") {
   save.image(file = paste(output_dir, "/", output_name, "_workspace.RData", sep = ""))
 }
 
-save(list_results, file = paste(output_dir, "list_results.Rlist", sep = ""), compress = FALSE)
+# list_results <- purrr::map(.x = 1:88, .f = ~readRDS(file = paste("/mnt/scratch/temp/PEF_2019_hmsc_list_results_chunk_", .x, ".rds", sep = "")) %>% return)
+
+# save(list_results, file = paste(output_dir, "list_results.Rlist", sep = ""), compress = FALSE)
 # load(file = paste(output_dir, "list_results.Rlist", sep = ""))
 
 # rbind and tibblise
-tibble_results <- list_results %>% rbindlist(use.names = TRUE, fill = TRUE) %>% tibble::as_tibble()
+tibble_results <- list_results %>% purrr::flatten() %>% rbindlist(use.names = TRUE) %>% tibble::as_tibble()
 
 # write tibble
 write.table(tibble_results, file = paste(output_dir, "/", output_name, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)

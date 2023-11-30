@@ -83,19 +83,13 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
 
 # DEBUG #######
 
-reconstructed_gtf_path <- "/mnt/scratch/2023_hmsc_ob_ont/3_stringtie/PKVPXF230199_pass_barcode01.trimmed.mixed_pgnexus.gtf"
+reconstructed_gtf_path <- "/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
 reference_genome_fasta_dir <- "/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
 output_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/"
-output_name <- "2023_hmsc_ob_ont_barcode01_NMD_PTC_E4"
-
-# reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_strawberry/results_assemblyonly/merged/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
-# reconstructed_gtf_path <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
-# reference_genome_fasta_dir <- "/media/Ubuntu/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/genome_fasta_extract2/"
-# output_name <- "/media/Ubuntu/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck.gtf"
-
+output_name <- "Homo_sapiens.GRCh38.98_NMD_PTC_E4"
 window_size <- 51
 min_exons_per_transcript <- 3
-use_start_codon <- "NO"
+use_start_codon <- "YES"
 number_of_workers <- 32
 
 ###############
@@ -134,7 +128,7 @@ future::plan(multicore)
 
 # FUNCTION TO 3 FRAME TRANSLATE ONE LIST CONTAINING NUCLEOTIDE SEQUENCE AND STRAND
 
-nt.sequence_strand_threeframetranslate <- function(vector_forward_nucleotides, strand, frame_adjust) {
+nt.sequence_strand_threeframetranslate <- function(vector_forward_nucleotides, strand, frame_adjust = 0) {
   
   if (strand == "+") {
     
@@ -426,7 +420,7 @@ for (chr in chr_to_run) {
   list_transcript_3FT <- future_imap(.x = list_transcript_fwd_nts, .f = function(a1, a2) {
     
     # DEBUG ###
-    # a1 <- list_transcript_fwd_nts[[79]]
+    # a1 <- list_transcript_fwd_nts[[106]]
     # a2 <- 1
     ###########
     
@@ -509,19 +503,19 @@ for (chr in chr_to_run) {
       length_longest_coding_sequence_frame0_noncanonical <- length(updated_list_temp$forward_CDS_nucleotides)
       genome_relative_start_coding_sequence_frame0_noncanonical <- updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon] %>% type.convert(as.is = TRUE)
       genome_relative_end_coding_sequence_frame0_noncanonical <- if (updated_list_temp$strand == "+") {
-        c(updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3],
-          updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
+        c(if (any(grepl(x = updated_list_temp$translation_frame_0, pattern = "\\*"))) {updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3]},
+          "nostop")[1]
       } else if (updated_list_temp$strand == "-") {
-        c(updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3],
-        updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
+        c(if (any(grepl(x = updated_list_temp$translation_frame_0, pattern = "\\*"))) {updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3]},
+          "nostop")[1]
       }
       
       genome_relative_stop_codon_frame0_noncanonical <- if (updated_list_temp$strand == "+") {
-        c(updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3)] %>% (function(x){return((x+1):(x+3))}) %>% paste(collapse = ","),
-          updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
+        c(if (any(grepl(x = updated_list_temp$translation_frame_0, pattern = "\\*"))) {updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon - 1 + (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3)] %>% (function(x){return((x+1):(x+3))}) %>% paste(collapse = ",")},
+          "nostop")[1]
       } else if (updated_list_temp$strand == "-") {
-        c(updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3)] %>% (function(x){return((x-1):(x-3))}) %>% paste(collapse = ","),
-          updated_list_temp$forward_coords[updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - length(updated_list_temp$forward_CDS_nucleotides) * 3])[1]
+        c(if (any(grepl(x = updated_list_temp$translation_frame_0, pattern = "\\*"))) {updated_list_temp$forward_coords[(updated_list_temp$fwd_coordinates_relative_first_nt_of_start_codon + 1 - (which(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))[1] - 1) * 3)] %>% (function(x){return((x-1):(x-3))}) %>% paste(collapse = ",")},
+          "nostop")[1]
       }
       
       has_ptc_frame0_noncanonical <- any(!is.na(str_locate(string = updated_list_temp$translation_frame_0, pattern = "\\*") %>% .[, 1]))

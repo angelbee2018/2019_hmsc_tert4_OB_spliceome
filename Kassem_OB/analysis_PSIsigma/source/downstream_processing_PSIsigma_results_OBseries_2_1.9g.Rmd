@@ -66,7 +66,7 @@ library(PFAM.db)
 # library(ggdendro)
 # library(Rfast)
 
-# shared_dir <- "/mnt/Tertiary/sharedfolder/"
+reference_data_dir <- "/mnt/LTS/reference_data/"
 
 psisigma_results_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/"
 
@@ -2158,7 +2158,7 @@ write.table(x = long_tibble_of_psisigma_DEXSeq_results, file = paste(R_processin
 
 ```{r}
 
-long_tibble_of_psisigma_DEXSeq_results <- read.delim(paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% as_tibble
+long_tibble_of_psisigma_DEXSeq_results <- read.delim(paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results.txt", sep = ""), sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE) %>% tibble::as_tibble()
 
 # write coords for poison exon finder
 write.table(x = long_tibble_of_psisigma_DEXSeq_results[, c("id", "chr", "event_region_start", "event_region_end", "alternative_exon_starts", "alternative_exon_ends", "matched_strand", "splicemode", "matched_gene_names")] %>% dplyr::rename("VSR_start" = "event_region_start", "VSR_end" = "event_region_end", "strand" = "matched_strand", "gene_name" = "matched_gene_names", "custom_identifier" = "id") %>% dplyr::mutate("organism" = NA), file = paste(R_processing_results_dir, "long_tibble_of_psisigma_DEXSeq_results_prepare_for_poison_exon_finder.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
@@ -2172,23 +2172,20 @@ tibble_poison_exon_finder_results <- read.delim(paste(R_processing_results_dir, 
 tibble_poison_exon_finder_results_processed0 <- tibble_poison_exon_finder_results %>%
   dplyr::mutate("introduces_PTC" = grepl(x = PTC_exists_in_alternative_exon, pattern = "TRUE") == TRUE & grepl(x = alternative_exon_stop_codon_is_premature, pattern = "TRUE") == TRUE) %>%
   dplyr::filter(introduces_PTC == TRUE | has_frameshift == TRUE) %>% 
-  dplyr::select(-list_three_frame_translation, -vector_transcript_segment_forward_genome_relative_coords, -list_forward_nucleotides)
+  dplyr::select(-list_three_frame_translation)
 
 # create a summary of each exon's PTC and frameshift behaviour, accounting for all matched ref. transcripts.
 tibble_poison_exon_finder_results_processed1 <- tibble_poison_exon_finder_results_processed0 %>%
-  dplyr::group_by(chr, VSR_start, VSR_end, alternative_exon_start, alternative_exon_end, splicemode) %>%
+  dplyr::group_by(chr, VSR_start, VSR_end, alternative_exon_starts, alternative_exon_ends, splicemode) %>%
   dplyr::summarise(introduces_PTC_for_all_matched_transcripts = all(introduces_PTC == TRUE),
                    introduces_PTC_for_any_matched_transcripts = any(introduces_PTC == TRUE),
                    
                    alters_frame_for_all_matched_transcripts = all(has_frameshift == TRUE),
                    alters_frame_for_any_matched_transcripts = any(has_frameshift == TRUE)) %>% 
-  dplyr::mutate("event_region_coords" = paste(chr, ":", VSR_start, "-", VSR_end, sep = ""),
-                "diff_exon_coords" = paste(chr, ":", alternative_exon_start, "-", alternative_exon_end, sep = "")) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-VSR_start, -VSR_end, -alternative_exon_start, -alternative_exon_end, -chr)
-
-# JOIN onto the main PSI-Sigma table
-long_tibble_of_psisigma_DEXSeq_results <- dplyr::left_join(long_tibble_of_psisigma_DEXSeq_results, tibble_poison_exon_finder_results_processed1, by = c("event_region_coords", "diff_exon_coords", "splicemode"))
+  dplyr::mutate("event_region_coords" = paste(chr, ":", VSR_start, "-", VSR_end, sep = "")) %>%
+  dplyr::ungroup()
+# JOIN onto the main PSI-Sigma table)
+long_tibble_of_psisigma_DEXSeq_results <- dplyr::left_join(long_tibble_of_psisigma_DEXSeq_results, tibble_poison_exon_finder_results_processed1, by = c("chr", "event_region_coords", "alternative_exon_starts", "alternative_exon_ends", "splicemode"))
 
 long_tibble_of_psisigma_DEXSeq_results[, c("introduces_PTC_for_all_matched_transcripts", "introduces_PTC_for_any_matched_transcripts", "alters_frame_for_all_matched_transcripts", "alters_frame_for_any_matched_transcripts")][is.na(long_tibble_of_psisigma_DEXSeq_results[, c("introduces_PTC_for_all_matched_transcripts", "introduces_PTC_for_any_matched_transcripts", "alters_frame_for_all_matched_transcripts", "alters_frame_for_any_matched_transcripts")])] <- FALSE
 
@@ -2464,7 +2461,7 @@ write.table(x = tibble_constitutive_LIV_info, file = paste(R_processing_results_
 write.table(x = tibble_constitutive_LIV_info[, c("event_region_coords", "diff_exon_coords", "splicemode", "matched_gene_names")] %>% 
               dplyr::rename("VSR_coords" = "event_region_coords", "alternative_exon_coords" = "diff_exon_coords", "gene_name" = "matched_gene_names") %>% 
               add_column("organism" = "Homo sapiens", "custom_identifier" = NA), file = paste(R_processing_results_dir, "long_table_of_all_constitutive_LIV", number.of.LIVs_constitutive, "_dpsi", dpsi_cutoff,  "_", pvalue_or_FDR, pvalue_cutoff, "_3FT.txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
-
+;
 ```
 
 # Exon switching analysis
@@ -2485,7 +2482,7 @@ vector_of_comparisons_final_edited <- gsub(x = vector_of_comparisons_final_edite
 vector_of_ud_comparisons <- vector_of_comparisons_final_edited[grep(x = vector_of_comparisons_final_edited, pattern = "MSC$")]
 
 # subset the wide table of all comparisons for only comparisons which have MSC
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 <- dplyr::filter(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV, comparison %in% vector_of_ud_comparisons) %>% dplyr::select(database_ID, event_region_coords, diff_exon_coords, splicemode, chr, diff_exon_start, diff_exon_end, matched_gene_names, matched_recon_transcript_names, matched_ref_transcript_names, matched_strand, NMD_biotype_reference, NMD_flagged_ref, NMD_flagged_recon, any_NMD, poison_exon_candidate_ref, poison_exon_candidate_recon, contains_PTC_ref, contains_PTC_recon, first_or_last_exon_reference, first_or_last_exon_recon, any_first_exon, any_last_exon, introduces_PTC_for_all_matched_transcripts, introduces_PTC_for_any_matched_transcripts, alters_frame_for_all_matched_transcripts, alters_frame_for_any_matched_transcripts, comparison, comparison.1_average.psi, comparison.2_average.psi) %>% dplyr::rename("comparison_ud" = "comparison.2_average.psi")
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0 <- dplyr::filter(wide_tibble_of_psisigma_results_allcomparisons_differential_info_LIV, comparison %in% vector_of_ud_comparisons) %>% dplyr::select(-dpsi, -pvalue, -FDR, -contains("comparison"), -contains("DEXSeq"), comparison, contains("average.psi")) %>% dplyr::rename("comparison_ud" = "comparison.2_average.psi")
 
 # rename the columns. replace "comparison name" with "timepoint", rename the comparison 2 to MSC
 # >
@@ -2501,7 +2498,7 @@ wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1 <- dplyr::bin
 # recast into a wide tibble
 ## aggregate function taken as the mean
 ## wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp0[c(2200:2206, 2665:2670), ]
-wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1, formula = database_ID + event_region_coords + diff_exon_coords + splicemode + chr + diff_exon_start + diff_exon_end + matched_gene_names + matched_recon_transcript_names + matched_ref_transcript_names + matched_strand + NMD_biotype_reference + NMD_flagged_ref + NMD_flagged_recon + any_NMD + poison_exon_candidate_ref + poison_exon_candidate_recon + contains_PTC_ref + contains_PTC_recon + first_or_last_exon_reference + first_or_last_exon_recon + any_first_exon + any_last_exon ~ timepoint, value.var = "PSI") %>% as_tibble
+wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- reshape2::dcast(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only_temp1, formula = event_region_coords + psisigma_gene.symbol + diff_exon_coords + splicemode + psisigma_exon_type + psisigma_reference.transcript + database_ID + chr + diff_exon_start + diff_exon_end + event_region_start + event_region_end + LIS_ID + exon_number + alternative_exon_coords + alternative_exon_starts + alternative_exon_ends + matched_gene_names + matched_strand + matched_ref_transcript_names + NMD_biotype_reference + NMD_flagged_ref + NMD_flagged_recon + poison_exon_candidate_ref + poison_exon_candidate_recon + contains_PTC_ref + contains_PTC_recon + first_or_last_exon_reference + first_or_last_exon_recon + any_first_exon + any_last_exon + matched_recon_transcript_names + any_NMD + introduces_PTC_for_all_matched_transcripts + introduces_PTC_for_any_matched_transcripts + alters_frame_for_all_matched_transcripts + alters_frame_for_any_matched_transcripts ~ timepoint, value.var = "PSI", fun.aggregate = function(x) {return(x[1])} ) %>% tibble::as_tibble()
 
 wide_tibble_of_psisigma_results_allcomparisons_final_ud.only <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only %>% dplyr::select(colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only)[!colnames(wide_tibble_of_psisigma_results_allcomparisons_final_ud.only) %in% vector_OBseries_timepoints_edited], all_of(vector_OBseries_timepoints_edited))
 
@@ -2515,7 +2512,7 @@ wide_tibble_of_psisigma_PSI_with_na_LIV <- wide_tibble_of_psisigma_results_allco
 
 ```{r}
 
-wide_tibble_of_absolute_PSI_averages_sum_temp <- wide_tibble_of_psisigma_PSI_with_na_LIV %>% dplyr::select(., -id, -database_ID)
+wide_tibble_of_absolute_PSI_averages_sum_temp <- wide_tibble_of_psisigma_PSI_with_na_LIV %>% dplyr::select(., -database_ID)
 
 # create list of event region, splicemode
 list_unique_exon_regions <- wide_tibble_of_absolute_PSI_averages_sum_temp[, c("event_region_coords", "diff_exon_coords")] %>% unique %>% array_tree
@@ -2966,7 +2963,7 @@ This gene background shall contain all ensembl protein coding, long noncoding an
 # note: you had to save the GO annotation file to disk in the previous steps above
 # catdb <- makeCATdb(myfile = paste(R_processing_results_dir, "polyA_RNAseq_GO_background_GOTERM.txt", sep = ""), lib = NULL, org = "", colno = c(2, 1, 3), idconv = NULL)
 
-load(paste(shared_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
+load(paste(reference_data_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = ""))
 
 ```
 

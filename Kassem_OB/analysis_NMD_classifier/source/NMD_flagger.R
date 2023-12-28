@@ -9,8 +9,6 @@ NMD candidature is flagged in the \"PTC\" entry of the GTF. First/last exon is f
 
 Recommended system requirements: 6 threads/64GB memory. Minimum system requirements: 1 thread/16GB memory"
 
-source("/mnt/LTS/tools/angel_suite/source/main_source.R")
-
 # print the arguments received by the R script
 cat("Arguments input:", commandArgs(), sep = "\n")
 args = 
@@ -35,6 +33,8 @@ library(optparse)
 library(tictoc)
 # start counting execution time of the whole script
 tictoc::tic("Overall execution time")
+
+source("/mnt/LTS/tools/angel_suite/source/main_source.R")
 
 # manage arguments
 list_input_arg_info = list(
@@ -83,14 +83,14 @@ if ((list(input_args$reconstructed_transcript_gtf, input_args$reference_genome_f
 
 # DEBUG #######
 
-reconstructed_gtf_path <- "/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
-reference_genome_fasta_dir <- "/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
-output_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/"
-output_name <- "Homo_sapiens.GRCh38.98_NMD_PTC_E4"
-window_size <- 51
-min_exons_per_transcript <- 3
-use_start_codon <- "YES"
-number_of_workers <- 32
+# reconstructed_gtf_path <- "/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+# reference_genome_fasta_dir <- "/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+# output_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/"
+# output_name <- "Homo_sapiens.GRCh38.98_NMD_PTC_E4"
+# window_size <- 51
+# min_exons_per_transcript <- 3
+# use_start_codon <- "NO"
+# number_of_workers <- 32
 
 ###############
 
@@ -171,19 +171,19 @@ label_first_last_exon <- function(tibble_gtf_subset_by_transcript_id) {
   # account for transcripts which only have one exon
   if (max_exon_number == 1) {
     
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "only_one_exon"
+    tibble_gtf_subset_by_transcript_id[type.convert(tibble_gtf_subset_by_transcript_id$exon_number, as.is = TRUE) == max_exon_number, "first_or_last_exon"] <- "only_one_exon"
     
   } else if (exon_order == "increasing" & tibble_gtf_subset_by_transcript_id$strand %>% unique == "-") {
     
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "first_exon"
+    tibble_gtf_subset_by_transcript_id[type.convert(tibble_gtf_subset_by_transcript_id$exon_number, as.is = TRUE) == max_exon_number, "first_or_last_exon"] <- "first_exon"
     
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "last_exon"
+    tibble_gtf_subset_by_transcript_id[type.convert(tibble_gtf_subset_by_transcript_id$exon_number, as.is = TRUE) == 1, "first_or_last_exon"] <- "last_exon"
     
   } else {
     
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == max_exon_number, "first_or_last_exon"] <- "last_exon"
+    tibble_gtf_subset_by_transcript_id[type.convert(tibble_gtf_subset_by_transcript_id$exon_number, as.is = TRUE) == max_exon_number, "first_or_last_exon"] <- "last_exon"
     
-    tibble_gtf_subset_by_transcript_id[tibble_gtf_subset_by_transcript_id$exon_number == 1, "first_or_last_exon"] <- "first_exon"
+    tibble_gtf_subset_by_transcript_id[type.convert(tibble_gtf_subset_by_transcript_id$exon_number, as.is = TRUE) == 1, "first_or_last_exon"] <- "first_exon"
     
   }
   
@@ -335,18 +335,18 @@ for (chr in chr_to_run) {
                                                 # since the start is always less than the end in genome relative coords, for the fwd strand last_nt_of_second_last_exon will be the end coord of the second last exon.
                                                 # however for rev. strand, last_nt_of_second_last_exon will be the start coord of the second last exon, and the first_nt_of_last_exon will be the end coord of the last exon.
                                                 "last_nt_of_second_last_exon" = if (a1$strand %>% unique %>% paste == "+") {
-                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max - 1)) %>% .$end %>% paste %>% as.numeric
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% max - 1)) %>% .$end %>% paste %>% type.convert(as.is = TRUE)
                                                 } else if (exon_order == "stranded" & a1$strand %>% unique %>% paste == "-") {
-                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max - 1)) %>% .$start %>% paste %>% as.numeric
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% max - 1)) %>% .$start %>% paste %>% type.convert(as.is = TRUE)
                                                 } else if (exon_order == "increasing" & a1$strand %>% unique %>% paste == "-") {
-                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% min + 1)) %>% .$start %>% paste %>% as.numeric
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% min + 1)) %>% .$start %>% paste %>% type.convert(as.is = TRUE)
                                                 }, 
                                                 "first_nt_of_last_exon" = if (a1$strand %>% unique %>% paste == "+") {
-                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max)) %>% .$start %>% paste %>% as.numeric
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% max)) %>% .$start %>% paste %>% type.convert(as.is = TRUE)
                                                 } else if (exon_order == "stranded" & a1$strand %>% unique %>% paste == "-") {
-                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% max)) %>% .$end %>% paste %>% as.numeric
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% max)) %>% .$end %>% paste %>% type.convert(as.is = TRUE)
                                                 } else if (exon_order == "increasing" & a1$strand %>% unique %>% paste == "-") {
-                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% as.numeric %>% min)) %>% .$end %>% paste %>% as.numeric
+                                                  a1 %>% dplyr::filter(type == "exon" & exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% min)) %>% .$end %>% paste %>% type.convert(as.is = TRUE)
                                                 } )
                                               
                                               # only splice in the start_codon entry if use_start_codon is specified
@@ -386,11 +386,11 @@ for (chr in chr_to_run) {
       
       updated_list <- purrr::splice(a1,
                                     "fwd_coordinates_relative_first_nt_of_start_codon" = if (a1$strand %>% unique %>% paste == "+") {
-                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% as.numeric %>% min)) %>% .$start == a1$forward_coords)
+                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% min)) %>% .$start == a1$forward_coords)
                                     } else if (exon_order == "stranded" & a1$strand %>% unique %>% paste == "-") {
-                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% as.numeric %>% min)) %>% .$end == a1$forward_coords)
+                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% min)) %>% .$end == a1$forward_coords)
                                     } else if (exon_order == "increasing" & a1$strand %>% unique %>% paste == "-") {
-                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% as.numeric %>% max)) %>% .$end == a1$forward_coords)
+                                      which(a1$start_codon %>% type_convert %>% dplyr::filter(exon_number == (exon_number %>% type.convert(as.is = TRUE) %>% max)) %>% .$end == a1$forward_coords)
                                     } )
       
     }
@@ -959,7 +959,7 @@ if (save_workspace_when_done == "DEBUG") {
 }
 
 cat("Annotate exons where stop codons reside")
-tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame0_ATGonly"] <- furrr::future_pmap(
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "exon_contains_PTC_frame0_ATGonly"] <- furrr::future_pmap(
   .l = list(
     "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
     "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
@@ -972,7 +972,7 @@ tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame0_A
     
   }, .progress = TRUE ) %>% unlist
 
-tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame1_ATGonly"] <- furrr::future_pmap(
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "exon_contains_PTC_frame1_ATGonly"] <- furrr::future_pmap(
   .l = list(
     "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
     "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
@@ -985,7 +985,7 @@ tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame1_A
     
   }, .progress = TRUE ) %>% unlist
 
-tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame2_ATGonly"] <- furrr::future_pmap(
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "exon_contains_PTC_frame2_ATGonly"] <- furrr::future_pmap(
   .l = list(
     "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
     "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
@@ -998,7 +998,7 @@ tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame2_A
     
   }, .progress = TRUE ) %>% unlist
 
-tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame0_noncanonical"] <- furrr::future_pmap(
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "exon_contains_PTC_frame0_noncanonical"] <- furrr::future_pmap(
   .l = list(
     "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
     "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
@@ -1011,7 +1011,7 @@ tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame0_n
     
   }, .progress = TRUE ) %>% unlist
 
-tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame1_noncanonical"] <- furrr::future_pmap(
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "exon_contains_PTC_frame1_noncanonical"] <- furrr::future_pmap(
   .l = list(
     "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
     "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
@@ -1024,7 +1024,7 @@ tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame1_n
     
   }, .progress = TRUE ) %>% unlist
 
-tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "contains_PTC_frame2_noncanonical"] <- furrr::future_pmap(
+tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", "exon_contains_PTC_frame2_noncanonical"] <- furrr::future_pmap(
   .l = list(
     "a1" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$start,
     "a2" = tibble_recon_gtf_nmd[tibble_recon_gtf_nmd$type == "exon", ]$end,
@@ -1052,7 +1052,7 @@ tibble_recon_gtf_nmd_first.last <- furrr::future_map2(
   .f = function(a1, a2) {
     
     # DEBUG ###
-    # a1 <- tibble_annotated_recon_gtf %>% dplyr::group_split(transcript_id) %>% .[[1]]
+    # a1 <- tibble_recon_gtf_nmd %>% dplyr::group_split(transcript_id) %>% .[[1]]
     ###########
     
     # print(a2)
@@ -1065,11 +1065,11 @@ tibble_recon_gtf_nmd_first.last <- furrr::future_map2(
       
     } else {
       
-      max_exon_number <- max(output_gtf0$exon_number %>% na.omit)
+      max_exon_number <- max(output_gtf0$exon_number %>% na.omit %>% type.convert(as.is = TRUE))
       
       if (max_exon_number == 1) {
         
-        output_gtf0[output_gtf0$exon_number == max_exon_number & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "only_one_exon"
+        output_gtf0[(output_gtf0$exon_number %>% type.convert(as.is = TRUE)) == max_exon_number & !is.na(output_gtf0$exon_number %>% type.convert(as.is = TRUE)), "first_or_last_exon"] <- "only_one_exon"
         
       }
       
@@ -1082,15 +1082,15 @@ tibble_recon_gtf_nmd_first.last <- furrr::future_map2(
         # account for transcripts which only have one exon
         if (exon_order == "increasing" & output_gtf0$strand %>% unique == "-") {
           
-          output_gtf0[output_gtf0$exon_number == max_exon_number & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "first_exon"
+          output_gtf0[(output_gtf0$exon_number %>% type.convert(as.is = TRUE)) == max_exon_number & !is.na(output_gtf0$exon_number %>% type.convert(as.is = TRUE)), "first_or_last_exon"] <- "first_exon"
           
-          output_gtf0[output_gtf0$exon_number == 1 & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "last_exon"
+          output_gtf0[(output_gtf0$exon_number %>% type.convert(as.is = TRUE)) == 1 & !is.na(output_gtf0$exon_number %>% type.convert(as.is = TRUE)), "first_or_last_exon"] <- "last_exon"
           
         } else {
           
-          output_gtf0[output_gtf0$exon_number == max_exon_number & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "last_exon"
+          output_gtf0[(output_gtf0$exon_number %>% type.convert(as.is = TRUE)) == max_exon_number & !is.na(output_gtf0$exon_number %>% type.convert(as.is = TRUE)), "first_or_last_exon"] <- "last_exon"
           
-          output_gtf0[output_gtf0$exon_number == 1 & !is.na(output_gtf0$exon_number), "first_or_last_exon"] <- "first_exon"
+          output_gtf0[(output_gtf0$exon_number %>% type.convert(as.is = TRUE)) == 1 & !is.na(output_gtf0$exon_number %>% type.convert(as.is = TRUE)), "first_or_last_exon"] <- "first_exon"
           
         }
         

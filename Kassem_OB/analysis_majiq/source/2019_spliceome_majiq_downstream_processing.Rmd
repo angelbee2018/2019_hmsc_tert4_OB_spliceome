@@ -23,7 +23,7 @@ library(genefilter)
 library(future.apply)
 library(furrr)
 options(future.globals.maxSize = 1500000000000, future.fork.enable = TRUE)
-plan(multiprocess)
+plan(multicore)
 memory.limit(100000)
 
 library(rtracklayer)
@@ -1027,44 +1027,6 @@ plot_tSNE_for_timepoint_and_replicate <- function(transposed_matrixtable, timepo
 
 # Generate files for MAJIQ
 
-## Generate study configuration file
-
-```{r eval=FALSE, include=FALSE}
-
-majiq_study_configuration_file_path <- paste(majiq_results_dir, "atlas_totalrna_study_configuration.txt", sep = "")
-
-readr::write_lines(
-  x = c(
-    "[info]",
-    "readlen=73",
-    paste("bamdirs=", bam_bai_sj_sam_dir, sep = ""),
-    "genome=hg38",
-    "strandness=forward",
-    "[experiments]",
-    tibble_combined_mapping_info[!is.na(tibble_combined_mapping_info$condition_names), ] %>% dplyr::group_by(RNA_number) %>% dplyr::summarise("bioreps" = paste(condition_names, ".Aligned.sortedByCoord.out", sep = "") %>% paste(collapse = ",")) %>% (function(x) {paste(x$RNA_number, "=", x$bioreps, sep = "")})
-    ),
-  file = majiq_study_configuration_file_path,
-  sep = "\n"
-  )
-
-```
-
-## generate model_matrix for moccasin
-
-```{r eval=FALSE, include=FALSE}
-
-# generate design matrix
-temp_condition_names <- list.files(path = star_output_dir, pattern = ".Aligned.sortedByCoord.out.bam$") %>% gsub(pattern = "\\.bam", replacement = "")
-
-temp_replicate_names <- temp_condition_names %>% gsub(pattern = ".*B(\\d)_.*", replacement = "\\1")
-
-design_matrix <- tibble("filename" = temp_condition_names) %>% 
-  dplyr::bind_cols(., model.matrix(~ 0 + temp_replicate_names) %>% as_tibble)
-
-write.table(x = design_matrix, file = paste(majiq_results_dir, "2019_msc_spliceome_batch_info_for_moccasin.txt", sep = ""), sep = "\t", quote = FALSE, col.names = TRUE, row.names = FALSE)
-
-```
-
 # Import and process MAJIQ tables
 
 ## read the MAJIQ sql file
@@ -1144,7 +1106,7 @@ list_majiq_psi_filtered_by_read_counts <- furrr::future_map2(
       long_tibble0[!is.na(long_tibble0$`ir_coords`), ] %>% dplyr::select(-`ir_coords`) %>% dplyr::mutate("junc_or_IR" = "junc") %>% dplyr::rename("junc_IR_coords" = "junctions_coords")
     )
     
-    plan(list(tweak(multiprocess, workers = 8)))
+    plan(list(tweak(multicore, workers = 8)))
     
     # only the PSI values attributed to "junctions" actually describe IR.
     # therefore we group up every chr/junc_ir_coords and if there is mixed IR and junction event, it must be an IR event.
@@ -1234,7 +1196,7 @@ colnames(wide_tibble_psi1) <- gsub(x = colnames(wide_tibble_psi1), pattern = "ud
 
 # data.table::fwrite(x = wide_tibble_psi, file = paste(R_processing_results_dir, vector_experiment_metadata_initial %>% paste(collapse = "_"), "_wide_tibble_psi.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
-plan(multiprocess)
+plan(multicore)
 options(mc.cores = 32)
 
 # this is the wide_tibble_psi with VSR_coords
@@ -1319,7 +1281,7 @@ list_junction_entries <- tibble(
   "end" = gsub(x = wide_tibble_psi$junc_IR_coords, pattern = "(.*)\\-(.*)", replacement = "\\2")
 ) %>% purrr::array_tree() %>% type.convert %>% suppressMessages() %>% suppressWarnings()
 
-plan(multiprocess)
+plan(multicore)
 options(mc.cores = 96)
 
 list_gtf_matching_exon_entries <- furrr::future_map(
@@ -1807,9 +1769,9 @@ dev.off()
 
 vector_experiment_metadata_main <- vector_experiment_metadata_initial
 
-differential_probability_cutoff <- 0.95
+differential_probability_cutoff <- 0.8
 
-constitutive_probability_cutoff <- 0.95
+constitutive_probability_cutoff <- 0.8
 
 vector_experiment_metadata_main <- c(vector_experiment_metadata_main, paste("diff", differential_probability_cutoff, sep = ""), paste("cons", constitutive_probability_cutoff, sep = ""))
 
@@ -1828,7 +1790,7 @@ row_indices_wide_tibble_dpsi_differential_entries <- apply(
   suppressMessages() %>% suppressWarnings() 
 
 row_indices_wide_tibble_dpsi_constitutive_entries <- apply(
-  X = wide_tibble_dpsi %>% dplyr::select(contains("probability_changing")),
+  X = wide_tibble_dpsi %>% dplyr::select(contains("probability_non_changing")),
   MARGIN = 1,
   FUN = function(X) {
     return(all(X %>% na.omit %>% type.convert() >= constitutive_probability_cutoff))
@@ -2036,7 +1998,7 @@ load(paste(reference_data_dir, "polyA_RNAseq_GO_background_GOTERM.catdb", sep = 
 
 ```{r}
 
-plan(multiprocess)
+plan(multicore)
 options(mc.cores = 3)
 
 list_tibbles_hypergo_result <- purrr::map(.x = c("BP", "CC", "MF"), .f = ~systemPipeR::GOHyperGAll(catdb = catdb, gocat = .x, sample = wide_tibble_SOM_summary_5_by_5$gene_name, Nannot = 2) %>% GOHyperGAll_benjamini_correction %>% tibble::as_tibble() %>% readr::type_convert(), .progress = TRUE) %>% set_names(nm = c("BP", "CC", "MF"))
@@ -2075,8 +2037,8 @@ write.table(x = tibble_hypergo_result_all_differential, file = paste(R_processin
 
 ```{r}
 
-plan(list(tweak(multiprocess, workers = 8),
-          tweak(multiprocess, workers = 4)))
+plan(list(tweak(multicore, workers = 8),
+          tweak(multicore, workers = 4)))
 
 tibble_hypergo_result_differential_per_som_cluster <- furrr::future_map2(
   .x = wide_tibble_SOM_summary_5_by_5 %>% dplyr::group_split(som_cluster) %>% purrr::set_names(x = ., nm = purrr::map(.x = ., .f = ~.x$som_cluster %>% unique) %>% unlist),
@@ -2246,7 +2208,7 @@ wide_tibble_psi <- data.table::fread(file = paste(R_processing_results_dir, vect
 # convert LSVs to VSRs
 ## construct an addition/subtraction flag table: starts are +1 and ends are -1
 
-plan(multiprocess)
+plan(multicore)
 options(mc.cores = 16)
 
 list_lsv_to_vsr_pos_strand <- furrr::future_map(

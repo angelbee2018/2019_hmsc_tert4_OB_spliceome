@@ -54,6 +54,8 @@ library(ggdendro)
 library(data.table)
 # library(Rfast)
 
+source("/mnt/LTS/tools/angel_suite/source/main_source.R")
+
 reference_data_dir <- "/mnt/LTS/reference_data/"
 
 # results_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/multiomic_synthesis/results/"
@@ -8625,7 +8627,8 @@ list_JUM_diff_junctions_array.tree <- tibble_JUM_differential_dpsi0.15_qvalue0.0
 
 source("/mnt/LTS/tools/angel_suite/source/main_source.R")
 
-# tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1854_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
+
 # tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na
 # 
 # tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na
@@ -8662,9 +8665,12 @@ listified_tibble <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>%
 
 list_psisigma_differential_with_na_matched_to_ont <- round_robin_pmap_callr(
   .l = list(
-    "_a1" = purrr::map(.x = parallel::splitIndices(nx = length(listified_tibble), ncl = 94), .f = ~listified_tibble[.x])
+    "a1" = listified_tibble,
+    "a2" = 1:length(listified_tibble)
   ), 
-  .num_workers = 94,
+  .num_workers = 16,
+  .chunkify = TRUE,
+  .no_chunks = 99,
   .temp_path = "/mnt/scratch/temp/PEF_2019_multiomic_synthesis_list_psisigma_differential_with_na_matched_to_ont.rdata",
   .temp_dir = "/mnt/scratch/temp/",
   .re_export = TRUE,
@@ -8674,7 +8680,8 @@ list_psisigma_differential_with_na_matched_to_ont <- round_robin_pmap_callr(
   .job_name = "PEF_2019_multiomic_synthesis_list_psisigma_differential_with_na_matched_to_ont",
   .result_mode = "ordered",
   .keep_intermediate_files = FALSE,
-  .f = function(`_a1`) {
+  .debug = TRUE,
+  .f = function(a1, a2) {
     
     library(seqinr)
     library(tidyverse)
@@ -8689,139 +8696,145 @@ list_psisigma_differential_with_na_matched_to_ont <- round_robin_pmap_callr(
     
     source("/mnt/LTS/tools/angel_suite/source/main_source.R")
     
-    list_L0_result <- purrr::imap(
-      .x = `_a1`,
-      .f = function(a1, a2) {
-        
-        # DEBUG ###
-        # a1 <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[2]]
-        ###########
-        
-        cat(a2, "\n")
-        
-        if (a1$splicemode %>% grepl(pattern = "IR")) {
-          
-          # match the junction
-          list_matched_ont_junction_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$diff_exon_start, a1$diff_exon_end)), query_end = max(c(a1$diff_exon_start, a1$diff_exon_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
-          
-          list_matched_ont_exclusion_transcript_entries <- purrr::map(.x = names(list_matched_ont_junction_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
-              purrr::set_names(nm = names(list_matched_ont_junction_entries))
-          
-          if (length(list_matched_ont_junction_entries) > 0) {
-            
-            # if junction match exists, then find all transcripts with completely overlapping exon
-            list_matched_ont_exon_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$start <= (min(c(a1$diff_exon_start, a1$diff_exon_end)) - 1)) & (tibble_2023_hmsc_ob_ont_gtf$end >= (max(c(a1$diff_exon_start, a1$diff_exon_end)) + 1)) & tibble_2023_hmsc_ob_ont_gtf$type == "exon", ] %>% 
-              dplyr::group_by(transcript_id) %>% 
-              dplyr::group_split() %>% 
-              purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
-            
-            list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
-              purrr::set_names(nm = names(list_matched_ont_exon_entries))
-            
-            list_L1_result <- list(
-              "splicing_data" = a1,
-              "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
-              "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
-              "list_matched_ont_exclusion_entries" = list_matched_ont_junction_entries,
-              "list_matched_ont_exclusion_transcript_entries" = list_matched_ont_exclusion_transcript_entries
-            )
-            
-          } else {
-            list_L1_result <- list(
-              "splicing_data" = a1,
-              "list_matched_ont_inclusion_entries" = list(),
-              "list_matched_ont_inclusion_transcript_entries" = list(),
-              "list_matched_ont_exclusion_entries" = list(),
-              "list_matched_ont_exclusion_transcript_entries" = list()
-            )
-          }
-          
-        } else if (a1$splicemode %>% grepl(pattern = "A.SS")) {
-          
-          # match event region
-          list_matched_event_region <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$event_region_start, a1$event_region_end)), query_end = max(c(a1$event_region_start, a1$event_region_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
-          
-          list_matched_ont_exclusion_transcript_entries <- purrr::map(.x = names(list_matched_event_region), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
-              purrr::set_names(nm = names(list_matched_event_region))
-          
-          # match alternative bit
-          # ENHANCED EXON EXTENSION MATCHING
-          # Strategy: 
-          # 1. Determine the common VSR and exon coord.
-          # 2. Calculate the genomic coord of the DR + 1 nucleotide.
-          # This is done using the equation: genome_coord_first_nucleotide_extending_into_common_region = common + (common_coord-VSR_only_coord)/(abs(common_coord-VSR_only_coord))
-          # 3. Find the CONSTITUTIVE (native, non-extended) exon by requiring no overlap with the DR but has either the start or end coord = the DR + 1 nucleotide.
-          # 4. The exonic matches are any exon which overlaps the region of the constitutive span AND contains the WHOLE DR on the same strand.
-          common_coord <- intersect(c(a1$event_region_start %>% type.convert(as.is = TRUE), a1$event_region_end %>% type.convert(as.is = TRUE)), 
-                                    c(a1$diff_exon_start %>% type.convert(as.is = TRUE), a1$diff_exon_end %>% type.convert(as.is = TRUE)))
-          event_region_only_coord <- setdiff(c(a1$event_region_start %>% type.convert(as.is = TRUE), a1$event_region_end %>% type.convert(as.is = TRUE)), common_coord)
-          exon_only_coord <- setdiff(c(a1$diff_exon_start %>% type.convert(as.is = TRUE), a1$diff_exon_end %>% type.convert(as.is = TRUE)), common_coord)
-          genome_coord_second_nucleotide_extending_into_junction = exon_only_coord - 2*((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
-          genome_coord_second_nucleotide_extending_into_common_region = common_coord + 2*((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
-          
-          tibble_GTF_exons_with_DR_extended_into_junction <- extract_overlapping_features(query_chr = a1$chr, query_start = min(c(common_coord, genome_coord_second_nucleotide_extending_into_junction)), query_end = max(c(common_coord, genome_coord_second_nucleotide_extending_into_junction)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 0, right_tolerance = 0, return_type = "exon", complete_overlap = TRUE)
-          
-          tibble_GTF_exons_with_DR_extended_into_constitutive_region <- extract_overlapping_features(query_chr = a1$chr, query_start = min(c(exon_only_coord, genome_coord_second_nucleotide_extending_into_common_region)), query_end = max(c(exon_only_coord, genome_coord_second_nucleotide_extending_into_common_region)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, return_type = "exon", complete_overlap = TRUE)
-          
-          list_matched_ont_exon_entries <- dplyr::anti_join(tibble_GTF_exons_with_DR_extended_into_constitutive_region, tibble_GTF_exons_with_DR_extended_into_junction, by = c("transcript_id", "timepoint")) %>% 
-            dplyr::group_by(transcript_id) %>% 
-            dplyr::group_split() %>% 
-            purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
-          
-          list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
-            purrr::set_names(nm = names(list_matched_ont_exon_entries))
-          
-          list_L1_result <- list(
-            "splicing_data" = a1,
-            "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
-            "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
-            "list_matched_ont_exclusion_entries" = list_matched_event_region,
-            "list_matched_ont_exclusion_transcript_entries" = list_matched_ont_exclusion_transcript_entries
-          )
-          
-        } else {
-          
-          list_matched_event_region <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$event_region_start, a1$event_region_end)), query_end = max(c(a1$event_region_start, a1$event_region_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
-          
-          list_matched_ont_exclusion_transcript_entries <- purrr::map(.x = names(list_matched_event_region), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
-              purrr::set_names(nm = names(list_matched_event_region))
-          
-          list_matched_ont_exon_entries <- purrr::map2(
-            .x = a1$alternative_exon_starts %>% strsplit(split = ";") %>% unlist,
-            .y = a1$alternative_exon_ends %>% strsplit(split = ";") %>% unlist, 
-            .f = ~extract_matching.exons(query_chr = a1$chr, query_start = min(c(.x, .y)), query_end = max(c(.x, .y)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, return_type = "exon"))
-          
-          # to account for multiple matches from MES exons, we need to find the transcripts with all matching exons.
-          tibble_transcripts_with_all_matched_exons <- list_matched_ont_exon_entries %>% purrr::map(~.x[, c("transcript_id", "timepoint")]) %>% purrr::reduce(dplyr::inner_join, by = c("transcript_id", "timepoint"))
-          
-          # filter matched exon entries by transcripts containing all exons
-          list_matched_ont_exon_entries_filtered_by_correct_transcripts <- list_matched_ont_exon_entries %>% purrr::map(~dplyr::inner_join(.x, tibble_transcripts_with_all_matched_exons, by = c("transcript_id", "timepoint"))) %>% 
-            data.table::rbindlist() %>%
-            tibble::as_tibble() %>%
-            dplyr::group_by(transcript_id) %>% 
-            dplyr::group_split() %>% 
-            purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
-          
-          list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries_filtered_by_correct_transcripts), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
-            purrr::set_names(nm = names(list_matched_ont_exon_entries_filtered_by_correct_transcripts))
-          
-          list_L1_result <- list(
-            "splicing_data" = a1,
-            "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries_filtered_by_correct_transcripts,
-            "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
-            "list_matched_ont_exclusion_entries" = list_matched_event_region,
-            "list_matched_ont_exclusion_transcript_entries" = list_matched_ont_exclusion_transcript_entries
-          )
-          
-        }
-        
-        return(list_L1_result)
-        
-      } )
+    # DEBUG ###
+    # a1 <- tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na %>% dplyr::rowwise() %>% dplyr::group_split() %>% .[[2]]
+    ###########
     
-    return(list_L0_result)
+    cat(a2, "\n")
     
-  } ) %>% purrr::flatten()
+    # print("ls")
+    # print(ls(envir = .GlobalEnv))
+    # 
+    # print("frame")
+    # print(sys.nframe())
+    # 
+    # for (tempframe in 0:sys.nframe()) {
+    #   print(tempframe)
+    #   print(sys.function(which = tempframe))
+    #   
+    #   print("variables in frame:")
+    #   print(ls(envir = sys.frame(which = tempframe)))
+    # }
+    
+    if (a1$splicemode %>% grepl(pattern = "IR")) {
+      
+      # match the junction
+      list_matched_ont_junction_entries <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$diff_exon_start, a1$diff_exon_end)), query_end = max(c(a1$diff_exon_start, a1$diff_exon_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      list_matched_ont_exclusion_transcript_entries <- purrr::map(.x = names(list_matched_ont_junction_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+        purrr::set_names(nm = names(list_matched_ont_junction_entries))
+      
+      if (length(list_matched_ont_junction_entries) > 0) {
+        
+        # if junction match exists, then find all transcripts with completely overlapping exon
+        list_matched_ont_exon_entries <- tibble_2023_hmsc_ob_ont_gtf[(tibble_2023_hmsc_ob_ont_gtf$start <= (min(c(a1$diff_exon_start, a1$diff_exon_end)) - 1)) & (tibble_2023_hmsc_ob_ont_gtf$end >= (max(c(a1$diff_exon_start, a1$diff_exon_end)) + 1)) & tibble_2023_hmsc_ob_ont_gtf$type == "exon", ] %>% 
+          dplyr::group_by(transcript_id) %>% 
+          dplyr::group_split() %>% 
+          purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+        
+        list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+          purrr::set_names(nm = names(list_matched_ont_exon_entries))
+        
+        list_L1_result <- list(
+          "splicing_data" = a1,
+          "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
+          "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
+          "list_matched_ont_exclusion_entries" = list_matched_ont_junction_entries,
+          "list_matched_ont_exclusion_transcript_entries" = list_matched_ont_exclusion_transcript_entries
+        )
+        
+      } else {
+        list_L1_result <- list(
+          "splicing_data" = a1,
+          "list_matched_ont_inclusion_entries" = list(),
+          "list_matched_ont_inclusion_transcript_entries" = list(),
+          "list_matched_ont_exclusion_entries" = list(),
+          "list_matched_ont_exclusion_transcript_entries" = list()
+        )
+      }
+      
+    } else if (a1$splicemode %>% grepl(pattern = "A.SS")) {
+      
+      # match event region
+      list_matched_event_region <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$event_region_start, a1$event_region_end)), query_end = max(c(a1$event_region_start, a1$event_region_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      list_matched_ont_exclusion_transcript_entries <- purrr::map(.x = names(list_matched_event_region), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+        purrr::set_names(nm = names(list_matched_event_region))
+      
+      # match alternative bit
+      # ENHANCED EXON EXTENSION MATCHING
+      # Strategy: 
+      # 1. Determine the common VSR and exon coord.
+      # 2. Calculate the genomic coord of the DR + 1 nucleotide.
+      # This is done using the equation: genome_coord_first_nucleotide_extending_into_common_region = common + (common_coord-VSR_only_coord)/(abs(common_coord-VSR_only_coord))
+      # 3. Find the CONSTITUTIVE (native, non-extended) exon by requiring no overlap with the DR but has either the start or end coord = the DR + 1 nucleotide.
+      # 4. The exonic matches are any exon which overlaps the region of the constitutive span AND contains the WHOLE DR on the same strand.
+      common_coord <- intersect(c(a1$event_region_start %>% type.convert(as.is = TRUE), a1$event_region_end %>% type.convert(as.is = TRUE)), 
+                                c(a1$diff_exon_start %>% type.convert(as.is = TRUE), a1$diff_exon_end %>% type.convert(as.is = TRUE)))
+      event_region_only_coord <- setdiff(c(a1$event_region_start %>% type.convert(as.is = TRUE), a1$event_region_end %>% type.convert(as.is = TRUE)), common_coord)
+      exon_only_coord <- setdiff(c(a1$diff_exon_start %>% type.convert(as.is = TRUE), a1$diff_exon_end %>% type.convert(as.is = TRUE)), common_coord)
+      genome_coord_second_nucleotide_extending_into_junction = exon_only_coord - 2*((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
+      genome_coord_second_nucleotide_extending_into_common_region = common_coord + 2*((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
+      
+      tibble_GTF_exons_with_DR_extended_into_junction <- extract_overlapping_features(query_chr = a1$chr, query_start = min(c(common_coord, genome_coord_second_nucleotide_extending_into_junction)), query_end = max(c(common_coord, genome_coord_second_nucleotide_extending_into_junction)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 0, right_tolerance = 0, return_type = "exon", complete_overlap = TRUE)
+      
+      tibble_GTF_exons_with_DR_extended_into_constitutive_region <- extract_overlapping_features(query_chr = a1$chr, query_start = min(c(exon_only_coord, genome_coord_second_nucleotide_extending_into_common_region)), query_end = max(c(exon_only_coord, genome_coord_second_nucleotide_extending_into_common_region)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, return_type = "exon", complete_overlap = TRUE)
+      
+      list_matched_ont_exon_entries <- dplyr::anti_join(tibble_GTF_exons_with_DR_extended_into_constitutive_region, tibble_GTF_exons_with_DR_extended_into_junction, by = c("transcript_id", "timepoint")) %>% 
+        dplyr::group_by(transcript_id) %>% 
+        dplyr::group_split() %>% 
+        purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+      
+      list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+        purrr::set_names(nm = names(list_matched_ont_exon_entries))
+      
+      list_L1_result <- list(
+        "splicing_data" = a1,
+        "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries,
+        "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
+        "list_matched_ont_exclusion_entries" = list_matched_event_region,
+        "list_matched_ont_exclusion_transcript_entries" = list_matched_ont_exclusion_transcript_entries
+      )
+      
+    } else {
+      
+      list_matched_event_region <- extract_junction.flanking.exons(query_chr = a1$chr, query_start = min(c(a1$event_region_start, a1$event_region_end)), query_end = max(c(a1$event_region_start, a1$event_region_end)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, match_consecutive = TRUE, match_inside_same_transcript = TRUE, return_type = "exon")
+      
+      list_matched_ont_exclusion_transcript_entries <- purrr::map(.x = names(list_matched_event_region), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+        purrr::set_names(nm = names(list_matched_event_region))
+      
+      list_matched_ont_exon_entries <- purrr::map2(
+        .x = a1$alternative_exon_starts %>% strsplit(split = ";") %>% unlist,
+        .y = a1$alternative_exon_ends %>% strsplit(split = ";") %>% unlist, 
+        .f = ~extract_matching.exons(query_chr = a1$chr, query_start = min(c(.x, .y)), query_end = max(c(.x, .y)), query_strand = a1$matched_strand, tibble_gtf_table = tibble_2023_hmsc_ob_ont_gtf, left_query_shift = 0, right_query_shift = 0, left_tolerance = 1, right_tolerance = 1, return_type = "exon"))
+      
+      # to account for multiple matches from MES exons, we need to find the transcripts with all matching exons.
+      tibble_transcripts_with_all_matched_exons <- list_matched_ont_exon_entries %>% purrr::map(~.x[, c("transcript_id", "timepoint")]) %>% purrr::reduce(dplyr::inner_join, by = c("transcript_id", "timepoint"))
+      
+      # filter matched exon entries by transcripts containing all exons
+      list_matched_ont_exon_entries_filtered_by_correct_transcripts <- list_matched_ont_exon_entries %>% purrr::map(~dplyr::inner_join(.x, tibble_transcripts_with_all_matched_exons, by = c("transcript_id", "timepoint"))) %>% 
+        data.table::rbindlist() %>%
+        tibble::as_tibble() %>%
+        dplyr::group_by(transcript_id) %>% 
+        dplyr::group_split() %>% 
+        purrr::set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+      
+      list_matched_ont_transcript_entries <- purrr::map(.x = names(list_matched_ont_exon_entries_filtered_by_correct_transcripts), .f = ~tibble_2023_hmsc_ob_ont_gtf[tibble_2023_hmsc_ob_ont_gtf$transcript_id == .x, ] ) %>% 
+        purrr::set_names(nm = names(list_matched_ont_exon_entries_filtered_by_correct_transcripts))
+      
+      list_L1_result <- list(
+        "splicing_data" = a1,
+        "list_matched_ont_inclusion_entries" = list_matched_ont_exon_entries_filtered_by_correct_transcripts,
+        "list_matched_ont_inclusion_transcript_entries" = list_matched_ont_transcript_entries,
+        "list_matched_ont_exclusion_entries" = list_matched_event_region,
+        "list_matched_ont_exclusion_transcript_entries" = list_matched_ont_exclusion_transcript_entries
+      )
+      
+    }
+    
+    return(list_L1_result)
+    
+  } )
 
 saveRDS(object = list_psisigma_differential_with_na_matched_to_ont, file = paste(results_dir, "list_psisigma_differential_with_na_matched_to_ont.rds", sep = ""))
 
@@ -9958,6 +9971,8 @@ list_frames_with_stop_codon <- round_robin_pmap_callr(
 
 list_frames_with_stop_codon_pruned <- list_frames_with_stop_codon %>% purrr::keep(.p = ~.x %>% length > 0) %>% purrr::map(.f = ~.x %>% purrr::discard(.p = ~.x %>% nrow == 0)) %>% purrr::keep(.p = ~.x %>% length > 0)
 
+length(list_frames_with_stop_codon_pruned)
+
 ```
 
 #### check for ONT 5' or 3' sequencing bias
@@ -10217,6 +10232,141 @@ list_jum_differential_with_na_matched_to_ont
 list_jum_constitutive_no_na_matched_to_ont
 list_majiq_differential_with_na_matched_to_ont
 list_majiq_constitutive_matched_to_ont
+
+```
+
+### Do relative NMD analysis for each frame
+
+- For all splice events detected by SR, get some statistics on the number of frames which usually undergo simultaneous SWITCHING
+- Then apply our conclusions for each splice event if deemed valid
+
+```{r}
+
+list_psisigma_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_psisigma_differential_with_na_matched_to_ont.rds", sep = ""))
+list_psisigma_constitutive_matched_to_ont <- readRDS(file = paste(results_dir, "list_psisigma_constitutive_matched_to_ont.rds", sep = ""))
+list_jum_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_jum_differential_with_na_matched_to_ont.rds", sep = ""))
+list_jum_constitutive_no_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_jum_constitutive_no_na_matched_to_ont.rds", sep = ""))
+list_majiq_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_majiq_differential_with_na_matched_to_ont.rds", sep = ""))
+list_majiq_constitutive_matched_to_ont <- readRDS(file = paste(results_dir, "list_majiq_constitutive_matched_to_ont.rds", sep = ""))
+
+tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na
+tibble_PSIsigma_constitutive_dpsi0.10_pvalue0.01_with_na
+tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na
+tibble_JUM_constitutive_dpsi0.15_qvalue0.01_no_na
+tibble_majiq_differential_with_na
+tibble_majiq_constitutive
+
+```
+
+#### psisigma differential
+
+```{r}
+
+list_psisigma_differential_with_na_matched_to_ont_pruned <- list_psisigma_differential_with_na_matched_to_ont %>% 
+  purrr::discard(.p = ~.x$list_matched_ont_inclusion_entries %>% length == 0)
+
+list_psisigma_differential_vs_ont_ptc_results_per_frame <- round_robin_pmap_callr(
+  .l = list(
+    "_a1" = purrr::map(.x = parallel::splitIndices(nx = length(list_psisigma_differential_with_na_matched_to_ont_pruned), ncl = 32), .f = ~list_psisigma_differential_with_na_matched_to_ont_pruned[.x])
+  ), 
+  .num_workers = 32,
+  .temp_path = "/mnt/scratch/temp/2019_multiomic_synthesis_list_psisigma_differential_vs_ont_ptc_results_per_frame.rdata",
+  .temp_dir = "/mnt/scratch/temp/",
+  .re_export = TRUE,
+  .env_flag = "user",
+  .objects = c(),
+  .status_messages_dir = "/mnt/scratch/temp/",
+  .job_name = "2019_multiomic_synthesis_list_psisigma_differential_vs_ont_ptc_results_per_frame",
+  .result_mode = "ordered",
+  .keep_intermediate_files = FALSE,
+  .f = function(`_a1`) {
+    
+    library(seqinr)
+    library(tidyverse)
+    library(purrr)
+    library(furrr)
+    library(dplyr)
+    library(rtracklayer)
+    library(data.table)
+    library(optparse)
+    
+    library(tictoc)
+    
+    source("/mnt/LTS/tools/angel_suite/source/main_source.R")
+    
+    purrr::map(
+      .x = `_a1`,
+      .f = function(a1) {
+        
+        # DEBUG ###
+        # a1 <- list_psisigma_differential_with_na_matched_to_ont_pruned[[12]]
+        ###########
+        
+        tibble_tally_inclusion_contains_PTC_frame0_ATGonly <- a1$list_matched_ont_inclusion_entries %>% purrr::map(.f = ~.x$contains_PTC_frame0_ATGonly) %>% unlist %>% paste %>% table %>% tibble::as_tibble() %>% dplyr::left_join(tibble(. = c("TRUE", "FALSE", "NA")), .) %>% dplyr::mutate_at(.vars = "n", function(x) {x[is.na(x)] <- 0; x <- x/sum(x); return(x)} )
+        tibble_tally_inclusion_contains_PTC_frame1_ATGonly <- a1$list_matched_ont_inclusion_entries %>% purrr::map(.f = ~.x$contains_PTC_frame1_ATGonly) %>% unlist %>% paste %>% table %>% tibble::as_tibble() %>% dplyr::left_join(tibble(. = c("TRUE", "FALSE", "NA")), .) %>% dplyr::mutate_at(.vars = "n", function(x) {x[is.na(x)] <- 0; x <- x/sum(x); return(x)} )
+        tibble_tally_inclusion_contains_PTC_frame2_ATGonly <- a1$list_matched_ont_inclusion_entries %>% purrr::map(.f = ~.x$contains_PTC_frame2_ATGonly) %>% unlist %>% paste %>% table %>% tibble::as_tibble() %>% dplyr::left_join(tibble(. = c("TRUE", "FALSE", "NA")), .) %>% dplyr::mutate_at(.vars = "n", function(x) {x[is.na(x)] <- 0; x <- x/sum(x); return(x)} )
+        
+        if (length(a1$list_matched_ont_exclusion_entries) > 0) {
+          
+          tibble_tally_exclusion_contains_PTC_frame0_ATGonly <- a1$list_matched_ont_exclusion_entries %>% purrr::map(.f = ~.x$contains_PTC_frame0_ATGonly) %>% unlist %>% paste %>% table %>% tibble::as_tibble() %>% dplyr::left_join(tibble(. = c("TRUE", "FALSE", "NA")), .) %>% dplyr::mutate_at(.vars = "n", function(x) {x[is.na(x)] <- 0; x <- x/sum(x); return(x)} )
+          tibble_tally_exclusion_contains_PTC_frame1_ATGonly <- a1$list_matched_ont_exclusion_entries %>% purrr::map(.f = ~.x$contains_PTC_frame1_ATGonly) %>% unlist %>% paste %>% table %>% tibble::as_tibble() %>% dplyr::left_join(tibble(. = c("TRUE", "FALSE", "NA")), .) %>% dplyr::mutate_at(.vars = "n", function(x) {x[is.na(x)] <- 0; x <- x/sum(x); return(x)} )
+          tibble_tally_exclusion_contains_PTC_frame2_ATGonly <- a1$list_matched_ont_exclusion_entries %>% purrr::map(.f = ~.x$contains_PTC_frame2_ATGonly) %>% unlist %>% paste %>% table %>% tibble::as_tibble() %>% dplyr::left_join(tibble(. = c("TRUE", "FALSE", "NA")), .) %>% dplyr::mutate_at(.vars = "n", function(x) {x[is.na(x)] <- 0; x <- x/sum(x); return(x)} )
+          
+        } else {
+          tibble_tally_exclusion_contains_PTC_frame0_ATGonly <- "no_exclusion_match"
+          tibble_tally_exclusion_contains_PTC_frame1_ATGonly <- "no_exclusion_match"
+          tibble_tally_exclusion_contains_PTC_frame2_ATGonly <- "no_exclusion_match"
+        }
+        
+        return(
+          list(
+            "tibble_tally_inclusion_contains_PTC_frame0_ATGonly" = tibble_tally_inclusion_contains_PTC_frame0_ATGonly,
+            "tibble_tally_inclusion_contains_PTC_frame1_ATGonly" = tibble_tally_inclusion_contains_PTC_frame1_ATGonly,
+            "tibble_tally_inclusion_contains_PTC_frame2_ATGonly" = tibble_tally_inclusion_contains_PTC_frame2_ATGonly,
+            
+            "tibble_tally_exclusion_contains_PTC_frame0_ATGonly" = tibble_tally_exclusion_contains_PTC_frame0_ATGonly,
+            "tibble_tally_exclusion_contains_PTC_frame1_ATGonly" = tibble_tally_exclusion_contains_PTC_frame1_ATGonly,
+            "tibble_tally_exclusion_contains_PTC_frame2_ATGonly" = tibble_tally_exclusion_contains_PTC_frame2_ATGonly
+          )
+        )
+        
+      } )
+    
+  } ) %>% purrr::flatten()
+
+# chi squared test of uniformity
+# $n %>% (function(x) {x <- x - (1/3); y <- x^2; csq <- sum(y * 3); return(csq)})
+
+list_psisigma_differential_vs_ont_ptc_results_per_frame_pruned <- list_psisigma_differential_vs_ont_ptc_results_per_frame %>%
+  purrr::discard(.p = ~data.class(.x$tibble_tally_exclusion_contains_PTC_frame0_ATGonly) != "tbl_df" | data.class(.x$tibble_tally_exclusion_contains_PTC_frame1_ATGonly) != "tbl_df" | data.class(.x$tibble_tally_exclusion_contains_PTC_frame2_ATGonly) != "tbl_df")
+
+list_psisigma_differential_vs_ont_ptc_results_per_frame_differences <- purrr::map(
+  .x = list_psisigma_differential_vs_ont_ptc_results_per_frame_pruned,
+  .f = function(a1) {
+    
+    list(
+      "tibble_diff_contains_PTC_frame0_ATGonly" = tibble("." = a1$tibble_tally_inclusion_contains_PTC_frame0_ATGonly$`.`, "n" = a1$tibble_tally_inclusion_contains_PTC_frame0_ATGonly$n - a1$tibble_tally_exclusion_contains_PTC_frame0_ATGonly$n),
+      "tibble_diff_contains_PTC_frame1_ATGonly" = tibble("." = a1$tibble_tally_inclusion_contains_PTC_frame1_ATGonly$`.`, "n" = a1$tibble_tally_inclusion_contains_PTC_frame1_ATGonly$n - a1$tibble_tally_exclusion_contains_PTC_frame1_ATGonly$n),
+      "tibble_diff_contains_PTC_frame2_ATGonly" = tibble("." = a1$tibble_tally_inclusion_contains_PTC_frame2_ATGonly$`.`, "n" = a1$tibble_tally_inclusion_contains_PTC_frame2_ATGonly$n - a1$tibble_tally_exclusion_contains_PTC_frame2_ATGonly$n)
+    ) %>%
+      return
+    
+  } )
+
+list_psisigma_differential_vs_ont_ptc_sigdiff <- purrr::map(
+  .x = list_psisigma_differential_vs_ont_ptc_results_per_frame_differences,
+  .f = function(a1) {
+    tibble(
+      "frame0_ptc_sigdiff" = any(abs(a1$tibble_diff_contains_PTC_frame0_ATGonly$n) > (1/3)),
+      "frame1_ptc_sigdiff" = any(abs(a1$tibble_diff_contains_PTC_frame1_ATGonly$n) > (1/3)),
+      "frame2_ptc_sigdiff" = any(abs(a1$tibble_diff_contains_PTC_frame2_ATGonly$n) > (1/3))
+        ) %>%
+      return
+  }
+)
+
+# plot frequency of ptc switching simultaneity across frames
+list_psisigma_differential_vs_ont_ptc_sigdiff %>% purrr::map(.f = ~.x %>% t %>% which %>% length) %>% unlist %>% table
 
 ```
 

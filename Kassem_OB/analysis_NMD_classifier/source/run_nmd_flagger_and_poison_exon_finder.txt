@@ -1,22 +1,24 @@
 
-source_dir="/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/source/"
-results_dir="/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/"
+source_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/source/"
+results_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/"
 
-ref_gtf_path="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
-# recon_gtf_path="/srv/scratch/z3463471/hg38_ensembl_reference/gtf/alltimepoints_denovo_reconstructed_stringtiemerged.gtf"
+job_name="2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries_1d"
 
-reference_genome_fasta_dir="/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
+# ref_gtf_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf"
+recon_gtf_path="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/multiomic_synthesis/results/2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries_1d.gtf"
+
+reference_genome_fasta_dir="/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
 
 # execution
 ## Ensembl ref GTF
-(Rscript $source_dir"NMD_flagger.R" -R $ref_gtf_path -F $reference_genome_fasta_dir -D $results_dir -O Homo_sapiens.GRCh38.98_NMD_PTC_E4 -C 12 -S TRUE -H 1 -E 4 -V YES 2>&1 | tee $results_dir"Homo_sapiens.GRCh38.98_NMD_PTC_E4.log") &
+# (Rscript $source_dir"NMD_flagger.R" -R $ref_gtf_path -F $reference_genome_fasta_dir -D $results_dir -O $job_name -C 16 -S NO -H 1 -E 4 -V YES 2>&1 | tee $results_dir$job_name".log") &
 
 ## Recon GTF
-(Rscript $source_dir"NMD_flagger.R" -R $recon_gtf_path -F $reference_genome_fasta_dir -D $results_dir -O alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4 -C 6 -S FALSE -H 1 -E 4 -V YES 2>&1 | tee $results_dir"alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.log") &
+(Rscript $source_dir"NMD_flagger.R" -R $recon_gtf_path -F $reference_genome_fasta_dir -D $results_dir -O $job_name -C 16 -S YES -H 3 -E 2 -V YES 2>&1 | tee $results_dir$job_name".log") &
 
 # Poison exon finder ###
 # all PSI-Sigma exons
-(Rscript $source_dir"poison_exon_finder.R" -E "/mnt/Helium_8TB_1/2020_RNA_atlas/results/R_processing_results/tibble_unique_LIV_info_prepare_for_poison_exon_finder.txt" -I IR -R $ref_gtf_path -F $reference_genome_fasta_dir -D "/mnt/Helium_8TB_1/2020_RNA_atlas/results/R_processing_results/" -O tibble_unique_LIV_info_poison_exon_finder_annotated -C 32 -S ALWAYS -H 1 -V NO --chrmode 1 --output_fasta FALSE 2>&1 | tee "/mnt/Helium_8TB_1/2020_RNA_atlas/results/R_processing_results/tibble_unique_LIV_info_prepare_for_poison_exon_finder.log") &
+Rscript $source_dir"poison_exon_finder.R" -E "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_DEXSeq_results_prepare_for_poison_exon_finder.txt" -I IR -R $ref_gtf_path -F $reference_genome_fasta_dir -D "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/" -O psisigma_all_exons_with_na_poison_exon_finder -C 32 -S ALWAYS -H 1 -V NO --chrmode 1 --output_fasta FALSE 2>&1 | tee "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/psisigma_all_exons_with_na_poison_exon_finder.log"
 
 # katana ###
 
@@ -27,3 +29,17 @@ ref_gtf_path="/srv/scratch/z3463471/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh
 reference_genome_fasta_dir="/srv/scratch/z3463471/hg38_ensembl_reference/raw_genome_fasta/dna_by_chr/"
 
 Rscript $source_dir"poison_exon_finder.R" -E "/srv/scratch/z3463471/sandbox/R_processing_results_dir/tibble_unique_LIV_info_prepare_for_poison_exon_finder.txt" -I IR -R $ref_gtf_path -F $reference_genome_fasta_dir -D "/srv/scratch/z3463471/sandbox/R_processing_results_dir/" -O tibble_unique_LIV_info_poison_exon_finder_annotated -C 56 -S ALWAYS -H 1 -V NO --chrmode 1 --output_fasta FALSE 2>&1 | tee "/srv/scratch/z3463471/sandbox/R_processing_results_dir/tibble_unique_LIV_info_prepare_for_poison_exon_finder.log"
+
+###############################
+
+# merging of GTF from all replicates of each timepoint using StringTie merge
+
+stringtie_dir="/mnt/LTS/tools/stringtie-2.1.0.Linux_x86_64/"
+
+cd $stringtie_dir
+
+chmod a+x stringtie
+
+# merge ALL transcripts from ALL the timepoints.
+./stringtie --merge -p 4 -m 0 -f 0 -c 0 -i "/mnt/scratch/2023_hmsc_ob_ont/3_stringtie/PKVPXF230199_pass_barcode0"*".trimmed.mixed_pgnexus.gtf" -o $results_dir"2023_hmsc_ob_ont_alltimepoints.gtf"
+

@@ -1,0 +1,32 @@
+#!/bin/bash
+
+#PBS -N rMATS_PGNEXUS_kassem_AD_alltimeseries_pvalue1
+#PBS -l select=1:ncpus=8:mem=100gb
+#PBS -l walltime=108:00:00
+#PBS -j oe
+#PBS -k eod
+#PBS -o /srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_AD/results_rMATS/
+#PBS -M z3463471@ad.unsw.edu.au
+#PBS -m ae
+
+module load samtools/1.9
+module load python/2.7.15
+
+rmats_package_dir="/home/z3463471/isoform_software/rMATS.4.0.2/rMATS-turbo-Linux-UCS4/"
+bam_bai_sj_sam_dir="/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_AD/bam_bai_sj_sam_files/"
+
+results_dir="/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_AD/results_rMATS/"
+source_dir="/home/z3463471/PGNEXUS_kassem_MSC/AD/analysis_rMATS/run_1/source/"
+
+ensembl_reference_dir="/srv/scratch/z3463471/hg38_ensembl_reference/"
+gtf_dir=$ensembl_reference_dir"gtf/"
+
+sampleandaccessionlists="/home/z3463471/PGNEXUS_kassem_MSC/AD/"
+list_of_timepoint_comparisons_final=$sampleandaccessionlists"list_of_timepoint_comparisons_final.txt"
+
+# RUNNING RMATS
+## need to concatenate every dam replicate TT
+
+cd $bam_bai_sj_sam_dir
+
+for comparison in $(cat $list_of_timepoint_comparisons_final); do cat $(echo $comparison | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1_r1_Aligned.out_sorted.bam/g') > b1.txt; cat $(echo $comparison | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\3_r1_Aligned.out_sorted.bam/g') > b2.txt; mkdir $results_dir$comparison"/"; python/2.7.15 $rmats_package_dir"rmats.py" --b1 b1.txt --b2 b2.txt --gtf $gtf_dir"Homo_sapiens.GRCh38.98.gtf" --od $results_dir$comparison"/" -t paired --nthread 8 --readLength 75 --tstat 8 --nthread 8; done

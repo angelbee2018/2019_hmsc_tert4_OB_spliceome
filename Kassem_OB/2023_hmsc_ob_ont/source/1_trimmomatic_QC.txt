@@ -1,0 +1,36 @@
+# specify directories
+## this contains all the folders of each sample
+raw_fastq_dir="/mnt/scratch/data/2023_hmsc_ob_ont/PKVPXF230199_pass/PKVPXF230199/"
+temp_fastq_dir="/mnt/scratch/2023_hmsc_ob_ont/temp_fastq/"
+mkdir -p $temp_fastq_dir
+trimmomatic_output_dir="/mnt/scratch/2023_hmsc_ob_ont/1_trimmomatic/"
+mkdir -p $trimmomatic_output_dir
+
+# extract fastq files in each subdirectory into a single folder
+cd $raw_fastq_dir
+
+cp -r * $temp_fastq_dir
+
+# fastqc
+conda activate base
+
+echo 96 > $temp_fastq_dir"parallel_ncores"
+
+cd $temp_fastq_dir
+
+parallel --link --ungroup -j $temp_fastq_dir"parallel_ncores" --round-robin -N 1 'fastqc -t 2 {1}' \
+::: $(ls *.fastq.gz)
+
+# TRIMMOMATIC
+cd $temp_fastq_dir
+
+for fastqfile in $(ls *.fastq.gz); do (trimmomatic SE -phred33 -threads 8 $temp_fastq_dir$fastqfile $trimmomatic_output_dir$(echo $fastqfile | sed 's/\.fastq\.gz/\.trimmed\.fastq\.gz/g') HEADCROP:100) & done
+
+wait
+
+# fastqc after trimming to confirm
+cd $trimmomatic_output_dir
+
+parallel --link --ungroup -j 96 --round-robin -N 1 'fastqc -t 2 {1}' \
+::: $(ls *trimmed.fastq.gz)
+

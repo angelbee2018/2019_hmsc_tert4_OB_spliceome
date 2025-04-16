@@ -64,6 +64,8 @@ results_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/multiomic_synthe
 
 ucsc_hg19_to_hg38_chainfile_path <- "/mnt/LTS/reference_data/hg38_ensembl_reference/hg19ToHg38.over.chain"
 
+nmd_classifier_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_NMD_classifier/results/"
+
 # results_directory_figures <- paste(results_dir, "figures/", sep="")
 # 
 # if(! dir.exists(results_directory_figures) ) {
@@ -74,6 +76,8 @@ tibble_ensembl_gene_name_transcript_stable_id_mapping <- read.delim(file = paste
 
 vector_OBseries_timepoints_raw <- c("ud", "6h", "12h", "24h", "3d", "6d", "9d", "12d")
 vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d", "12d")
+
+vector_2023_ont_timepoints_edited <- c("MSC", "6h", "1d", "3d", "9d", "12d")
 
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf_exon.only_with_first.last.gtf") %>% as_tibble
@@ -89,371 +93,6 @@ vector_OBseries_timepoints_edited <- c("MSC", "6h", "12h", "1d", "3d", "6d", "9d
 # tibble_ref_gtf_with_NMD_flagged_E5 <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMDflagger_qualitycheck_E5.gtf") %>% as_tibble
 
 ```
-
-## define functions
-
-### Enrichment/Gene Ontology
-
-```{r}
-
-# function to do Benjamini-Hochberg FDR correction for Gene Ontology output tables from GOHyperGall
-
-## takes the output of the GOHyperGall GO enrichment table and over-writes the Padj column with benjamini-corrected values from the Phyper column
-## spits out the resulting table with modified single column.
-
-## NOTE: BENJAMINI PVALUES ABOVE 0.05 ARE RENAMED NA
-
-GOHyperGAll_benjamini_correction <- function(raw_GOHyperGAll_table, FDR_cutoff = 0.05)
-
-  {
-  
-  benjamini_GOHyperGAll_table <- raw_GOHyperGAll_table
-  
-  benjamini_GOHyperGAll_table <- benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$SampleMatch >= 1, ]
-  
-  benjamini_GOHyperGAll_table[, "Padj"] <- p.adjust(p = benjamini_GOHyperGAll_table[, "Phyper"], method = "BH", n = length(benjamini_GOHyperGAll_table[, "Phyper"]))
-  
-  benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$Padj > FDR_cutoff, "Padj"] <- NA
-
-  return(benjamini_GOHyperGAll_table)
-  
-  }
-
-# the equivalent for bc3net::enrichment() output table
-
-bc3net_benjamini_correction <- function(raw_bc3net_table, FDR_cutoff = 0.05)
-
-  {
-  
-  benjamini_bc3net_table <- raw_bc3net_table
-  
-  benjamini_bc3net_table_processed <- benjamini_bc3net_table[benjamini_bc3net_table$genes >= 1, ]
-  
-  if (nrow(benjamini_bc3net_table_processed) != 0) {
-  
-  benjamini_bc3net_table_processed[, "padj"] <- p.adjust(p = benjamini_bc3net_table_processed[, "pval"], method = "BH", n = length(benjamini_bc3net_table_processed[, "pval"]))
-  
-  benjamini_bc3net_table_processed[benjamini_bc3net_table_processed$padj > FDR_cutoff, "padj"] <- NA
-  
-  } else {
-    
-    benjamini_bc3net_table_processed <- benjamini_bc3net_table
-    
-    benjamini_bc3net_table_processed[, "padj"] <- NA
-    
-  }
-  
-  return(benjamini_bc3net_table_processed)
-  
-}
-
-# bc3net::enrichment() does not show captured genes for each family enriched, so we have to add it in. but in doing so, i want to avoid a purrr within a purrr
-
-# this function selects genes from the background in each family which are ONLY input genes.
-
-filtering_genehits_from_background_catalogue <- function(catalogue, genehit_vector){
-  
-  filtered_catalogue <- purrr::map(.x = catalogue, .f = ~intersect(.x, genehit_vector))
-  
-  return(filtered_catalogue)
-  
-}
-
-```
-
-### FUNCTION TO CHANGE THE NAME OF ONE COLUMN WITH EXACT MATCH
-
-```{r}
-
-rename_column_exact <- function(input_tibble, target_column, output_colname) {
-  
-  output_tibble <- input_tibble
-  
-  colnames(output_tibble)[which(colnames(output_tibble) == target_column)] <- output_colname
-  
-  return(output_tibble)
-  
-}
-
-```
-
-
-### function to split a whole table by a delimiter in a column
-
-```{r}
-
-split_delimited_column_in_table <- function(input_table, target_colname, split, columns_to_deduplicate = NULL) {
-  
-  # DEBUG ###
-  # input_table <- tibble_phosphosites_with_protein_group_ids
-  # target_colname <- "Protein.group.IDs"
-  # split = "\\;"
-  # columns_to_deduplicate <- c("id", "1h_vs_ud|IB")
-  ###########
-  
-  # list-ify the target column
-  list_target_column_strsplit_per_element <- input_table[, target_colname] %>% unlist %>% strsplit(., split = split)
-  
-  # map length
-  vector_split_lengths <- list_target_column_strsplit_per_element %>% purrr::map(~length(.x)) %>% unlist(use.names = FALSE)
-  
-  # repeat table according to the split lengths
-  row_indices_of_table_repeated_by_split <- rep(x = 1:nrow(input_table), times = vector_split_lengths)
-  
-  input_table_repeated_by_split <- input_table[row_indices_of_table_repeated_by_split, ]
-  
-  # replace target column with split values
-  input_table_repeated_by_split[, target_colname] <- list_target_column_strsplit_per_element %>% unlist(use.names = FALSE)
-  
-  split_table <- input_table_repeated_by_split
-  
-  # if specified, append an index to a particular column
-  if (is.null(columns_to_deduplicate) == FALSE) {
-    
-    # get the duplicated row indices where split lengths > 1
-    indices_of_duplicates <- which(vector_split_lengths > 1)
-    
-    # get the repetition number where split lengths > 1
-    repetition_numbers_of_duplicates <- vector_split_lengths[which(vector_split_lengths > 1)]
-    
-    # list-ify the columns to be appended
-    list_deduplicated_columns <- input_table[, columns_to_deduplicate] %>% array_tree(margin = 2) %>% purrr::map(~array_tree(.x))
-    
-    # map over each column, split the target element and add _[0-9]+
-    list_deduplicated_columns_split <- purrr::map(.x = list_deduplicated_columns, .f = function(a1) {
-      
-      # map a subset each of the L2 (elements of a column)
-      a1[indices_of_duplicates] <- purrr::map2(.x = a1[indices_of_duplicates], .y = repetition_numbers_of_duplicates, 
-                  .f = ~rep(.x, times = .y) %>% unlist %>% paste(., 1:.y, sep = "_"))
-      
-      return(a1 %>% unlist)
-      
-    } )
-    
-    # tibblise
-    tibble_deduplicated_columns_split <- list_deduplicated_columns_split %>% as_tibble
-    
-    # add back every row onto the split table
-    for (dedupe_colname in columns_to_deduplicate) {
-      
-      split_table[, dedupe_colname] <- tibble_deduplicated_columns_split[, dedupe_colname]
-      
-    }
-    
-  }
-  
-  return(split_table %>% type_convert)
-  
-}
-
-```
-
-### function to split a whole table by a delimiter in a few columns (multi ver.)
-
-```{r}
-
-split_delimited_columns_in_table <- function(input_table, target_colname, split, columns_to_deduplicate = NULL) {
-  
-  # DEBUG ###
-  # input_table <- test
-  # target_colname <- c("CHR_ID", "CHR_POS", "STRONGEST SNP-RISK ALLELE", "SNPS", "CONTEXT")
-  # split = "\\;"
-  # columns_to_deduplicate <- NULL
-  ###########
-  
-  # list-ify the target column
-  list_target_column_strsplit_per_element <- input_table[, target_colname] %>% array_tree(margin = 2) %>% purrr::map(~.x %>% unlist %>% strsplit(., split = split))
-  
-  # retrieve lengths of each split for each row, each column.
-  list_target_column_split_lengths_per_element <- purrr::map(.x = list_target_column_strsplit_per_element, .f = ~purrr::map(.x = .x, .f = ~.x %>% length))
-  
-  # do not account for rows that were length 1 for one column BUT NOT for others.
-  vector_indices_length_one_for_some_colunmns <- purrr::pmap(.l = list_target_column_split_lengths_per_element, .f = ~(c(...) %>% unique %>% length == 2) & (any(c(...) == 1))) %>% unlist %>% which
-  
-  # map length
-  vector_sum_lengths <- list_target_column_strsplit_per_element %>% purrr::map(~.x[setdiff(.x %>% length, vector_indices_length_one_for_some_colunmns)]) %>% purrr::map(~length(.x %>% unlist)) %>% unlist(use.names = FALSE) %>% unique
-  
-  # check. if the split lengths are different, then die.
-  if (length(vector_sum_lengths) != 1) {
-    
-    # get problem rows for easy debugging
-    vector_problem_row_indices <- purrr::pmap(.l = list_target_column_split_lengths_per_element, .f = ~(c(...)[c(...) != 1] %>% unique %>% length) > 1) %>% unlist %>% which
-    
-    stop("split lengths are uneven across specified columns. Problem rows: ", paste(vector_problem_row_indices, collapse = ","))
-    
-  }
-  
-  # repeat table according to the split lengths
-  vector_split_lengths <- purrr::map_depth(.x = list_target_column_strsplit_per_element, .depth = 2, .f = ~length(.x)) %>% 
-    purrr::map(~unlist(.x)) %>%
-    purrr::pmap(.f = ~max(...)) %>%
-    unlist
-  
-  # if there are elements of length = 1, then repeat to max. length.
-  list_target_column_strsplit_per_element <- purrr::map(.x = list_target_column_strsplit_per_element, 
-                                                        .f = ~purrr::map2(.x = .x, .y = vector_split_lengths, 
-                                                                          .f = function(b1, b2) {
-                                                                            
-                                                                            if (b1 %>% length == b2) {
-                                                                              return(b1)
-                                                                            } else {
-                                                                              return(rep(b1, times = b2))
-                                                                            }
-                                                                            
-                                                                          } ))
-  
-  row_indices_of_table_repeated_by_split <- purrr::map2(.x = 1:nrow(input_table), .y = vector_split_lengths, .f = ~rep(x = .x, times = .y)) %>% unlist
-  
-  input_table_repeated_by_split <- input_table[row_indices_of_table_repeated_by_split, ]
-  
-  # replace target column with split values
-  input_table_repeated_by_split[, target_colname] <- list_target_column_strsplit_per_element %>% purrr::map(~unlist(.x)) %>% purrr::reduce(cbind)
-  
-  split_table <- input_table_repeated_by_split
-  
-  # if specified, append an index to a particular column
-  if (is.null(columns_to_deduplicate) == FALSE) {
-    
-    # get the duplicated row indices where split lengths > 1
-    indices_of_duplicates <- which(vector_split_lengths > 1)
-    
-    # get the repetition number where split lengths > 1
-    repetition_numbers_of_duplicates <- vector_split_lengths[which(vector_split_lengths > 1)]
-    
-    # list-ify the columns to be appended
-    list_deduplicated_columns <- input_table[, columns_to_deduplicate] %>% array_tree(margin = 2) %>% purrr::map(~array_tree(.x))
-    
-    # map over each column, split the target element and add _[0-9]+
-    list_deduplicated_columns_split <- purrr::map(.x = list_deduplicated_columns, .f = function(a1) {
-      
-      # map a subset each of the L2 (elements of a column)
-      a1[indices_of_duplicates] <- purrr::map2(.x = a1[indices_of_duplicates], .y = repetition_numbers_of_duplicates, 
-                  .f = ~rep(.x, times = .y) %>% unlist %>% paste(., 1:.y, sep = "_"))
-      
-      return(a1 %>% unlist)
-      
-    } )
-    
-    # tibblise
-    tibble_deduplicated_columns_split <- list_deduplicated_columns_split %>% as_tibble
-    
-    # add back every row onto the split table
-    for (dedupe_colname in columns_to_deduplicate) {
-      
-      split_table[, dedupe_colname] <- tibble_deduplicated_columns_split[, dedupe_colname]
-      
-    }
-    
-  }
-  
-  return(split_table)
-  
-}
-
-```
-
-### function to convert a vector of numeric positions into sets of simple ranges
-
-```{r}
-
-# USAGE:
-# input_vector: vector of numerical values to convert to ranges
-# metadata (optional): vector the same length as `input_vector` containing information such as chromosome.
-
-convert_vector.of.positions_to_simple.ranges <- function(input_vector, metadata_vector) {
-  
-  # DEBUG ###
-  # tibble_input_vector_and_metadata <- tibble_JUM_valid_phosphosites_with_overlap %>% 
-  #   dplyr::select(chrom, genome_relative_positions_phosphosite) %>% 
-  #   split_delimited_column_in_table(input_table = ., split = ",", target_colname = "genome_relative_positions_phosphosite")
-  # input_vector <- tibble_input_vector_and_metadata$genome_relative_positions_phosphosite
-  # metadata_vector <- tibble_input_vector_and_metadata$chrom
-  
-  # input_vector <- tibble_dbPTM_coords_and_chr$vec_all_genome_relative_coords_of_item
-  # metadata_vector <- tibble_dbPTM_coords_and_chr$chr
-  ###########
-  
-  # tibblise and soft-convert to numeric.
-  # throw error if still not numeric.
-  tibble_input_vector <- tibble::enframe(input_vector, value = "vec", name = NULL) %>% type_convert 
-  
-  if (tibble_input_vector$vec %>% data.class != "numeric") {
-    stop("check if the input vector is numeric")
-  } 
-  
-  # join the metadata
-  tibble_input_vector_and_metadata <- dplyr::bind_cols(tibble_input_vector, metadata_vector %>% as_tibble)
-  
-  # subset and list-ify by metadata
-  list_input_vector_subset_by_metadata <- tibble_input_vector_and_metadata %>% 
-    dplyr::group_split(!!as.name(colnames(tibble_input_vector_and_metadata)[!colnames(tibble_input_vector_and_metadata) %in% "vec"]))
-  
-  # loop over the list
-  # convert the individual nt positions to a set of ranges
-  ## achieve this by comparing n to n + 1
-  ## for rows where diff > 1, the n represents the end of an exon. n.plus.1 represents the start of the exon right after the gap.
-  list_blockdata <- purrr::imap(.x = list_input_vector_subset_by_metadata, 
-                               .f = function(a1, a2) {
-                                 
-                                 # DEBUG ###
-                                 # a1 <- list_input_vector_subset_by_metadata[[1]]
-                                 ###########
-                                 
-                                 cat("\ndoing: ", a2)
-                                 
-                                 # sort input vector in increasing order
-                                 a1 <- a1 %>% dplyr::arrange(vec)
-                                 
-                                 tibble_n_n.plus.1 <- tibble("n" = a1$vec %>% head(n = length(a1$vec) - 1),
-                                                             "n.plus.1" = a1$vec %>% .[-1]) %>% 
-                                   add_column("difference" = .$`n.plus.1` - .$`n`) %>%
-                                   dplyr::filter(difference != 0)
-                                 
-                                 ## if there are no gaps, then just take the genomic range as the start:end
-                                 if (tibble_n_n.plus.1$difference %>% unique %>% length == 1 & tibble_n_n.plus.1$difference %>% .[1] == 1) {
-                                   
-                                   vec_blockCount <- 1
-                                   vec_blockSizes <- length(a1$vec)
-                                   vec_blockStarts <- dplyr::first(a1$vec)
-                                   vec_blockEnds <- dplyr::last(a1$vec)
-                                   
-                                 } else if ((tibble_n_n.plus.1$difference %>% unique %>% length == 1 & tibble_n_n.plus.1$difference %>% .[1] == 1) != TRUE) {
-                                   
-                                   vec_blockCount <- tibble_n_n.plus.1$difference %>% unique %>% length
-                                   vec_blockStarts <- c(dplyr::first(a1$vec), 
-                                                        tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n.plus.1"] %>% unlist(use.names = FALSE))
-                                   vec_blockEnds <- c(tibble_n_n.plus.1[tibble_n_n.plus.1$difference > 1, "n"] %>% unlist(use.names = FALSE), 
-                                                      dplyr::last(a1$vec))
-                                   vec_blockSizes <- vec_blockEnds - vec_blockStarts + 1
-                                   
-                                 }
-                                 
-                                 return(list(
-                                   "vec_blockCount" = vec_blockCount,
-                                   "vec_blockStarts" = vec_blockStarts,
-                                   "vec_blockEnds" = vec_blockEnds,
-                                   "vec_blockSizes" = vec_blockSizes
-                                 ))
-                                 
-                               } )
-  
-  # make the list of metadata
-  list_metadata <- purrr::map(.x = list_input_vector_subset_by_metadata, .f = ~.x %>% dplyr::select(-vec) %>% unique)
-  
-  list_tibbles_start_end <- purrr::map2(.x = list_blockdata, 
-                                        .y = list_metadata,
-                                        .f = ~list("tibble" = tibble("start" = .x$vec_blockStarts,
-                                                     "end" = .x$vec_blockEnds),
-                                                   "metadata" = .y) %>% flatten %>% as_tibble)
-  
-  tibble_start_end_metadata <- list_tibbles_start_end %>% rbindlist %>% as_tibble
-  
-  # create tibble of start end count
-  
-}
-
-```
-
 
 ## generating enrichment catalog of PFAM protein families
 
@@ -5060,7 +4699,7 @@ library(regioneR)
 library(rtracklayer)
 library(BSgenome.Hsapiens.UCSC.hg38)
 
-tibble_ref_gtf_original <- rtracklayer::import("/mnt/Tertiary/sharedfolder/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
+tibble_ref_gtf_original <- rtracklayer::import("/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
 # tibble_ref_gtf_original <- rtracklayer::import("Z:/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf") %>% as_tibble
 
 tibble_ref_gtf_original <- tibble_ref_gtf_original %>% dplyr::select(-source, -score, -gene_version, -gene_source, -transcript_version, -transcript_source, -tag, -transcript_support_level, -exon_version, -protein_version, -ccds_id) %>% unique
@@ -8625,7 +8264,7 @@ list_JUM_diff_junctions_array.tree <- tibble_JUM_differential_dpsi0.15_qvalue0.0
 
 ```{r}
 
-source("/mnt/LTS/tools/angel_suite/source/main_source.R")
+sapply(list.files("/mnt/LTS/tools/angel_suite/source/", pattern = "\\.R", full.names = TRUE), source)
 
 tibble_PSIsigma_differential_dpsi0.10_pvalue0.01_with_na <- read.delim("/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9g_in_parallel_with_denominator_sorted_GTF/R_processing_results/long_tibble_of_psisigma_results_allcomparisons_differential_info_LIV1854_dpsi15_DEXSeq_padj0.01_anysig_with_na.txt", sep = "\t", row.names = NULL, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE) %>% as_tibble
 
@@ -8647,7 +8286,7 @@ list_2023_hmsc_ob_ont_gtf <- furrr::future_map2(
     # a2 <- "MSC"
     ###########
     
-    tibble_gtf <- rtracklayer::import(con = a1) %>% tibble::as_tibble() %>% dplyr::mutate_if(is.factor, as.character) %>% dplyr::mutate("timepoint" = a2)
+    tibble_gtf <- rtracklayer::import(con = a1) %>% tibble::as_tibble() %>% dplyr::mutate_if(is.factor, as.character) %>% dplyr::mutate("timepoint" = a2) %>% readr::type_convert()
     
   }, .progress = TRUE ) 
 
@@ -8669,18 +8308,7 @@ list_psisigma_differential_with_na_matched_to_ont <- round_robin_pmap_callr(
     "a2" = 1:length(listified_tibble)
   ), 
   .num_workers = 16,
-  .chunkify = TRUE,
   .no_chunks = 99,
-  .temp_path = "/mnt/scratch/temp/PEF_2019_multiomic_synthesis_list_psisigma_differential_with_na_matched_to_ont.rdata",
-  .temp_dir = "/mnt/scratch/temp/",
-  .re_export = TRUE,
-  .env_flag = "user",
-  .objects = c("tibble_2023_hmsc_ob_ont_gtf"),
-  .status_messages_dir = "/mnt/scratch/temp/",
-  .job_name = "PEF_2019_multiomic_synthesis_list_psisigma_differential_with_na_matched_to_ont",
-  .result_mode = "ordered",
-  .keep_intermediate_files = FALSE,
-  .debug = TRUE,
   .f = function(a1, a2) {
     
     library(seqinr)
@@ -8836,7 +8464,9 @@ list_psisigma_differential_with_na_matched_to_ont <- round_robin_pmap_callr(
     
   } )
 
-saveRDS(object = list_psisigma_differential_with_na_matched_to_ont, file = paste(results_dir, "list_psisigma_differential_with_na_matched_to_ont.rds", sep = ""))
+qs::qsave(x = list_psisigma_differential_with_na_matched_to_ont, file = paste(results_dir, "list_psisigma_differential_with_na_matched_to_ont.qs", sep = ""))
+
+list_psisigma_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_psisigma_differential_with_na_matched_to_ont.rds", sep = ""))
 
 ```
 
@@ -9008,9 +8638,9 @@ listified_tibble <- tibble_JUM_differential_dpsi0.15_qvalue0.01_with_na %>% dply
 
 list_jum_differential_with_na_matched_to_ont <- round_robin_pmap_callr(
   .l = list(
-    "_a1" = purrr::map(.x = parallel::splitIndices(nx = length(listified_tibble), ncl = 94), .f = ~listified_tibble[.x])
+    "_a1" = purrr::map(.x = parallel::splitIndices(nx = length(listified_tibble), ncl = 96), .f = ~listified_tibble[.x])
   ), 
-  .num_workers = 94,
+  .num_workers = 96,
   .temp_path = "/mnt/scratch/temp/PEF_2019_multiomic_synthesis_list_jum_differential_with_na_matched_to_ont.rdata",
   .temp_dir = "/mnt/scratch/temp/",
   .re_export = TRUE,
@@ -9113,6 +8743,8 @@ list_jum_differential_with_na_matched_to_ont <- round_robin_pmap_callr(
   } ) %>% purrr::flatten()
 
 saveRDS(object = list_jum_differential_with_na_matched_to_ont, file = paste(results_dir, "list_jum_differential_with_na_matched_to_ont.rds", sep = ""))
+
+list_jum_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_jum_differential_with_na_matched_to_ont.rds", sep = ""))
 
 ```
 
@@ -9488,10 +9120,29 @@ list_psisigma_differential_with_na_matched_to_ont <- readRDS(file = paste(result
 list_psisigma_constitutive_matched_to_ont <- readRDS(file = paste(results_dir, "list_psisigma_constitutive_matched_to_ont.rds", sep = ""))
 list_jum_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_jum_differential_with_na_matched_to_ont.rds", sep = ""))
 list_jum_constitutive_no_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_jum_constitutive_no_na_matched_to_ont.rds", sep = ""))
-list_majiq_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_majiq_differential_with_na_matched_to_ont.rds", sep = ""))
-list_majiq_constitutive_matched_to_ont <- readRDS(file = paste(results_dir, "list_majiq_constitutive_matched_to_ont.rds", sep = ""))
+# list_majiq_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_majiq_differential_with_na_matched_to_ont.rds", sep = ""))
+# list_majiq_constitutive_matched_to_ont <- readRDS(file = paste(results_dir, "list_majiq_constitutive_matched_to_ont.rds", sep = ""))
 
 ```
+
+### simplify into table
+
+```{r}
+
+tibble_psisigma_differential_with_na_matched_to_ont <- list_psisigma_differential_with_na_matched_to_ont %>% 
+  purrr::keep(.p = ~length(.x[[2]]) > 0) %>% 
+  purrr::map(~.x$splicing_data) %>%
+  data.table::rbindlist() %>%
+  tibble::as_tibble()
+
+tibble_jum_differential_with_na_matched_to_ont <- list_jum_differential_with_na_matched_to_ont %>% 
+  purrr::keep(.p = ~length(.x[[2]]) > 0) %>% 
+  purrr::map(~.x$splicing_data) %>%
+  data.table::rbindlist() %>%
+  tibble::as_tibble()
+
+```
+
 
 ## High level analyses between short read and ONT
 
@@ -9524,17 +9175,17 @@ print(paste(
   "/", 
   length(list_jum_constitutive_no_na_matched_to_ont), sep = ""))
 
-print("majiq differential matched in ONT - total")
-print(paste(
-  list_majiq_differential_with_na_matched_to_ont %>% purrr::map(.f = ~.x$list_matched_ont_inclusion_entries %>% length > 0) %>% unlist %>% which %>% length, 
-  "/", 
-  length(list_majiq_differential_with_na_matched_to_ont), sep = ""))
-
-print("majiq constitutive matched in ONT - total")
-print(paste(
-  list_majiq_constitutive_matched_to_ont %>% purrr::map(.f = ~.x$list_matched_ont_inclusion_entries %>% length > 0) %>% unlist %>% which %>% length, 
-  "/", 
-  length(list_majiq_constitutive_matched_to_ont), sep = ""))
+# print("majiq differential matched in ONT - total")
+# print(paste(
+#   list_majiq_differential_with_na_matched_to_ont %>% purrr::map(.f = ~.x$list_matched_ont_inclusion_entries %>% length > 0) %>% unlist %>% which %>% length, 
+#   "/", 
+#   length(list_majiq_differential_with_na_matched_to_ont), sep = ""))
+# 
+# print("majiq constitutive matched in ONT - total")
+# print(paste(
+#   list_majiq_constitutive_matched_to_ont %>% purrr::map(.f = ~.x$list_matched_ont_inclusion_entries %>% length > 0) %>% unlist %>% which %>% length, 
+#   "/", 
+#   length(list_majiq_constitutive_matched_to_ont), sep = ""))
 
 ```
 
@@ -9699,6 +9350,259 @@ ggplot_majiq_constitutive_matched_to_ont_joined_count
 
 ```
 
+## match ONT exons to reference
+derive stats pertaining to number of exons sharing 0, 1 or 2 vertices with the reference
+
+remove first and last exons from the reference 
+
+```{r}
+
+tibble_ref_gtf <- rtracklayer::import("/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% tibble::as_tibble()
+
+list_2023_hmsc_ob_ont_gtf
+
+```
+
+### match exact, followed by one-sided match
+
+```{r}
+
+list_ont_vs_ref_vertex_match_results <- callr_map(
+  .x = list_2023_hmsc_ob_ont_gtf,
+  .no_workers = 6, .no_chunks = 6,
+  .f = function(a1) {
+    
+    a1 <- a1 %>% .[(.$strand != "*") & (.$type == "exon"), ]
+    
+    ### EXACT MATCH
+    # exact match of each alternative exon to the reference GTF
+    # if an exact match is found, regardless of whether it is the first/last exon in ONT or reference, we count it as a real match
+    list_matched_GTF_exon_entries <- mc_pmap(
+      .l = list(
+        "b1" = a1$seqnames,
+        "b2" = a1$start %>% type.convert(as.is = TRUE),
+        "b3" = a1$end %>% type.convert(as.is = TRUE),
+        "b4" = a1$strand,
+        "b5" = a1$first_or_last_exon
+      ),
+      .no_workers = 32, .no_chunks = 32,
+      .f = function(b1, b2, b3, b4, b5) {
+        
+        # DEBUG ###
+        # b1 <- a1$seqnames %>% .[[29]]
+        # b2 <- a1$start %>% type.convert(as.is = TRUE) %>% .[[29]]
+        # b3 <- a1$end %>% type.convert(as.is = TRUE) %>% .[[29]]
+        # b4 <- a1$strand %>% .[[29]]
+        # b5 <- a1$first_or_last_exon %>% .[[29]]
+        ###########
+        
+         tibble_exactmatch <- extract_matching.exons(query_chr = b1, query_start = b2, query_end = b3, query_strand = b4, tibble_gtf_table = tibble_ref_gtf, return_type = "exon") 
+        
+        logical_match_found_in_ref <- nrow(tibble_exactmatch) > 0
+        
+        if (logical_match_found_in_ref == TRUE) {
+          logical_match_found_in_ref <- "exactmatch"
+          if (any(unique(tibble_exactmatch$first_or_last_exon) != "NA")) {
+            logical_match_found_in_ref <- paste(logical_match_found_in_ref, "_", paste(paste("ref_", sort(unique(tibble_exactmatch$first_or_last_exon) %>% .[. != "NA"]), sep = ""), collapse = "_"), sep = "")
+          }
+          
+          if (b5 != "NA") {
+            logical_match_found_in_ref <- paste("ont_", b5, "_", logical_match_found_in_ref, sep = "")
+          }
+          
+        }
+        
+        if (logical_match_found_in_ref == FALSE) {
+          
+          tibble_singlesided_match_starts <- magnetise_genome_position_to_ref_starts(query_chr = b1, query_coord = b2, query_strand = b4, tibble_gtf_table = tibble_ref_gtf, query_tolerance = 1, return_type = "exon")$tibble_ref_starts_matched_to_query_coord
+          
+          tibble_singlesided_match_ends <- magnetise_genome_position_to_ref_end(query_chr = b1, query_coord = b3, query_strand = b4, tibble_gtf_table = tibble_ref_gtf, query_tolerance = 1, return_type = "exon")$tibble_ref_ends_matched_to_query_coord
+          
+          logical_onesided_match_in_ref <- (nrow(tibble_singlesided_match_starts) > 0) | (nrow(tibble_singlesided_match_ends) > 0)
+          
+          if (logical_onesided_match_in_ref == TRUE) {
+            logical_onesided_match_in_ref <- "onesided"
+            if (any(unique(dplyr::bind_rows(tibble_singlesided_match_starts, tibble_singlesided_match_ends)$first_or_last_exon) != "NA")) {
+              logical_onesided_match_in_ref <- paste(logical_onesided_match_in_ref, "_", paste(paste("ref_", sort(unique(dplyr::bind_rows(tibble_singlesided_match_starts, tibble_singlesided_match_ends)$first_or_last_exon) %>% .[. != "NA"]), sep = ""), collapse = "_"), sep = "")
+            }
+          }
+          
+          if (logical_onesided_match_in_ref == FALSE) {
+            logical_onesided_match_in_ref <- "nomatch"
+          }
+          
+          if (b5 != "NA") {
+            logical_onesided_match_in_ref <- paste("ont_", b5, "_", logical_onesided_match_in_ref, sep = "")
+          }
+         
+          logical_match_found_in_ref <- logical_onesided_match_in_ref
+           
+        }
+        
+        return(logical_match_found_in_ref)
+        
+      }, .progress = TRUE )
+    
+    return(list_matched_GTF_exon_entries %>% unlist)
+    
+  } )
+
+qsave(x = list_ont_vs_ref_vertex_match_results, file = paste(results_dir, "list_ont_vs_ref_vertex_match_results.qs"))
+
+```
+
+### get match stats
+
+```{r}
+
+percentage_of_ref_covered_by_ont <- (purrr::map2(
+  .x = list_2023_hmsc_ob_ont_gtf,
+  .y = list_ont_vs_ref_vertex_match_results,
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- list_2023_hmsc_ob_ont_gtf[[1]]
+    # a2 <- list_ont_vs_ref_vertex_match_results[[1]]
+    ###########
+    
+    a1 <- a1 %>% .[(.$strand != "*") & (.$type == "exon"), ]
+    
+    return(a1[grep(x = a2, pattern = "exactmatch"), ])
+    
+  } ) %>% data.table::rbindlist(use.names = TRUE) %>% tibble::as_tibble() %>% dplyr::distinct(seqnames, start, end, .keep_all = TRUE) %>% .$width %>% sum) /
+  (tibble_ref_gtf %>% .[.$type == "exon", ] %>% dplyr::distinct(seqnames, start, end, .keep_all = TRUE) %>% .$width %>% sum)
+
+list_ont_to_ref_matching_scores <- callr_map2(
+  .x = list_2023_hmsc_ob_ont_gtf,
+  .y = list_ont_vs_ref_vertex_match_results,
+  .no_workers = 6, .no_chunks = 6,
+  .f = function(a1, a2) {
+    
+    # DEBUG ###
+    # a1 <- list_2023_hmsc_ob_ont_gtf[[1]]
+    # a2 <- list_ont_vs_ref_vertex_match_results[[1]]
+    ###########
+    
+    # number of transcripts in ONT
+    tibble_transcript_id_max_exon_number <- a1[a1$type == "exon", ] %>% 
+      dplyr::group_by(transcript_id) %>% 
+      dplyr::summarise("max_exon_number" = max(exon_number)) 
+    
+    # transcripts with at least 2 exons
+    number_of_transcripts_in_ont <- nrow(tibble_transcript_id_max_exon_number %>% .[.$max_exon_number > 1, ])
+    
+    # join ref exon matching info onto ONT GTF table
+    tibble_ont_gtf_with_ref_matching_results <- dplyr::left_join(
+      a1,
+      a1 %>% .[(.$strand != "*") & (.$type == "exon"), ] %>% dplyr::mutate("ref_matching_result" = a2)
+    )
+    
+    # count matching exons and transcripts
+    list_ont_exon_match <- mc_pmap(
+      .l = list(
+        "b1" = tibble_ont_gtf_with_ref_matching_results %>% 
+        .[.$type == "exon", ] %>%
+        dplyr::group_split(transcript_id) %>%
+        purrr::keep(.p = ~max(.x$exon_number) > 1)
+      ),
+      .no_workers = 8, .no_chunks = 8,
+      .f = function(b1) {
+        
+        # DEBUG ###
+        # b1 <- tibble_ont_gtf_with_ref_matching_results %>% 
+        #   .[.$type == "exon", ] %>%
+        #   dplyr::group_split(transcript_id) %>%
+        #   purrr::keep(.p = ~max(.x$exon_number) > 1) %>% .[[43]]
+        ###########
+        
+        if (any(is.na(b1$ref_matching_result))) {
+          stop("shouldn't be missing matching info")
+        }
+        
+        # exactmatch|onesided|nomatch
+        regular_exon_exactmatch_count <- sum(as.numeric(grepl(x = b1[which(!b1$first_or_last_exon %in% c("first_exon", "last_exon")), ]$ref_matching_result, pattern = "exactmatch")))
+        regular_exon_onesided_count <- sum(as.numeric(grepl(x = b1[which(!b1$first_or_last_exon %in% c("first_exon", "last_exon")), ]$ref_matching_result, pattern = "onesided")))
+        regular_exon_nomatch_count <- sum(as.numeric(grepl(x = b1[which(!b1$first_or_last_exon %in% c("first_exon", "last_exon")), ]$ref_matching_result, pattern = "nomatch")))
+        
+        firstlast_exon_exactmatch_count <- sum(as.numeric(grepl(x = b1[which(b1$first_or_last_exon %in% c("first_exon", "last_exon")), ]$ref_matching_result, pattern = "exactmatch")))
+        firstlast_exon_onesided_count <- sum(as.numeric(grepl(x = b1[which(b1$first_or_last_exon %in% c("first_exon", "last_exon")), ]$ref_matching_result, pattern = "onesided")))
+        firstlast_exon_nomatch_count <- sum(as.numeric(grepl(x = b1[which(b1$first_or_last_exon %in% c("first_exon", "last_exon")), ]$ref_matching_result, pattern = "nomatch")))
+        
+        return(
+          data.table::data.table(
+            "transcript_id" = b1$transcript_id %>% unique,
+            "regular_exon_exactmatch_count" = regular_exon_exactmatch_count,
+            "regular_exon_onesided_count" = regular_exon_onesided_count,
+            "regular_exon_nomatch_count" = regular_exon_nomatch_count,
+            
+            "firstlast_exon_exactmatch_count" = firstlast_exon_exactmatch_count,
+            "firstlast_exon_onesided_count" = firstlast_exon_onesided_count,
+            "firstlast_exon_nomatch_count" = firstlast_exon_nomatch_count
+          ) )
+        
+      }, .progress = TRUE)
+    
+    tibble_ont_exon_match <- list_ont_exon_match %>% 
+      data.table::rbindlist() %>% tibble::as_tibble()
+    
+    return(tibble_ont_exon_match)
+    
+  } )
+
+list_transcript_exon_match_summary <- purrr::map(
+  .x = list_ont_to_ref_matching_scores,
+  .f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- list_ont_to_ref_matching_scores[[4]]
+    ###########
+    
+    number_of_transcripts_all_match <- which(
+      (a1$regular_exon_onesided_count == 0) & 
+        (a1$regular_exon_nomatch_count == 0) &
+        (a1$firstlast_exon_onesided_count == 0) &
+        (a1$firstlast_exon_nomatch_count == 0)
+    ) %>% length
+    
+    number_of_transcripts_onesided_boundary_match <- which(
+      (a1$regular_exon_onesided_count == 0) & 
+        (a1$regular_exon_nomatch_count == 0) &
+        (a1$firstlast_exon_onesided_count > 0) &
+        (a1$firstlast_exon_nomatch_count == 0)
+    ) %>% length
+    
+    number_of_ont_transcripts <- nrow(a1)
+    
+    number_of_matched_exons_total <- sum(a1$regular_exon_exactmatch_count) + sum(a1$firstlast_exon_exactmatch_count)
+    
+    number_of_onesided_matches_total <- sum(a1$regular_exon_onesided_count) + sum(a1$firstlast_exon_onesided_count)
+    
+    number_of_ont_exons <- a1 %>% dplyr::select(contains("count")) %>% unlist %>% sum
+    
+    return(
+      list(
+        "number_of_transcripts_all_match" = number_of_transcripts_all_match,
+        "number_of_transcripts_onesided_boundary_match" = number_of_transcripts_onesided_boundary_match,
+        "number_of_ont_transcripts" = number_of_ont_transcripts,
+        "number_of_matched_exons_total" = number_of_matched_exons_total,
+        "number_of_onesided_matches_total" = number_of_onesided_matches_total
+      )
+    )
+    
+  } )
+
+qsave(x = list_transcript_exon_match_summary, file = paste(results_dir, "list_transcript_exon_match_summary.qs"))
+
+purrr::pmap(
+  .l = list_transcript_exon_match_summary %>% purrr::set_names(nm = c("a1", "a2", "a3", "a4", "a5", "a6")),
+  .f = function(a1, a2, a3, a4, a5, a6) {
+    
+    return(mean(c(a1, a2, a3, a4, a5, a6)))
+    
+  } )
+
+```
+
 ## Get quantitative correlations between short read and ONT
 
 ### d
@@ -9797,7 +9701,220 @@ cor(x = tibble_matched_timeseries_data_for_plot %>% na.omit %>% .$scaled_value_s
 
 ```
 
-## Do NMD analysis
+## Do NMD analysis - reference-guided
+use the start and stop codons in reference to do the in-silico translation
+
+### transfer start and stop codons from ref GTF to ONT GTF
+
+```{r}
+
+tibble_ref_gtf <- rtracklayer::import("/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% tibble::as_tibble()
+
+# map start/stops onto the transcript_ids of the ONT GTF
+tibble_ref_gtf_startstop_codons <- tibble_ref_gtf[tibble_ref_gtf$type %in% c("start_codon", "stop_codon"), ] %>% 
+  dplyr::distinct(seqnames, start, end, strand, type, .keep_all = TRUE)
+
+list_startop_entries_for_insertion <- callr_insulator(.f = quote(mc_pmap(
+  .l = list(
+    "a1" = 1:nrow(tibble_ref_gtf_startstop_codons)
+  ),
+  .no_workers = 192, .no_chunks = 192,
+  .f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- 2343
+    ###########
+    
+    L1_row_tibble_ref_gtf_startstop_codons <- tibble_ref_gtf_startstop_codons[a1, ]
+    
+    list_additional_exon_entries_ref_startstop_ont <- purrr::map(
+      .x = list_2023_hmsc_ob_ont_gtf,
+      .f = function(b1) {
+        
+        # DEBUG ###
+        # b1 <- list_2023_hmsc_ob_ont_gtf[[1]]
+        ###########
+        
+        L2_tibble_fully_overlapped_exons_in_ont <- b1[(b1$seqnames == L1_row_tibble_ref_gtf_startstop_codons$seqnames) & (b1$start <= L1_row_tibble_ref_gtf_startstop_codons$start + 0) & (b1$end >= L1_row_tibble_ref_gtf_startstop_codons$end - 0) & (b1$strand == L1_row_tibble_ref_gtf_startstop_codons$strand) & (b1$type == "exon"), ]
+        
+        tibble_startstop_entries_for_insertion <- L2_tibble_fully_overlapped_exons_in_ont[, c("seqnames", "start", "end", "width", "strand", "source", "type", "gene_id", "transcript_id", "timepoint", "exon_number")]
+        
+        if (nrow(L2_tibble_fully_overlapped_exons_in_ont) > 0) {
+          tibble_startstop_entries_for_insertion[, "seqnames"] <- L1_row_tibble_ref_gtf_startstop_codons$seqnames
+          tibble_startstop_entries_for_insertion[, "start"] <- L1_row_tibble_ref_gtf_startstop_codons$start
+          tibble_startstop_entries_for_insertion[, "end"] <- L1_row_tibble_ref_gtf_startstop_codons$end
+          tibble_startstop_entries_for_insertion[, "width"] <- L1_row_tibble_ref_gtf_startstop_codons$width
+          tibble_startstop_entries_for_insertion[, "strand"] <- L1_row_tibble_ref_gtf_startstop_codons$strand
+          tibble_startstop_entries_for_insertion[, "type"] <- L1_row_tibble_ref_gtf_startstop_codons$type
+        }
+        
+        return(tibble_startstop_entries_for_insertion)
+        
+      } )
+    
+    return(list_additional_exon_entries_ref_startstop_ont)
+    
+  }, .progress = TRUE ) ))
+
+list_2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries <- purrr::map(
+  .x = 1:length(list_2023_hmsc_ob_ont_gtf),
+  .f = function(a1) {
+    
+    dplyr::bind_rows(
+      list_2023_hmsc_ob_ont_gtf[[a1]],
+      purrr::map(
+        .x = list_startop_entries_for_insertion,
+        .f = ~.x[[a1]] ) %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% tibble::as_tibble()
+    ) %>% return
+    
+  }, .progress = TRUE ) 
+
+# some transcripts may have gotten more than one start or stop codon. only keep the earliest or latest one respectively.
+list_2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries <- purrr::pmap(
+  .l = list(
+    "a1" = list_2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries
+  ),
+  .f = function(a1) {
+    
+    # DEBUG ###
+    # a1 <- list_2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries[[1]]
+    ###########
+    
+    if (is.numeric(a1$exon_number) == FALSE) {
+      stop("exon_number column needs to be numeric")
+    }
+    
+    tibble_filtered_gtf <- list(
+      a1 %>% .[!.$type %in% c("start_codon", "stop_codon"), ],
+      a1[a1$type == "start_codon", ] %>% dplyr::group_split(transcript_id) %>% purrr::map(.f = ~.x[.x$exon_number == min(.x$exon_number), ] %>% .[1, ]),
+      a1[a1$type == "stop_codon", ] %>% dplyr::group_split(transcript_id) %>% purrr::map(.f = ~.x[.x$exon_number == min(.x$exon_number), ] %>% .[nrow(.), ])
+    ) %>%
+      purrr::reduce(dplyr::bind_rows)
+    
+    # only keep transcripts that have annotated start/stop codons
+    tibble_filtered_gtf <- tibble_filtered_gtf %>% .[.$transcript_id %in% (tibble_filtered_gtf %>% .[.$type %in% c("start_codon", "stop_codon"), ] %>% .$transcript_id %>% unique), ]
+    
+    return(tibble_filtered_gtf)
+    
+  }, .progress = TRUE )
+
+purrr::map2(
+  .x = list_2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries,
+  .y = purrr::map(.x = list_2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries, .f = ~.x$timepoint %>% unique) %>% unlist,
+  .f = ~rtracklayer::export(object = .x %>% dplyr::select(-contains("frame"), -contains("first_or_last")), con = paste(results_dir, "2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries_", .y, ".gtf", sep = ""), format = "gtf"), 
+    # data.table::fwrite(x = .x, file = paste(results_dir, "2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries_", .y, ".gtf", sep = ""), quote = FALSE, row.names = FALSE, col.names = TRUE)
+  .progress = TRUE
+)
+
+```
+
+### retrieve annotations for NMD
+
+```{r}
+
+list_2023_hmsc_ob_ont_gtf_annotated_nmd <- purrr::map(
+  .x = vector_2023_ont_timepoints_edited,
+  .f = ~rtracklayer::import(con = paste(nmd_classifier_dir, "2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries_", .x, ".gtf", sep = ""), format = "gtf") %>% tibble::as_tibble(), 
+    # data.table::fwrite(x = .x, file = paste(results_dir, "2023_hmsc_ob_ont_gtf_with_ref_inserted_startstop_entries_", .y, ".gtf", sep = ""), quote = FALSE, row.names = FALSE, col.names = TRUE)
+  .progress = TRUE
+)
+
+tibble_2023_hmsc_ob_ont_gtf_annotated_nmd <- list_2023_hmsc_ob_ont_gtf_annotated_nmd %>% data.table::rbindlist(use.names = TRUE) %>% tibble::as_tibble()
+
+list_psisigma_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_psisigma_differential_with_na_matched_to_ont.rds", sep = ""))
+list_psisigma_constitutive_matched_to_ont <- readRDS(file = paste(results_dir, "list_psisigma_constitutive_matched_to_ont.rds", sep = ""))
+list_jum_differential_with_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_jum_differential_with_na_matched_to_ont.rds", sep = ""))
+list_jum_constitutive_no_na_matched_to_ont <- readRDS(file = paste(results_dir, "list_jum_constitutive_no_na_matched_to_ont.rds", sep = ""))
+
+# get an NMD annotation for all matched splice events
+
+tibble_psisigma_differential_with_na_nmd_referenceguided <- purrr::map(
+  .x = list_psisigma_differential_with_na_matched_to_ont,
+  .f = function(a1) {
+    
+    if (length(a1$list_matched_ont_inclusion_entries) > 0) {
+      
+      return(
+        dplyr::bind_cols(
+          a1$splicing_data,
+          a1$list_matched_ont_inclusion_entries %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% .[, c("transcript_id_original", "timepoint")] %>% dplyr::rename("ont_matched_transcript_id" = "transcript_id_original", "ont_matched_timepoint" = "timepoint")
+        )
+      )
+      
+    } else {
+      return(a1$splicing_data[0,])
+      }
+      
+  } ) %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% tibble::as_tibble()
+
+tibble_psisigma_differential_with_na_nmd_referenceguided[which(tibble_psisigma_differential_with_na_nmd_referenceguided$introduces_PTC_for_any_matched_transcripts == TRUE), ] %>% dplyr::distinct(id, .keep_all = TRUE) %>% .$splicemode %>% table
+
+tibble_psisigma_constitutive_nmd_referenceguided <- purrr::map(
+  .x = list_psisigma_constitutive_matched_to_ont,
+  .f = function(a1) {
+    
+    if (length(a1$list_matched_ont_inclusion_entries) > 0) {
+      
+      return(
+        dplyr::bind_cols(
+          a1$splicing_data,
+          a1$list_matched_ont_inclusion_entries %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% .[, c("transcript_id_original", "timepoint")] %>% dplyr::rename("ont_matched_transcript_id" = "transcript_id_original", "ont_matched_timepoint" = "timepoint")
+        )
+      )
+      
+    } else {
+      return(a1$splicing_data[0,])
+      }
+      
+  } ) %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% tibble::as_tibble()
+
+tibble_psisigma_constitutive_nmd_referenceguided[which(tibble_psisigma_constitutive_nmd_referenceguided$introduces_PTC_for_any_matched_transcripts == TRUE), ] %>% dplyr::distinct(id, .keep_all = TRUE) %>% .$splicemode %>% table
+
+tibble_jum_differential_with_na_nmd_referenceguided <- purrr::map(
+  .x = list_jum_differential_with_na_matched_to_ont,
+  .f = function(a1) {
+    
+    if (length(a1$list_matched_ont_inclusion_entries) > 0) {
+      
+      return(
+        dplyr::bind_cols(
+          a1$splicing_data,
+          a1$list_matched_ont_inclusion_entries %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% .[, c("transcript_id_original", "timepoint")] %>% dplyr::rename("ont_matched_transcript_id" = "transcript_id_original", "ont_matched_timepoint" = "timepoint")
+        )
+      )
+      
+    } else {
+      return(a1$splicing_data[0,])
+      }
+      
+  } ) %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% tibble::as_tibble()
+
+tibble_jum_differential_with_na_nmd_referenceguided[which(tibble_jum_differential_with_na_nmd_referenceguided$any_NMD == TRUE), ] %>% dplyr::distinct(AS_event_ID, sub_junction_start_coor, sub_junction_end_coor, .keep_all = TRUE) %>% .$splicemode %>% table
+
+tibble_jum_constitutive_nmd_referenceguided <- purrr::map(
+  .x = list_jum_constitutive_no_na_matched_to_ont,
+  .f = function(a1) {
+    
+    if (length(a1$list_matched_ont_inclusion_entries) > 0) {
+      
+      return(
+        dplyr::bind_cols(
+          a1$splicing_data,
+          a1$list_matched_ont_inclusion_entries %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% .[, c("transcript_id_original", "timepoint")] %>% dplyr::rename("ont_matched_transcript_id" = "transcript_id_original", "ont_matched_timepoint" = "timepoint")
+        )
+      )
+      
+    } else {
+      return(a1$splicing_data[0,])
+      }
+      
+  } ) %>% data.table::rbindlist(use.names = TRUE, fill = TRUE) %>% tibble::as_tibble()
+
+tibble_jum_constitutive_nmd_referenceguided[which(tibble_jum_constitutive_nmd_referenceguided$any_NMD == TRUE), ] %>% dplyr::distinct(AS_event_ID, sub_junction_start_coor, sub_junction_end_coor, .keep_all = TRUE) %>% .$splicemode %>% table
+
+```
+
+## Do NMD analysis - de novo
 
 ### Validation of translation fidelity against reference GTF
 
@@ -10226,12 +10343,6 @@ list_psisigma_differential_with_na_nmd_results <- purrr::map(
     tibble_exclusion_transcript_entries <- a1$list_matched_ont_exclusion_transcript_entries %>% dplyr::bind_rows()
     
   } )
-
-list_psisigma_constitutive_matched_to_ont
-list_jum_differential_with_na_matched_to_ont
-list_jum_constitutive_no_na_matched_to_ont
-list_majiq_differential_with_na_matched_to_ont
-list_majiq_constitutive_matched_to_ont
 
 ```
 

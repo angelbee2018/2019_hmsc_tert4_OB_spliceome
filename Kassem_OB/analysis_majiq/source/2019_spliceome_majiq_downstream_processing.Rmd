@@ -1102,8 +1102,8 @@ list_majiq_psi_filtered_by_read_counts <- furrr::future_map2(
       split_delimited_columns_in_table(input_table = ., target_colname = c(colnames(tibble_gene_names)[grep(x = colnames(tibble_gene_names), pattern = "psi", ignore.case = FALSE)], "junctions_coords"), split = "\\;")
       
     long_tibble1 <- dplyr::bind_rows(
-      long_tibble0[!is.na(long_tibble0$`ir_coords`), ] %>% .[.$`ir_coords` %>% is.na == FALSE, ] %>% dplyr::select(-`junctions_coords`) %>% dplyr::mutate("junc_or_IR" = "IR") %>% dplyr::rename("junc_IR_coords" = "ir_coords"),
-      long_tibble0[!is.na(long_tibble0$`ir_coords`), ] %>% dplyr::select(-`ir_coords`) %>% dplyr::mutate("junc_or_IR" = "junc") %>% dplyr::rename("junc_IR_coords" = "junctions_coords")
+      long_tibble0[!is.na(long_tibble0$`ir_coords`), ] %>% dplyr::select(-`junctions_coords`) %>% dplyr::mutate("junc_or_IR" = "IR") %>% dplyr::rename("junc_IR_coords" = "ir_coords"),
+      long_tibble0 %>% dplyr::select(-`ir_coords`) %>% dplyr::mutate("junc_or_IR" = "junc") %>% dplyr::rename("junc_IR_coords" = "junctions_coords")
     )
     
     plan(list(tweak(multicore, workers = 8)))

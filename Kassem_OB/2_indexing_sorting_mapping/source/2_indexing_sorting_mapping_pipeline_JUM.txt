@@ -1,0 +1,79 @@
+module load star/2.7.2b
+module load samtools/1.9
+
+# specify parent directory for all mapping in scratch (this folder should already contain folders fastq_gz/fastq, mapping_pass_1, mapping_pass_2, aligned_bam.
+PGNEXUS_kassem_OB_data_dir="/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_OB/"
+
+genomeDir="/srv/scratch/z3463471/hg38_ensembl_reference/STAR_index/"
+
+# specify (home directory) folder with all the source and results code. should contain folders: 1_prefetch, 2_indexing_sorting_mapping, analysis_JUM. Should contain files: annotated_fastqnames_replicatenumber.txt, annotated_fastqnames_replicatenumber_pairnumber.txt, annotated_fastqnames_replicatenumber_underscore.txt
+sampleandaccessionlists="/home/z3463471/PGNEXUS_kassem_MSC/OB/"
+
+replicate_name_list_underscore=$sampleandaccessionlists"annotated_fastqnames_replicatenumber_underscore.txt"
+fastq_gz_dir="/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_OB/fastq_gz/"
+
+## INDEXING - ONLY NEEDS TO BE DONE ONCE!!
+
+#STAR --runThreadN 8 --genomeDir /srv/scratch/z3463471/hg38_ensembl_reference/raw_genome_fasta --runMode genomeGenerate \
+#--genomeFastaFiles /srv/scratch/z3463471/hg38_ensembl_reference/fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+#--sjdbGTFfile /srv/scratch/z3463471/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf --sjdbOverhang 99 --outTmpDir $TMPDIR/star
+
+# preparation for firstpassmapping
+# generating text files of SAMPLE names to loop through
+
+ls $fastq_gz_dir*"fastq.gz" > $sampleandaccessionlists"fastq_gz_filenames.txt"
+
+fastq_gz_filenames=$sampleandaccessionlists"fastq_gz_filenames.txt"
+
+# sample match must be changed
+sed -e 's/_r[0-9]_pair[1-2].fastq.gz//g' $fastq_gz_filenames | sort -u > $sampleandaccessionlists"sample_name_list.txt"
+
+sample_name_list=$sampleandaccessionlists"sample_name_list.txt"
+
+cat $replicate_name_list_underscore
+
+echo $(cat $replicate_name_list_underscore | wc -l) samples extracted, each come in pairs.
+
+cat $sample_name_list
+
+echo $(cat $sample_name_list | wc -l) timepoints extracted.
+
+# FIRST PASS MAPPING ###
+
+cd $fastq_gz_dir
+
+for rawfastqfile in $(cat $replicate_name_list_underscore); do zcat $rawfastqfile"pair1.fastq.gz" > $rawfastqfile"pair1.fastq"; zcat $rawfastqfile"pair2.fastq.gz" > $rawfastqfile"pair2.fastq"; STAR --runThreadN 10 --genomeDir $genomeDir --outSJfilterReads Unique --outFileNamePrefix $PGNEXUS_kassem_OB_data_dir"mapping_pass_1/"$rawfastqfile --readFilesIn $fastq_gz_dir$rawfastqfile"pair1.fastq" $fastq_gz_dir$rawfastqfile"pair2.fastq" --outTmpDir $TMPDIR/star; rm $rawfastqfile"pair1.fastq" -f; rm $rawfastqfile"pair2.fastq" -f; done
+
+### concatenate all the *SJ.out.tab files
+
+cat $PGNEXUS_kassem_OB_data_dir"mapping_pass_1/"*"SJ.out.tab" > $PGNEXUS_kassem_OB_data_dir"mapping_pass_2/total_SJ.out.tab"
+
+total_SJ=$PGNEXUS_kassem_OB_data_dir"mapping_pass_2/total_SJ.out.tab"
+
+rm $PGNEXUS_kassem_OB_data_dir"mapping_pass_1/"*
+
+# SECOND PASS MAPPING ###
+
+# loop through each replicate each command
+
+for rawfastqfile in $(cat $replicate_name_list_underscore); do zcat $rawfastqfile"pair1.fastq.gz" > $rawfastqfile"pair1.fastq"; zcat $rawfastqfile"pair2.fastq.gz" > $rawfastqfile"pair2.fastq"; STAR --runThreadN 10 --genomeDir $genomeDir --outSJfilterReads Unique --outSAMstrandField intronMotif --outFilterMultimapNmax 1 --sjdbFileChrStartEnd $total_SJ --outFileNamePrefix $PGNEXUS_kassem_OB_data_dir"mapping_pass_2/"$rawfastqfile --readFilesIn $fastq_gz_dir$rawfastqfile"pair1.fastq" $fastq_gz_dir$rawfastqfile"pair2.fastq" --outTmpDir $TMPDIR/star; rm $rawfastqfile"pair1.fastq" -f; rm $rawfastqfile"pair2.fastq" -f; done
+
+# SORTING ###
+
+# sed -e 's/.fastq//g' $fastq_gz_filenames > $sampleandaccessionlists"annotated_fastq_bulkRNASeq_names.txt"
+
+replicate_name_list=$sampleandaccessionlists"annotated_fastqnames_replicatenumber.txt"
+
+# annotated_fastq_bulkRNASeq_names=$sampleandaccessionlists"annotated_fastq_bulkRNASeq_names.txt"
+
+cd $PGNEXUS_kassem_OB_data_dir"mapping_pass_2/"
+
+for filename in $(cat $replicate_name_list); do
+samtools view -bS $filename"_Aligned.out.sam" > $filename"_Aligned.out.bam"
+samtools sort -o $filename"_Aligned.out_sorted.bam" -T $filename"_temp" $filename"_Aligned.out.bam" 
+samtools index $filename"_Aligned.out_sorted.bam"
+done
+
+rm *Aligned.out.bam
+mv *Aligned.out_sorted.bam $PGNEXUS_kassem_OB_data_dir"aligned_bam/"
+

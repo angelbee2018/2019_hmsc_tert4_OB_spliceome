@@ -1,0 +1,99 @@
+# Deal with environment
+ulimit -n 65535
+ulimit -s 16384
+
+conda deactivate
+
+export LD_LIBRARY_PATH=/home/angel/miniconda3/envs/htslib_1.15/lib:/home/angel/miniconda3/lib
+export HTSLIB_LIBRARY_DIR=/home/angel/miniconda3/envs/htslib_1.15/lib:/home/angel/miniconda3/lib
+export HTSLIB_INCLUDE_DIR=/home/angel/miniconda3/envs/htslib_1.15/include:/home/angel/miniconda3/include
+
+# Specify directories
+
+STAR_output_dir="/mnt/scratch/2019_hmsc_spliceome/2_STAR/"
+
+majiq_output_dir="/mnt/scratch/2019_hmsc_spliceome/3_MAJIQ/"
+
+mkdir -p $majiq_output_dir
+
+#samtools_path="/mnt/LTS/tools/samtools-0.1.19/samtools"
+#sudo ln -s $samtools_path /usr/bin/samtools
+
+# ref_gtf_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.sorted.gtf"
+ref_gff_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gff/Homo_sapiens.GRCh38.98.gff3"
+
+majiq_package_dir=/mnt/LTS/tools/majiq/
+
+moccasin_path=/mnt/LTS/tools/moccasin/moccasin.py
+
+cd $majiq_package_dir
+
+python3 -m venv env
+
+source env/bin/activate
+
+#pip install git+https://bitbucket.org/biociphers/majiq_academic.git#egg=majiq
+
+# STEP 1: the study configuration file for the whole Atlas should have been made in R already.
+
+# STEP 2: MAJIQ-BUILD
+cd $majiq_output_dir
+
+majiq build $ref_gff_path --minreads 5 --minpos 2 --min-experiments 0.1 --min-denovo 5 --permissive --dump-coverage -c 2019_hmsc_spliceome_study_configuration.txt --output build_groups -j 96
+
+# STEP 3: MOCCASIN
+deactivate
+# conda activate python39
+
+cd $majiq_output_dir
+
+python3 $moccasin_path -J 16 2019_msc_spliceome_batch_info_for_moccasin.txt build_groups/ build_groups_moccasin/ temp_replicate_names1 temp_replicate_names2 temp_replicate_names3
+
+# STEP 4: MAJIQ-PSI
+conda deactivate
+
+cd $majiq_package_dir
+
+python3 -m venv env
+
+source env/bin/activate
+
+cd $majiq_output_dir
+
+## raw
+parallel -N 1 -j 96 --link --round-robin --ungroup 'majiq psi --minreads 5 --minpos 2 --min-experiments 1 {1} --output psi_raw/ --name $(echo {1} | sed "s/build\_groups\/\(.*\)\_Aligned\.sortedByCoord\.out\.majiq/\1/g") -j 1' \
+::: $(ls build_groups/*.majiq)
+## moccasin
+parallel -N 1 -j 96 --link --round-robin --ungroup 'majiq psi --minreads 5 --minpos 2 --min-experiments 1 {1} --output psi_moccasin/ --name $(echo {1} | sed "s/build\_groups\_moccasin\/\(.*\)\_Aligned\.sortedByCoord\.out\.scf\_adjusted\.majiq/\1/g") -j 1' \
+::: $(ls build_groups_moccasin/*.majiq)
+
+cd $majiq_output_dir"psi_raw/"
+## reannotate using voila
+parallel --round-robin -N 1 -j 96 --link --ungroup "voila tsv {1}"build_groups/splicegraph.sql" {1}"psi_raw/"{2} --show-all -f {1}"psi_raw/"{3}" \
+::: $majiq_output_dir \
+::: $(ls *.psi.voila) \
+::: $(ls *.psi.voila | sed 's/psi\.voila/psi_fixed.tsv/g')
+
+# STEP 5: VOILA
+voila view $majiq_output_dir"build_groups/splicegraph.sql" $majiq_output_dir"psi_raw/BM_MSC_to_OB_12d_B2.psi.voila"
+
+# STEP 6: delta PSI
+cd $majiq_output_dir"build_groups"
+
+tempcommand1=$(ls *.majiq | sed 's/BM\_MSC\_to\_OB\_\(.*\)\_B.\_Aligned.*/"\1"/g' | sort -u | paste -s -d, -)
+
+## retrieve pariwise comparison names
+R -q -s -e "suppressMessages(library(tidyverse)); combn(x = c($tempcommand1), m = 2) %>% .[1, ] %>% cat"
+R -q -s -e "suppressMessages(library(tidyverse)); combn(x = c($tempcommand1), m = 2) %>% .[2, ] %>% cat"
+
+parallel --round-robin -N 1 -j 96 --link --ungroup "majiq deltapsi -grp1 $majiq_output_dir"build_groups/BM_MSC_to_OB_"{1}"_B1_Aligned.sortedByCoord.out.majiq" $majiq_output_dir"build_groups/BM_MSC_to_OB_"{1}"_B2_Aligned.sortedByCoord.out.majiq" $majiq_output_dir"build_groups/BM_MSC_to_OB_"{1}"_B3_Aligned.sortedByCoord.out.majiq" -grp2 $majiq_output_dir"build_groups/BM_MSC_to_OB_"{2}"_B1_Aligned.sortedByCoord.out.majiq" $majiq_output_dir"build_groups/BM_MSC_to_OB_"{2}"_B2_Aligned.sortedByCoord.out.majiq" $majiq_output_dir"build_groups/BM_MSC_to_OB_"{2}"_B3_Aligned.sortedByCoord.out.majiq" --minreads 5 --minpos 2 --min-experiments 1 --names {1} {2} --output $majiq_output_dir"deltapsi/" --logger $majiq_output_dir"deltapsi/"{1}"_vs_"{2}"."" \
+::: $(R -q -s -e "suppressMessages(library(tidyverse)); combn(x = c($tempcommand1), m = 2) %>% .[1, ] %>% cat") \
+::: $(R -q -s -e "suppressMessages(library(tidyverse)); combn(x = c($tempcommand1), m = 2) %>% .[2, ] %>% cat")
+
+## reannotate with differential dpsi cutoff of 0.15
+cd $majiq_output_dir"deltapsi/"
+
+parallel --round-robin -N 1 -j 96 --link --ungroup "voila tsv {1}"build_groups/splicegraph.sql" {1}"deltapsi/"{2} --show-all --non-changing-threshold 0.05 --threshold 0.15 -f {1}"deltapsi/"{3}" \
+::: $majiq_output_dir \
+::: $(ls *.deltapsi.voila) \
+::: $(ls *.deltapsi.voila | sed 's/deltapsi\.voila/deltapsi_0.15.tsv/g')

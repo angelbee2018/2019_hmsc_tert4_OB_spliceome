@@ -1,0 +1,55 @@
+# SET VARIABLES
+
+raw_fastq_dir="/mnt/scratch/data/2023_hmsc_ob_ont/PKVPXF230199_pass/PKVPXF230199/"
+
+trimmomatic_output_dir="/mnt/scratch/2023_hmsc_ob_ont/1_trimmomatic/"
+
+minimap_output_dir="/mnt/scratch/2023_hmsc_ob_ont/2_minimap/"
+
+stringtie_output_dir="/mnt/scratch/2023_hmsc_ob_ont/3_stringtie/"
+
+mkdir -p $stringtie_output_dir
+
+short_read_bamfile_dir="/mnt/scratch/2019_hmsc_spliceome/2_STAR/"
+
+ulimit -n 65535
+
+# STRINGTIE
+
+## straight long reads
+
+conda activate base
+
+cd $minimap_output_dir
+
+for bamfile in $(ls *sorted.bam); do stringtie -p 32 -L $bamfile -o $stringtie_output_dir$(echo $bamfile | sed 's/\.sorted\.bam/\.gtf/g') & done
+
+## mixed with 2012 PGNEXUS short read paired end data
+
+cd $minimap_output_dir
+
+parallel --link -j 96 -N 1 --round-robin --ungroup ' \
+samtools merge -@ 32 {4}BM_MSC_to_OB_{1}_Aligned.merged.bam {4}BM_MSC_to_OB_{1}_B1_Aligned.sortedByCoord.out.bam {4}BM_MSC_to_OB_{1}_B2_Aligned.sortedByCoord.out.bam {4}BM_MSC_to_OB_{1}_B3_Aligned.sortedByCoord.out.bam; \
+samtools sort -@ 32 {4}BM_MSC_to_OB_{1}_Aligned.merged.bam {4}BM_MSC_to_OB_{1}_Aligned.sorted.merged' \
+::: ud 6h 24h 3d 9d 12d \
+::: barcode01 barcode02 barcode03 barcode04 barcode05 barcode06 \
+::: $minimap_output_dir \
+::: $short_read_bamfile_dir \
+::: $stringtie_output_dir
+
+parallel --link -j 96 -N 1 --round-robin --ungroup ' \
+stringtie -p 32 -L $bamfile -o {5}PKVPXF230199_pass_{2}.mixed_pgnexus.gtf --mix {4}BM_MSC_to_OB_{1}_Aligned.sorted.merged.bam {3}PKVPXF230199_pass_{2}.sorted.bam' \
+::: ud ud 6h 6h 24h 24h 3d 3d 9d 9d 12d 12d \
+::: barcode01 barcode01.trimmed barcode02 barcode02.trimmed barcode03 barcode03.trimmed barcode04 barcode04.trimmed barcode05 barcode05.trimmed barcode06 barcode06.trimmed \
+::: $minimap_output_dir \
+::: $short_read_bamfile_dir \
+::: $stringtie_output_dir
+
+; \
+rm {4}BM_MSC_to_OB_{1}_Aligned.sortedByCoord.out.merged.bam
+
+
+
+
+
+

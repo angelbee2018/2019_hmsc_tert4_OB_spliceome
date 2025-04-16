@@ -1,0 +1,41 @@
+# SET VARIABLES
+
+raw_fastq_dir="/mnt/scratch/data/2023_hmsc_ob_ont/PKVPXF230199_pass/PKVPXF230199/"
+
+trimmomatic_output_dir="/mnt/scratch/2023_hmsc_ob_ont/1_trimmomatic/"
+
+minimap_output_dir="/mnt/scratch/2023_hmsc_ob_ont/2_minimap/"
+
+mkdir -p $minimap_output_dir
+
+reference_fasta_path="/mnt/LTS/reference_data/hg38_ensembl_reference/raw_genome_fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+
+ulimit -n 65535
+
+# MINIMAP2
+
+conda activate base
+
+## try with raw, untrimmed reads first
+for fastqfile in $(ls $raw_fastq_dir*.fastq.gz); do minimap2 -ax splice -t 16 $reference_fasta_path $fastqfile > $minimap_output_dir$(echo $fastqfile | sed "s|$raw_fastq_dir||g" | sed 's/\.fastq\.gz/.sam/g') & done
+
+for fastqfile in $(ls $trimmomatic_output_dir*.fastq.gz); do minimap2 -ax splice -t 16 $reference_fasta_path $fastqfile > $minimap_output_dir$(echo $fastqfile | sed "s|$trimmomatic_output_dir||g" | sed 's/\.fastq\.gz/.sam/g') & done
+
+# convert to .bam and index
+conda activate psisigma
+
+cd $minimap_output_dir
+
+for samfile in $(ls *.sam); do samtools view -bS -@ 16 $samfile > $(echo $bamfile | sed 's/\.sam/\.bam/g') & done
+
+for bamfile in $(ls *.bam); do samtools sort -o $(echo $bamfile | sed 's/\.bam/\.sorted.bam/g') -T $bamfile"_temp" -@ 16 $bamfile & done
+
+for bamfile in $(ls *sorted.bam); do samtools index -@ 16 $bamfile & done
+
+
+
+
+
+
+
+

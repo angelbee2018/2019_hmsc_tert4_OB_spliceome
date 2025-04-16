@@ -1,0 +1,58 @@
+#!/bin/bash
+
+#PBS -N PSIsigma_PGNEXUS_kassem_AD_alltimeseries
+#PBS -l select=1:ncpus=4:mem=60gb
+#PBS -l walltime=108:00:00
+#PBS -j oe
+#PBS -k eod
+#PBS -o /home/z3463471/PGNEXUS_kassem_MSC/AD/analysis_PSIsigma/run_1_AD_timeseries/results/
+#PBS -M z3463471@ad.unsw.edu.au
+#PBS -m ae
+
+# language: timepoint = timepoint. replicate = technical replicate.
+
+module load samtools/1.10
+module load bedtools/2.27.1
+module load R/3.6.1
+module load perl/5.28.0
+
+data_dir="/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_AD/"
+bam_bai_SJ_and_sam_files_dir="/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_AD/bam_bai_sj_sam_files/"
+
+# THIS CODE EXPECTS YOU TO HAVE PUT THE BAM BAI SJ SAM FILES INTO THE AFOREMENTIONED DIRECTORY BEFOREHAND
+# NOTE: DO NOT EVER PUT BAM BAI SJ SAM FILES THAT YOU ARE NOT GOING TO ANALYSE INTO THE FOLDER. THE PROGRAMS IS REALLY DUMB AND WILL ATTEMPT TO PROCESS THAT ANYWAYS BUT FAIL MISERABLY
+# expect that the bam bai sj sam files relevant to the analysis folder ONLY AND NOTHING ELSE is placed into this folder
+
+reference_gtf_path="/srv/scratch/z3463471/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.sorted.gtf"
+refFlat_dir="/srv/scratch/z3463471/hg38_ensembl_reference/"
+
+PSIsigma_package_dir="/home/z3463471/isoform_software/PSIsigma_1.0/"
+source_dir="/home/z3463471/PGNEXUS_kassem_MSC/AD/analysis_PSIsigma/run_1_AD_timeseries/source/"
+
+results_dir="/srv/scratch/z3463471/PGNEXUS_kassem_MSC/Kassem_AD/results_PSIsigma/"
+mkdir $results_dir
+
+sampleandaccessionlists="/home/z3463471/PGNEXUS_kassem_MSC/AD/"
+
+sample_name_list=$sampleandaccessionlists"annotated_fastqnames_replicatenumber.txt"
+comparison_name_list=$sampleandaccessionlists"list_of_timepoint_comparisons_final.txt"
+
+# STEP 1: create symbolic links to bam bai sj sam files]
+
+cd $results_dir
+
+ln -s $bam_bai_SJ_and_sam_files_dir*".bam"* .
+ln -s $bam_bai_SJ_and_sam_files_dir*"SJ."* .
+
+# STEP 2: do PSI-Sigma:
+# a) create subdirectory containing name of comparison
+# b) enter comparison subdirectory
+# c) create groupa.txt and groupb.txt
+# d) run dummyai.pl
+
+#### MAYBE WE DONT HAVE TO CREATE SEPARATE DIR. AFTER ALL
+# for comparisonname in $(cat list_of_timepoint_comparisons_final); do mkdir $comparisonname; cd $comparisonname; ls $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1*.SJ*/g') > groupa.txt; ls $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\3*.SJ*/g') > groupb.txt; perl $PSIsigma_package_dir"dummyai.pl" --gtf $reference_gtf_path --name $comparisonname --type 1 -nread 5; cd ..; done
+
+# CAN START FROM STEP C)
+for comparisonname in $(cat $comparison_name_list); do ls $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\1/g')* > groupa.txt; ls $(echo $comparisonname | sed -e 's/\(.*\)\(_vs_\)\(.*\)/\3/g')* > groupb.txt; perl $PSIsigma_package_dir"dummyai.pl" $(echo $reference_gtf_path) $results_dir$comparisonname 1 5; done
+

@@ -1,0 +1,49 @@
+
+module load rnastar/2.7.2b
+module load samtools/0.1.19
+
+# specify parent directory for all mapping in scratch (this folder will house the folders fastq_gz/fastq, mapping_pass_1, mapping_pass_2, aligned_bam.
+PGNEXUS_kassem_OB_data_dir="/mnt/scratch/2019_hmsc_spliceome/"
+
+genomeDir="/mnt/LTS/reference_data/hg38_ensembl_reference/STAR_index/"
+
+# specify (home directory) folder with all the source and results code. should contain folders: 1_prefetch, 2_indexing_sorting_mapping, analysis_JUM. Should contain files: annotated_fastqnames_replicatenumber.txt, annotated_fastqnames_replicatenumber_pairnumber.txt, annotated_fastqnames_replicatenumber_underscore.txt
+sampleandaccessionlists="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/"
+
+#replicate_name_list_underscore=$sampleandaccessionlists"annotated_fastqnames_replicatenumber_underscore.txt"
+fastq_gz_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/fastq_gz/"
+
+## INDEXING - ONLY NEEDS TO BE DONE ONCE!!
+
+#STAR --runThreadN 8 --genomeDir /srv/scratch/z3463471/hg38_ensembl_reference/raw_genome_fasta --runMode genomeGenerate \
+#--genomeFastaFiles /srv/scratch/z3463471/hg38_ensembl_reference/fasta/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+#--sjdbGTFfile /srv/scratch/z3463471/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.gtf --sjdbOverhang 99 --outTmpDir $TMPDIR/star
+
+# preparation for firstpassmapping
+# generating text files of SAMPLE names to loop through
+
+ls $fastq_gz_dir*"fastq.gz" > $sampleandaccessionlists"sample_name_list.txt"
+ls $fastq_gz_dir*"fastq.gz" | sed 's/.*\/\(.*\)/\1/g' > $sampleandaccessionlists"fastq_gz_filenames.txt"
+ls $fastq_gz_dir*"fastq.gz" | sed 's/.*\/\(.*\)/\1/g' | sed 's/\(.*\_B.\)_R.*/\1_/g' | sort -u > $sampleandaccessionlists"replicate_name_list_underscore.txt"
+
+sample_name_list=$sampleandaccessionlists"sample_name_list.txt"
+fastq_gz_filenames=$sampleandaccessionlists"fastq_gz_filenames.txt"
+replicate_name_list_underscore=$sampleandaccessionlists"replicate_name_list_underscore.txt"
+replicate_name_list_fullstop=$sampleandaccessionlists"replicate_name_list_fullstop.txt"
+replicate_name_list_nothing=$sampleandaccessionlists"replicate_name_list_nothing.txt"
+
+echo $(cat $replicate_name_list_fullstop | wc -l) samples extracted, each come in pairs.
+
+cat $sample_name_list
+
+echo $(cat $sample_name_list | wc -l) timepoints extracted.
+
+# 2-PASS MAPPING ###
+
+cd $fastq_gz_dir
+
+mkdir -p $PGNEXUS_kassem_OB_data_dir"2_STAR_0.1.19/"
+
+for rawfastqfile in $(cat $replicate_name_list_nothing); do (STAR --readFilesCommand zcat --runThreadN 8  --outSAMtype BAM SortedByCoordinate --outSAMstrandField intronMotif --outSJfilterReads Unique --outFilterIntronMotifs RemoveNoncanonical --outFilterMultimapNmax 1 --genomeDir $genomeDir --twopassMode Basic --readFilesIn $rawfastqfile"_R1.fastq.gz" $rawfastqfile"_R2.fastq.gz" --outFileNamePrefix $PGNEXUS_kassem_OB_data_dir"2_STAR_0.1.19/"$rawfastqfile"."; samtools index $PGNEXUS_kassem_OB_data_dir"2_STAR_0.1.19/"$rawfastqfile".Aligned.sortedByCoord.out.bam") & done
+
+

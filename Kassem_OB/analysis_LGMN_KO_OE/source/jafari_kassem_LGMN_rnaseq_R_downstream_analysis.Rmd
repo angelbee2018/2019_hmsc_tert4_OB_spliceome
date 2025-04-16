@@ -1,5 +1,5 @@
 ---
-title: "2020 RNA Atlas (total RNA, splicing): Downstream PSI-Sigma analysis"
+title: "Jafari/Kassem LGMN KO/OE downstream PSI-Sigma analysis"
 author: "Angel Liang"
 date: "09/02/2021"
 output: html_document
@@ -17,15 +17,17 @@ library(RColorBrewer)
 library(data.table)
 data.table::setDTthreads(threads = 48)
 
-library(future.apply)
-library(furrr)
-options(future.globals.maxSize = 1500000000000, future.fork.enable = TRUE)
-plan(multiprocess)
-memory.limit(100000)
+# library(future.apply)
+# library(furrr)
+# options(future.globals.maxSize = 1500000000000, future.fork.enable = TRUE)
+# plan(multiprocess)
+# memory.limit(100000)
 
 library(rtracklayer)
 
 library(ggplot2)
+
+source("/mnt/LTS/tools/angel_suite/source/main_source.R")
 
 source_dir <- "/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_LGMN_KO_OE/source/"
 
@@ -42,723 +44,14 @@ bam_bai_sj_sam_dir <- "/mnt/scratch/jafari_kassem_LGMN_rnaseq/2_star/"
 
 reference_data_dir <- "/mnt/LTS/reference_data/"
 
+psisigma_results_dir_kd <- "/mnt/scratch/jafari_kassem_LGMN_rnaseq/3_psisigma/LGMN_KD_minus_ctrl"
+psisigma_results_dir_oe <- "/mnt/scratch/jafari_kassem_LGMN_rnaseq/3_psisigma/LGMN_OE_minus_ctrl"
+
+vector_experiment_tag <- c("jafari_kassem_lgmn", "rnaseq", "psisigma")
+
 # import the reference and recon GTFs with first/last exon information as well as flaggged NMD info.
 # tibble_ref_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/Homo_sapiens.GRCh38.98_NMD_PTC_E4.gtf") %>% as_tibble
 # tibble_recon_gtf <- rtracklayer::import("/mnt/Tertiary/sharedfolder/PGNEXUS_kassem_MSC/Kassem_OB/analysis_NMD_classifier/results/alltimepoints_denovo_reconstructed_stringtiemerged_NMD_PTC_E4.gtf") %>% as_tibble
-
-```
-
-## define functions
-
-### function to split a whole table by a delimiter in a column
-
-```{r}
-
-split_delimited_column_in_table <- function(input_table, target_colname, split, columns_to_deduplicate = NULL) {
-  
-  # DEBUG ###
-  # input_table <- tibble_phosphosites_with_protein_group_ids
-  # target_colname <- "Protein.group.IDs"
-  # split = "\\;"
-  # columns_to_deduplicate <- c("id", "1h_vs_ud|IB")
-  ###########
-  
-  # list-ify the target column
-  list_target_column_strsplit_per_element <- input_table[, target_colname] %>% unlist %>% strsplit(., split = split)
-  
-  # map length
-  vector_split_lengths <- list_target_column_strsplit_per_element %>% purrr::map(~length(.x)) %>% unlist(use.names = FALSE)
-  
-  # repeat table according to the split lengths
-  row_indices_of_table_repeated_by_split <- rep(x = 1:nrow(input_table), times = vector_split_lengths)
-  
-  input_table_repeated_by_split <- input_table[row_indices_of_table_repeated_by_split, ]
-  
-  # replace target column with split values
-  input_table_repeated_by_split[, target_colname] <- list_target_column_strsplit_per_element %>% unlist(use.names = FALSE)
-  
-  split_table <- input_table_repeated_by_split
-  
-  # if specified, append an index to a particular column
-  if (is.null(columns_to_deduplicate) == FALSE) {
-    
-    # get the duplicated row indices where split lengths > 1
-    indices_of_duplicates <- which(vector_split_lengths > 1)
-    
-    # get the repetition number where split lengths > 1
-    repetition_numbers_of_duplicates <- vector_split_lengths[which(vector_split_lengths > 1)]
-    
-    # list-ify the columns to be appended
-    list_deduplicated_columns <- input_table[, columns_to_deduplicate] %>% array_tree(margin = 2) %>% purrr::map(~array_tree(.x))
-    
-    # map over each column, split the target element and add _[0-9]+
-    list_deduplicated_columns_split <- purrr::map(.x = list_deduplicated_columns, .f = function(a1) {
-      
-      # map a subset each of the L2 (elements of a column)
-      a1[indices_of_duplicates] <- purrr::map2(.x = a1[indices_of_duplicates], .y = repetition_numbers_of_duplicates, 
-                  .f = ~rep(.x, times = .y) %>% unlist %>% paste(., 1:.y, sep = "_"))
-      
-      return(a1 %>% unlist)
-      
-    } )
-    
-    # tibblise
-    tibble_deduplicated_columns_split <- list_deduplicated_columns_split %>% as_tibble
-    
-    # add back every row onto the split table
-    for (dedupe_colname in columns_to_deduplicate) {
-      
-      split_table[, dedupe_colname] <- tibble_deduplicated_columns_split[, dedupe_colname]
-      
-    }
-    
-  }
-  
-  return(split_table %>% type_convert)
-  
-}
-
-```
-
-### Enrichment/Gene Ontology
-
-```{r}
-
-# function to do Benjamini-Hochberg FDR correction for Gene Ontology output tables from GOHyperGall
-
-## takes the output of the GOHyperGall GO enrichment table and over-writes the Padj column with benjamini-corrected values from the Phyper column
-## spits out the resulting table with modified single column.
-
-## NOTE: BENJAMINI PVALUES ABOVE 0.05 ARE RENAMED NA
-
-GOHyperGAll_benjamini_correction <- function(raw_GOHyperGAll_table)
-
-  {
-  
-  benjamini_GOHyperGAll_table <- raw_GOHyperGAll_table
-  
-  benjamini_GOHyperGAll_table <- benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$SampleMatch > 1, ]
-  
-  if (benjamini_GOHyperGAll_table %>% nrow == 0) {
-    benjamini_GOHyperGAll_table <- tibble()
-  } else {
-    benjamini_GOHyperGAll_table[, "Padj"] <- p.adjust(p = benjamini_GOHyperGAll_table[, "Phyper"], method = "BH", n = length(benjamini_GOHyperGAll_table[, "Phyper"]))
-    
-    # benjamini_GOHyperGAll_table[benjamini_GOHyperGAll_table$Padj > 0.05, "Padj"] <- NA
-  }
-
-  return(benjamini_GOHyperGAll_table)
-  
-  }
-
-# the equivalent for bc3net::enrichment() output table
-
-bc3net_benjamini_correction <- function(raw_bc3net_table)
-
-  {
-  
-  benjamini_bc3net_table <- raw_bc3net_table
-  
-  benjamini_bc3net_table_processed <- benjamini_bc3net_table[benjamini_bc3net_table$genes > 1, ]
-  
-  if (nrow(benjamini_bc3net_table_processed) != 0) {
-  
-  benjamini_bc3net_table_processed[, "padj"] <- p.adjust(p = benjamini_bc3net_table_processed[, "pval"], method = "BH", n = length(benjamini_bc3net_table_processed[, "pval"]))
-  
-  # benjamini_bc3net_table_processed[benjamini_bc3net_table_processed$padj > 0.05, "padj"] <- NA
-  
-  } else {
-    
-    benjamini_bc3net_table_processed <- benjamini_bc3net_table
-    
-    benjamini_bc3net_table_processed[, "padj"] <- NA
-    
-  }
-  
-  return(benjamini_bc3net_table_processed)
-  
-}
-
-# bc3net::enrichment() does not show captured genes for each family enriched, so we have to add it in. but in doing so, i want to avoid a purrr within a purrr
-
-# this function selects genes from the background in each family which are ONLY input genes.
-
-filtering_genehits_from_background_catalogue <- function(catalogue, genehit_vector){
-  
-  filtered_catalogue <- purrr::map(.x = catalogue, .f = ~intersect(.x, genehit_vector))
-  
-  return(filtered_catalogue)
-  
-}
-
-```
-
-```{r}
-
-# FUNCTION TO EXTRACT TRANSCRIPTS WITH JUNCTION-FLANKING EXONS.
-# NOTE: to be used with purrr
-# details of ONE junction: $chr, $start, $end, $strand
-# tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
-# index: loop progress marker to be used with imap
-
-extract_junction.flanking.exons <- function(query_chr, query_start, query_end, query_strand, tibble_gtf_table, tolerance_left = 1, tolerance_right = 1, tolerance_inside = 1, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon") {
-  
-  # DEBUG ###
-  # query_chr = b1$chr
-  # query_start = b1$vector_alt_segment_starts
-  # query_end = b1$vector_alt_segment_ends
-  # query_strand = "*"
-  # tibble_gtf_table = a2
-  # tolerance_left = 0
-  # tolerance_right = 0
-  # tolerance_inside = 0
-  # tolerance_outside = 0
-  # match_consecutive = TRUE
-  # return_type = ".*"
-  ###########################
-  
-  # print(paste("now processing junction number", index))
-  
-  if (query_strand == "." | query_strand == 0 | query_strand == "*") {
-    
-    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% .[.$start <= ((query_end %>% type.convert) + 1 + tolerance_outside + tolerance_left) & .$end >= ((query_start %>% type.convert) - 1 - tolerance_outside - tolerance_left), ] %>% .[!(.$start <= ((query_end %>% type.convert) - tolerance_inside - tolerance_right) & .$end >= ((query_start %>% type.convert) + tolerance_inside + tolerance_left)), ]
-    
-  } else if (query_strand == "+" | query_strand == "-") {
-    
-    tibble_gtf_subset_flanking_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% .[.$strand == query_strand %>% trimws, ] %>% .[.$start <= ((query_end %>% type.convert) + 1 + tolerance_right) & .$end >= ((query_start %>% type.convert) - 1 - tolerance_left), ] %>% .[!(.$start <= ((query_end %>% type.convert) - tolerance_inside - tolerance_right) & .$end >= ((query_start %>% type.convert) + tolerance_inside + tolerance_left)), ]
-    
-  } else {
-    
-    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
-    
-  }
-  
-  if (tibble_gtf_subset_flanking_exons %>% nrow > 0) {
-    
-    tibble_gtf_subset_flanking_exons <- tibble_gtf_subset_flanking_exons %>% dplyr::filter(str_detect(string = `type`, pattern = return_type))
-    
-  }
-  
-  list_of_junction_associated_transcripts <- tibble_gtf_subset_flanking_exons$transcript_id %>% unique %>% array_tree %>% flatten
-  
-  # make a list for each transcript that directly flanks a junction.
-  # then filter so that there are only a) exon PAIRS which b) are directly connected in the mature (spliced) transcript
-  
-  if (match_consecutive == TRUE) {
-    
-    list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% type.convert)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2) %>% keep(.x = ., .p = ~abs((.x[2, "exon_number"] %>% paste %>% type.convert) - (.x[1, "exon_number"] %>% paste %>% type.convert)) == 1)
-    
-  } else if (match_consecutive == FALSE) {
-    
-    list_of_tibbles_flanking_exon_gtf.entries_per_transcript <- purrr::map(.x = list_of_junction_associated_transcripts, .f = ~tibble_gtf_subset_flanking_exons[tibble_gtf_subset_flanking_exons$transcript_id == .x, ] %>% dplyr::arrange(exon_number %>% type.convert)) %>% set_names(list_of_junction_associated_transcripts) %>% keep(.x = ., .p = ~nrow(.x) == 2)
-    
-  }
-  
-  return(list_of_tibbles_flanking_exon_gtf.entries_per_transcript)
-  
-}
-
-# END extract_junction.flanking.exons_JUM() ###
-
-```
-
-```{r}
-
-# FUNCTION TO EXTRACT REFERENCE EXONS WHICH OVERLAP EXACTLY WITH QUERY EXONS
-# NOTE: to be used with purrr
-# input: spliceregion_list: a list containing details of ONE junction: $chr, $vector_alt_segment_starts, $vector_alt_segment_ends
-# tibble_gtf_table: rtracklayer::import(...) %>% as_tibble. can be any GTF. reconstructed or reference.
-# index: loop progress marker to be used with imap
-
-extract_matching.exons <- function(query_chr, query_start, query_end, query_strand, tibble_gtf_table, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") {
-
-  # DEBUG ###################
-  # index <- 1
-  # spliceregion_list <- wide_tibble_of_all_unique_VSR_and_exon_coords_array.tree_not_IR[[index]]
-  # # tibble_gtf_table <- tibble_ref_gtf
-  # tibble_gtf_table <- tibble_recon_gtf
-  # stranded = FALSE
-  ###########################
-
-  # print(paste("now processing junction number", index))
-  
-  if (query_strand == "." | query_strand == 0 | query_strand == "*") {
-    
-    # +/- 1 nt tolerance
-    tibble_gtf_subset_overlapping_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% 
-      .[which(.$start > ((query_start %>% as.numeric) - 1 - tolerance_left - tolerance_outside) & .$end < ((query_end %>% as.numeric) + 1 + tolerance_right + tolerance_outside)), ] %>% 
-      .[which((.$start < ((query_start %>% as.numeric) + 1 + tolerance_left + tolerance_inside) & .$end > ((query_end %>% as.numeric) - 1 - tolerance_right - tolerance_inside))), ] %>% 
-      .[which(.$type == return_type), ]
-    
-  } else if (query_strand == "+" | query_strand == "-") {
-    
-    # +/- 1 nt tolerance
-    tibble_gtf_subset_overlapping_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws &
-                                                              tibble_gtf_table$strand == query_strand %>% trimws, ] %>% 
-      .[which(.$start > ((query_start %>% as.numeric) - 1 - tolerance_left - tolerance_outside) & .$end < ((query_end %>% as.numeric) + 1 + tolerance_right + tolerance_outside)), ] %>% 
-      .[which((.$start < ((query_start %>% as.numeric) + 1 + tolerance_left + tolerance_inside) & .$end > ((query_end %>% as.numeric) - 1 - tolerance_right - tolerance_inside))), ] %>% 
-      .[which(.$type == return_type), ]
-    
-  } else {
-    
-    stop("Could not match the strand information in the transposed differential-only UNION_junc_coor_table. Make sure that the \"strand\" column in the UNION_junc_coor_table contains only +, - or .")
-    
-  }
-  
-  return(tibble_gtf_subset_overlapping_exons)
-  
-}
-
-```
-
-```{r}
-
-extract_overlapping_features <- function(query_chr, query_start, query_end, query_strand, tibble_gtf_table, left_query_shift = 0, right_query_shift = 0, left_tolerance = 0, right_tolerance = 0, return_type) {
-    
-    # DEBUG ###################
-    # index <- 1
-    # spliceregion_list <- wide_tibble_of_all_unique_VSR_and_exon_coords_array.tree_not_IR[[index]]
-    # # tibble_gtf_table <- tibble_ref_gtf
-    # tibble_gtf_table <- tibble_recon_gtf
-    # stranded = FALSE
-    ###########################
-    
-    # cat(query_chr, "\n")
-    # cat(query_start, "\n")
-    # cat(query_end, "\n")
-    # cat(query_strand, "\n")
-    # print(tibble_gtf_table, "\n")
-    # cat(left_query_shift, "\n")
-    # cat(right_query_shift, "\n")
-    # cat(left_tolerance, "\n")
-    # cat(right_tolerance, "\n")
-    
-    # print(paste("now processing junction number", index))
-    
-    # left_query_shift <<- left_query_shift
-    # right_query_shift <<- right_query_shift
-    # left_tolerance <<- left_tolerance
-    # right_tolerance <<- right_tolerance
-    
-    if (!(query_strand == "+" | query_strand == "-")) {
-        
-        # +/- 1 nt tolerance
-        tibble_gtf_subset_matching_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws, ] %>% 
-            .[which(.$end >= ((query_start %>% as.numeric) + left_query_shift - left_tolerance) & .$start <= ((query_end %>% as.numeric) + right_query_shift + right_tolerance)), ] %>% 
-            .[which(.$type == return_type), ]
-        
-    } else if (query_strand == "+" | query_strand == "-") {
-        
-        # +/- 1 nt tolerance
-        tibble_gtf_subset_matching_exons <- tibble_gtf_table[tibble_gtf_table$seqnames == query_chr %>% trimws &
-                                                                 tibble_gtf_table$strand == query_strand %>% trimws, ] %>% 
-            .[which(.$end >= ((query_start %>% as.numeric) + left_query_shift - left_tolerance) & .$start <= ((query_end %>% as.numeric) + right_query_shift + right_tolerance)), ] %>% 
-            .[which(.$type == return_type), ]
-        
-    }
-    
-    return(tibble_gtf_subset_matching_exons)
-    
-}
-
-## END extract_overlapping_features() ###
-
-```
-
-```{r}
-
-# FUNCTION TO EXTRACT COMMON STRING FROM TWO INPUT STRINGS IN ONE STEP, A SIMPLIFICATION OF QUALV
-
-extract_common_string <- function(input_string_a, input_string_b) {
-  
-  # debug ###
-  # 
-  # input_string_a <- "ud_absolute.psi_1"
-  # input_string_b <- "ud_absolute.psi_2"
-  
-  ###########
-  
-  vector_of_letters_a <- strsplit(input_string_a, "") %>% unlist
-  vector_of_letters_b <- strsplit(input_string_b, "") %>% unlist 
-
-  raw_LCS <- qualV::LCS(vector_of_letters_a, vector_of_letters_b)
-  vector_common_string <- raw_LCS$LCS %>% paste(collapse = "")
-  
-  return(vector_common_string)
-    
-}
-
-# END extract_common_string()
-
-# FUNCTION TO TAKE THE AVERAGE VALUE OF A MATRIX OF TIMEPOINTS WITH THREE REPLICATES EACH (3 column compartments at a time)
-## replicates of the same timepoint must be all grouped together.
-calculate_average_values_from_replicate_columns <- function(input_matrix, number_of_replicates, append_average_to_column_name = TRUE) {
-  
-  # DEBUG ######
-  
-  # input_matrix <- wide_tibble_of_psisigma_results_allcomparisons_final_ud.only[, col_indices_observations]
-  # number_of_replicates <- 3
-  
-  ##############
-  
-  # sanity check - if the number of columns is not an integer multiple of the number of replicates, there's something wrong
-  if (ncol(input_matrix) %% number_of_replicates != 0) {
-    
-    stop("the number of columns in the matrix is not an integer multiple of the number of replicates specified. please check the matrix and try again.")
-    
-  }
-  
-  # get the row numbers to subset
-  ## start of each compartment
-  a <- seq(1, (ncol(input_matrix) - number_of_replicates + 1), number_of_replicates)
-  ## end of each compartment
-  b <- seq(number_of_replicates, ncol(input_matrix), number_of_replicates)
-  # create list of compartments
-  c <- purrr::map2(.x = a, .y = b, .f = ~.x:.y)
-  # map each column into each compartment
-  d <- purrr::map(.x = c, .f = ~input_matrix[, .x])
-  # apply the average
-  e <- purrr::map(.x = d, .f = ~apply(X = .x, MARGIN = 1, FUN = function(X){mean(X, na.rm = TRUE)}))
-  # retrieve the column names of each compartment
-  column_names <- purrr::map(.x = d, .f = ~colnames(.x) %>% purrr::reduce(extract_common_string))
-  
-  if (append_average_to_column_name == TRUE) {
-    
-    column_names <- paste(column_names, "average", sep = "")
-    
-  }
-  
-  # reframe into tibble, return
-  f <- e %>% set_names(column_names) %>% as_tibble
-  
-}
-
-# END calculate_average_values_from_replicate_columns()
-
-```
-
-### FUNCTION TO PLOT PCA FOR TIMEPOINT AND REPLICATE
-
-```{r}
-
-plot_PCA_for_timepoint_and_replicate <- function(matrixtable, timepoint_order = NULL, replicate_order = NULL, plot_shapes = TRUE, text_labels = FALSE, point_or_label_size = 2, legend_position = "right", PCA_depths_y = NULL, PCA_depths_x = NULL, save_dir = NULL, save_name = NULL, graph_title = NULL, width = 10, height = 10) {
-  
-  # DEBUG ###
-  # matrixtable <- wide_tibble_matrix_processed_sorted_tibbles %>% as.data.frame
-  # save_dir <- R_processing_results_dir
-  # save_name <- "total_RNA"  # 
-  # graph_title <- "Total RNA"  # 
-  # timepoint_order <- long_tibble_processed_sorted_tibbles$sample_name %>% unique
-  # replicate_order <- c("r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8")
-  # width = 10
-  # height = 10
-  # PCA_depths_y = c(2, 3, 4)
-  # PCA_depths_x = c(1, 2, 3)
-  # text_labels <- FALSE
-  # point_or_label_size <- 4
-  ###########
-  
-  PCA_result <- prcomp(matrixtable)
-  
-  ## measure PC variance #
-  PCA_stdev <- tibble("PC" = 1:(PCA_result[["sdev"]] %>% length), "stdev" = PCA_result[["sdev"]])
-  
-  PCA_variance <- tibble(PC = PCA_stdev$PC, variance = PCA_stdev$stdev ^ 2)
-  PCA_variance <- add_column(PCA_variance, variance_explained = PCA_variance$variance/sum(PCA_variance$variance) * 100)
-  
-  ggplot(PCA_variance) + 
-    geom_col(aes(x = PC, y = variance_explained, fill = PC)) +
-    scale_fill_gradientn(colours = heat.colors(n = (PCA_result[["sdev"]] %>% length))) +
-    ggtitle(paste("PCA variance distribution\n", graph_title, sep = "")) +
-    guides(size = FALSE) + 
-    xlab("PC") +
-    ylab("Variance explained (%)") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica")) +
-    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".pdf", sep = ""), device = "pdf", dpi = 600, width = 45, height = 25, units = "cm") +
-    ggsave(filename = paste(save_dir, "PCA_barplot_stdevs_", save_name, ".svg", sep = ""), device = "svg", dpi = 600, width = 45, height = 25, units = "cm")
-  
-  ## measure PC loadings #
-  ## column names of the matrix need to be split by a "|", like this: timepoint|replicatenumber
-  PCA_loadings <- PCA_result[["rotation"]] %>% as_tibble(rownames = "sample")
-  PCA_loadings <- add_column(PCA_loadings, "timepoint" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\1") %>% factor(x = ., levels = timepoint_order), .after = "sample")
-  PCA_loadings <- add_column(PCA_loadings, "replicatenumber" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\2") %>% factor(x = ., levels = replicate_order), .after = "sample")
-  PCA_loadings <- add_column(PCA_loadings, 
-                             "condition_names" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\1"),
-                             "replicate_names" = gsub(x = PCA_loadings$sample, pattern = "(.*)\\|(.*)", replacement = "\\2"), 
-                             .after = "sample")
-  # append cluster number according to the order of timepoints specified by the user
-  PCA_loadings <- dplyr::left_join(PCA_loadings, tibble("condition_names" = levels(PCA_loadings$timepoint), "cluster_number" = 1:length(levels(PCA_loadings$timepoint))), by = "condition_names") %>% 
-    dplyr::relocate(cluster_number, .after = "sample")
-  
-  
-  # plot PCA for multiple depths all in one go.
-  purrr::map2(.x = PCA_depths_x, .y = PCA_depths_y, .f = function(.x, .y) {
-    
-    pc_x <- .x
-    pc_y <- .y
-    
-    ggplot(PCA_loadings) + 
-      (if (text_labels == FALSE) {geom_point(aes(x = !!(paste("PC", pc_x, sep = "") %>% as.name), y = !!(paste("PC", pc_y, sep = "") %>% as.name), shape = replicatenumber, color = timepoint), size = point_or_label_size)} else if (text_labels == TRUE) {geom_text(aes(x = !!(paste("PC", pc_x, sep = "") %>% as.name), y = !!(paste("PC", pc_y, sep = "") %>% as.name), label = PCA_loadings$cluster_number, color = timepoint), size = point_or_label_size, position = position_dodge(width = 4))}) +
-      scale_color_brewer(name = "Timepoint", palette = "Spectral", breaks = timepoint_order, limits = timepoint_order) +
-      scale_shape_manual(name = "Replicate", values = 1:length(replicate_order)) +
-      ggtitle(paste("PCA loadings\n", graph_title, sep = "")) +
-      guides(size = FALSE) + 
-      xlab(paste("PC", pc_x, " (", PCA_variance[pc_x, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-      ylab(paste("PC", pc_y, " (", PCA_variance[pc_y, "variance_explained"] %>% signif(3), "%)", sep = "")) +
-      theme_bw() +
-      theme(text = element_text(family = "Helvetica"), legend.position = legend_position) +
-      ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".pdf", sep = ""), device = "pdf", dpi = 600, width = width, height = height, units = "cm") +
-      ggsave(filename = paste(save_dir, "PCA_loadings_", save_name, "_PC", pc_y, "_vs_PC_", pc_x, ".svg", sep = ""), device = "svg", dpi = 600, width = width, height = height, units = "cm")
-    
-  } )
-  
-}
-
-```
-
-### FUNCTION TO PLOT UMAP FOR TIMEPOINT AND REPLICATE
-
-NOTE: the matrixtable must be transposed, with one row per variable.
-
-```{r}
-
-plot_UMAP_for_timepoint_and_replicate <- function(transposed_matrixtable, timepoint_order = NULL, replicate_order = NULL, plot_shapes = TRUE, centroid_labels = TRUE, point_size = 5, centroid_label_size = 4, legend_position = "none", PCA_depths_y = NULL, PCA_depths_x = NULL, input_colour_limits = NULL, input_colour_value = NULL, save_dir = NULL, save_name = NULL, graph_title = NULL, width = 10, height = 10) {
-  
-  # DEBUG ###
-  # transposed_matrixtable <- df_matrix_absolute_psi_in_sample_replicate_format %>% na.omit %>% t
-  # timepoint_order <- temp_condition_names
-  # replicate_order <- c("r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8")
-  # plot_shapes <- FALSE
-  # legend_position <- "none"
-  # centroid_labels <- TRUE
-  # point_size <- 1
-  # centroid_label_size <- 1
-  # PCA_depths_y <- c(2, 3, 4)
-  # PCA_depths_x <- c(1, 2, 3)
-  # save_dir <- R_processing_results_dir
-  # save_name <- "total_RNA_psisigma_pooled_replicates_no_na"
-  # graph_title <- "Total RNA/PSI-Sigma"
-  # width <- 40
-  # height <- 40
-  ###########
-  
-  tibble_umap_result <- umap::umap(transposed_matrixtable) %>% .$layout %>% 
-    as_tibble(rownames = "condition|replicate", .name_repair = "unique") %>%
-    setNames(nm = c("condition|replicate", "V1", "V2")) %>%
-    add_column("condition_names" = gsub(x = .$`condition|replicate`, pattern = "(.*)\\|(.*)", replacement = "\\1"),
-               "replicate_names" = gsub(x = .$`condition|replicate`, pattern = "(.*)\\|(.*)", replacement = "\\2")
-               )
-  
-  # centroid labels: make a separate file containing the centroid locations
-  tibble_centroid_locations <- tibble_umap_result %>% 
-    dplyr::group_by(condition_names) %>% 
-    dplyr::summarise("centroid_x" = mean(V1),
-                     "centroid_y" = mean(V2)) %>%
-    add_column("cluster_number" = paste(1:nrow(.)), .after = "condition_names")
-  
-  # append cluster info
-  tibble_umap_result_plot <- dplyr::left_join(tibble_umap_result, tibble_centroid_locations, by = "condition_names")
-  
-  if (is.null(input_colour_limits) == TRUE) {
-    
-    input_colour_limits <- c(tibble_umap_result_plot$condition_names %>% unique)
-    
-  }
-  
-  if (is.null(input_colour_value) == TRUE) {
-    
-    input_colour_value <- rainbow(n = (timepoint_order %>% length))
-    
-  }
-  
-  # plot UMAP for multiple depths all in one go.
-  ggplot_plot <- ggplot() +
-    (if (plot_shapes == TRUE) {geom_point(aes(x = tibble_umap_result_plot$V1, y = tibble_umap_result_plot$V2, shape = tibble_umap_result_plot$replicate_names, color = tibble_umap_result_plot$condition_names, fill = tibble_umap_result_plot$condition_names), size = point_size) } else {geom_blank(aes(x = tibble_umap_result_plot$V1, y = tibble_umap_result_plot$V2))}) +
-    scale_shape_manual(name = "Replicate", values = 1:length(replicate_order)) +
-    (if (centroid_labels == TRUE) {geom_text(aes(x = tibble_centroid_locations$centroid_x, y = tibble_centroid_locations$centroid_y, label = tibble_centroid_locations$cluster_number, color = tibble_centroid_locations$condition_names), size = centroid_label_size)} else {geom_blank(aes(x = tibble_centroid_locations$centroid_x, y = tibble_centroid_locations$centroid_y))}) +
-    scale_fill_manual(name = "Timepoint", breaks = input_colour_limits, limits = input_colour_limits, values = input_colour_value) +
-    scale_colour_manual(name = "Timepoint", breaks = input_colour_limits, limits = input_colour_limits, values = input_colour_value) +
-    # scale_color_brewer(name = "Timepoint", palette = "Spectral", breaks = timepoint_order, limits = timepoint_order) +
-    ggtitle(paste("UMAP projection\n", graph_title, sep = "")) +
-    guides(size = FALSE) + 
-    xlab("UMAP_1") +
-    ylab("UMAP_2") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"), legend.position = legend_position)
-  
-  ggsave(plot = ggplot_plot, filename = paste(save_dir, "/", save_name, ".pdf", sep = ""), device = "pdf", dpi = 600, width = width, height = height, units = "cm")
-  # ggsave(plot = ggplot_plot, filename = paste(save_dir, "/", save_name, ".svg", sep = ""), device = "svg", dpi = 600, width = width, height = height, units = "cm")
-  
-  write.table(x = tibble_centroid_locations, file = paste(save_dir, "/", save_name, "_cluster_legend.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
-  
-}
-
-plot_UMAP_for_timepoint_and_replicate_plotly <- function(transposed_matrixtable, timepoint_order = NULL, tibble_colour_metadata = NULL, replicate_order = NULL, plot_shapes = TRUE, centroid_labels = TRUE, point_size = 5, centroid_label_size = 4, legend_position = "none", PCA_depths_y = NULL, PCA_depths_x = NULL, input_colour_limits = NULL, input_colour_value = NULL, save_dir = NULL, save_name = NULL, graph_title = NULL, width = 10, height = 10, ...) {
-  
-  # DEBUG ###
-  # transposed_matrixtable <- tibble_matrix_absolute_psi_in_sample_replicate_format_with_na %>% t %>% .[gsub(x = rownames(.), pattern = "^(.*)\\|.*$", replacement = "\\1") %in% tibble_sharp_cluster_mapping$condition_names, ]
-  # timepoint_order <- temp_condition_names
-  # replicate_order <- c("r1", "r2")
-  # plot_shapes <- FALSE
-  # legend_position <- "none"
-  # centroid_labels <- TRUE
-  # point_size <- 1
-  # centroid_label_size <- 1
-  # PCA_depths_y <- c(2, 3, 4)
-  # PCA_depths_x <- c(1, 2, 3)
-  # input_colour_limits <- tibble_sharp_cluster_mapping$condition_names
-  # tibble_colour_metadata <- tibble_sharp_cluster_mapping %>% dplyr::ungroup() %>% dplyr::rename("som_cluster" = "cluster", "input_colour_limits" = "condition_names") %>% dplyr::select(id, som_cluster, input_colour_limits, Description, Biological_source, Type) %>% dplyr::mutate_at(.vars = c("Description", "Biological_source", "Type"), .funs = function(x) {gsub(x = x, pattern = "[^a-zA-Z0-9 -/]", replacement = "")})
-  # input_colour_value = rainbow(tibble_sharp_cluster_mapping$cluster %>% max) %>% .[tibble_sharp_cluster_mapping$cluster]
-  # save_dir <- R_processing_results_dir
-  # save_name <- paste("atlas_polya_psisigma_consensus_som_clusterone_with_na_plotly", sep = "")
-  # graph_title = "PolyA/PSI-Sigma w/ replicates, coloured by consensus SOM clusters"
-  # width <- 40
-  # height <- 40
-  ###########
-  
-  tibble_umap_result <- umap::umap(transposed_matrixtable) %>% .$layout %>% 
-    as_tibble(rownames = "condition|replicate", .name_repair = "unique") %>%
-    setNames(nm = c("condition|replicate", "V1", "V2")) %>%
-    add_column("condition_names" = gsub(x = .$`condition|replicate`, pattern = "(.*)\\|(.*)", replacement = "\\1"),
-               "replicate_names" = gsub(x = .$`condition|replicate`, pattern = "(.*)\\|(.*)", replacement = "\\2")
-               )
-  
-  # centroid labels: make a separate file containing the centroid locations
-  tibble_centroid_locations <- tibble_umap_result %>% 
-    dplyr::group_by(condition_names) %>% 
-    dplyr::summarise("centroid_x" = mean(V1),
-                     "centroid_y" = mean(V2)) %>%
-    add_column("cluster_number" = paste(1:nrow(.)), .after = "condition_names")
-  
-  tibble_colour_metadata <- tibble_colour_metadata[match(tibble_centroid_locations$condition_names, tibble_colour_metadata$input_colour_limits), ]
-  
-  # append cluster info
-  tibble_umap_result_plot <- dplyr::left_join(tibble_umap_result, tibble_centroid_locations, by = "condition_names")
-  
-  if (is.null(input_colour_limits) == TRUE) {
-    
-    input_colour_limits <- c(tibble_umap_result_plot$condition_names %>% unique)
-    
-  }
-  
-  if (is.null(input_colour_value) == TRUE) {
-    
-    input_colour_value <- rainbow(n = (timepoint_order %>% length))
-    
-  }
-  
-  # plot UMAP for multiple depths all in one go.
-  ggplot_plot <- ggplot() +
-    (if (plot_shapes == TRUE) {geom_point(aes(x = tibble_umap_result_plot$V1, y = tibble_umap_result_plot$V2, shape = tibble_umap_result_plot$replicate_names, color = tibble_umap_result_plot$condition_names, fill = tibble_umap_result_plot$condition_names), size = point_size) } else {geom_blank(aes(x = tibble_umap_result_plot$V1, y = tibble_umap_result_plot$V2))}) +
-    scale_shape_manual(name = "Replicate", values = 1:length(replicate_order)) +
-    (if (centroid_labels == TRUE) {geom_text(data = tibble_centroid_locations, aes(x = centroid_x, y = centroid_y, label = cluster_number, color = condition_names, som_cluster = tibble_colour_metadata$som_cluster, Description = tibble_colour_metadata$Description, Biological_source = tibble_colour_metadata$Biological_source, Type = tibble_colour_metadata$Type), size = centroid_label_size)} else {geom_blank(aes(x = tibble_centroid_locations$centroid_x, y = tibble_centroid_locations$centroid_y))}) +
-    scale_fill_manual(name = "Timepoint", breaks = input_colour_limits, limits = input_colour_limits, values = input_colour_value) +
-    scale_colour_manual(name = "Timepoint", breaks = input_colour_limits, limits = input_colour_limits, values = input_colour_value) +
-    # scale_color_brewer(name = "Timepoint", palette = "Spectral", breaks = timepoint_order, limits = timepoint_order) +
-    ggtitle(paste("UMAP projection\n", graph_title, sep = "")) +
-    guides(som_cluster = guide_legend(order = 1)) +
-    # guides(size = FALSE) +
-    xlab("UMAP_1") +
-    ylab("UMAP_2") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"), legend.position = legend_position)
-  
-  plotly::ggplotly(
-    p = ggplot_plot,
-    width = NULL,
-    height = NULL,
-    tooltip = "all",
-    dynamicTicks = FALSE,
-    layerData = "Timepoint",
-    originalData = TRUE,
-  ) %>% 
-    htmlwidgets::saveWidget(paste(save_dir, "/", save_name, ".html", sep = ""))
-  
-  ggsave(plot = ggplot_plot, filename = paste(save_dir, "/", save_name, ".pdf", sep = ""), device = "pdf", dpi = 600, width = width, height = height, units = "cm")
-  # ggsave(plot = ggplot_plot, filename = paste(save_dir, "/", save_name, ".svg", sep = ""), device = "svg", dpi = 600, width = width, height = height, units = "cm")
-  
-  write.table(x = tibble_centroid_locations, file = paste(save_dir, "/", save_name, "_cluster_legend.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
-  
-}
-
-```
-
-### FUNCTION TO PLOT tSNE FOR TIMEPOINT AND REPLICATE
-
-NOTE: the matrixtable must be transposed, with one row per variable.
-
-```{r}
-
-plot_tSNE_for_timepoint_and_replicate <- function(transposed_matrixtable, timepoint_order = NULL, replicate_order = NULL, plot_shapes = TRUE, centroid_labels = TRUE, point_size = 5, centroid_label_size = 4, legend_position = "none", PCA_depths_y = NULL, PCA_depths_x = NULL, input_colour_limits = NULL, input_colour_value = NULL, save_dir = NULL, save_name = NULL, graph_title = NULL, width = 10, height = 10) {
-  
-  # DEBUG ###
-  # transposed_matrixtable <- wide_tibble_matrix_processed_sorted_tibbles %>% as.data.frame %>% t
-  # save_dir <- R_processing_results_dir
-  # save_name <- "total_RNA"
-  # graph_title <- "Total RNA"
-  # timepoint_order <- long_tibble_processed_sorted_tibbles$sample_name %>% unique
-  # replicate_order <- c("r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8")
-  # width <- 40
-  # height <- 40
-  # point_size <- 1
-  # centroid_label_size <- 1
-  # plot_shapes <- FALSE
-  # centroid_labels <- TRUE
-  # legend_position <- "none"
-  ###########
-  
-  tibble_tsne_result <- Rtsne::Rtsne(X = transposed_matrixtable %>% unique, perplexity = 1, check_duplicates = FALSE, verbose = TRUE, num_threads = 0) %>% .$Y %>% 
-    as_tibble(.name_repair = "unique") %>%
-    add_column("condition_names" = rownames(transposed_matrixtable %>% unique), .before = 1) %>%
-    setNames(nm = c("condition|replicate", "V1", "V2")) %>%
-    add_column("condition_names" = gsub(x = .$`condition|replicate`, pattern = "(.*)\\|(.*)", replacement = "\\1"),
-               "replicate_names" = gsub(x = .$`condition|replicate`, pattern = "(.*)\\|(.*)", replacement = "\\2")
-    )
-  
-  # centroid labels: make a separate file containing the centroid locations
-  tibble_centroid_locations <- tibble_tsne_result %>% 
-    dplyr::group_by(condition_names) %>% 
-    dplyr::summarise("centroid_x" = mean(V1),
-                     "centroid_y" = mean(V2)) %>%
-    add_column("cluster_number" = paste(1:nrow(.)), .after = "condition_names")
-  
-  # append cluster info
-  tibble_tsne_result_plot <- dplyr::left_join(tibble_tsne_result, tibble_centroid_locations, by = "condition_names")
-  
-  if (is.null(input_colour_limits) == TRUE) {
-    
-    input_colour_limits <- c(tibble_tsne_result_plot$condition_names %>% unique)
-    
-  }
-  
-  if (is.null(input_colour_value) == TRUE) {
-    
-    input_colour_value <- rainbow(n = (timepoint_order %>% length))
-    
-  }
-  
-  # plot UMAP for multiple depths all in one go.
-  ggplot_plot <- ggplot() + 
-    (if (plot_shapes == TRUE) {geom_point(aes(x = tibble_tsne_result_plot$V1, y = tibble_tsne_result_plot$V2, shape = tibble_tsne_result_plot$replicate_names, color = tibble_tsne_result_plot$condition_names, fill = tibble_tsne_result_plot$condition_names), size = point_size) } else {geom_blank(aes(x = tibble_tsne_result_plot$V1, y = tibble_tsne_result_plot$V2))}) +
-    scale_shape_manual(name = "Replicate", values = 1:length(replicate_order)) +
-    (if (centroid_labels == TRUE) {geom_text(aes(x = tibble_centroid_locations$centroid_x, y = tibble_centroid_locations$centroid_y, label = tibble_centroid_locations$cluster_number, color = tibble_centroid_locations$condition_names), size = centroid_label_size)} else {geom_blank(aes(x = tibble_centroid_locations$centroid_x, y = tibble_centroid_locations$centroid_y))}) +
-    scale_fill_manual(name = "Timepoint", breaks = input_colour_limits, limits = input_colour_limits, values = input_colour_value) +
-    scale_colour_manual(name = "Timepoint", breaks = input_colour_limits, limits = input_colour_limits, values = input_colour_value) +
-    # scale_color_brewer(name = "Timepoint", palette = "Spectral", breaks = timepoint_order, limits = timepoint_order) +
-    ggtitle(paste("tSNE projection\n", graph_title, sep = "")) +
-    guides(size = FALSE) + 
-    xlab("tSNE_1") +
-    ylab("tSNE_2") +
-    theme_bw() +
-    theme(text = element_text(family = "Helvetica"), legend.position = legend_position)
-  
-    ggsave(plot = ggplot_plot, filename = paste(save_dir, "/", save_name, ".pdf", sep = ""), device = "pdf", dpi = 600, width = width, height = height, units = "cm")
-    # ggsave(plot = ggplot_plot, filename = paste(save_dir, "/", save_name, ".svg", sep = ""), device = "svg", dpi = 600, width = width, height = height, units = "cm")
-  
-  write.table(x = tibble_centroid_locations, file = paste(save_dir, "/", save_name, "_cluster_legend.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
-  
-}
 
 ```
 
@@ -768,122 +61,124 @@ plot_tSNE_for_timepoint_and_replicate <- function(transposed_matrixtable, timepo
 
 ```{r}
 
-# load universal db file
-
 read_threshold <- 5
 
-options(mc.cores = 96)
+# load universal db file
 
 # [which(tibble_test$value == TRUE)][1:10]
-list_sorted_joined_tibbles <- furrr::future_map2(
-  .x = list.dirs(path = psisigma_results_dir, recursive = FALSE, full.names = TRUE),
-  .y = list.dirs(path = psisigma_results_dir, recursive = FALSE, full.names = FALSE),
-  .f = function(a1, a2) {
+list_sorted_joined_tibbles <- round_robin_pmap_callr(
+  .l = list(
+    "a1" = list("kd" = read.delim(file = paste(psisigma_results_dir_kd, "/LGMN_KD_minus_ctrl_r1_ir3.sorted.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, na.strings = c("NA", "N/A", "na")) %>% tibble::as_tibble(),
+                "oe" = read.delim(file = paste(psisigma_results_dir_oe, "/LGMN_OE_minus_ctrl_r1_ir3.sorted.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, na.strings = c("NA", "N/A", "na")) %>% tibble::as_tibble()
+    ),
+    "a2" = list("kd" = read.delim(file = paste(psisigma_results_dir_kd, "/LGMN_KD_minus_ctrl_r1_ir3.denominator.gct", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, skip = 2, na.strings = c("NA", "N/A", "na")) %>% tibble::as_tibble(),
+                "oe" = read.delim(file = paste(psisigma_results_dir_oe, "/LGMN_OE_minus_ctrl_r1_ir3.denominator.gct", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, skip = 2, na.strings = c("NA", "N/A", "na")) %>% tibble::as_tibble()
+    ),
+    "a3" = list("kd" = data.table::fread(file = paste(psisigma_results_dir_kd, "/LGMN_KD_minus_ctrl.db", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = FALSE, check.names = FALSE, na.strings = c("NA", "N/A", "na"), fill = TRUE) %>% tibble::as_tibble(),
+                "oe" = data.table::fread(file = paste(psisigma_results_dir_oe, "/LGMN_OE_minus_ctrl.db", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = FALSE, check.names = FALSE, na.strings = c("NA", "N/A", "na"), fill = TRUE) %>% tibble::as_tibble()
+    ),
+    "a4" = c("kd", "oe")
+  ),
+  .num_workers = 96, .no_chunks = 96,
+  .f = function(a1, a2, a3, a4) {
     
     # DEBUG ###
-    a1 <- list.dirs(path = psisigma_results_dir, recursive = FALSE, full.names = TRUE) %>% .[[1]]
-    a2 <- list.dirs(path = psisigma_results_dir, recursive = FALSE, full.names = FALSE) %>% .[[1]]
+    # a1 <- read.delim(file = paste(psisigma_results_dir_kd, "/LGMN_KD_minus_ctrl_r1_ir3.sorted.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, na.strings = c("NA", "N/A", "na")) %>% tibble::as_tibble()
+    # a2 <- read.delim(file = paste(psisigma_results_dir_kd, "/LGMN_KD_minus_ctrl_r1_ir3.denominator.gct", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, skip = 2, na.strings = c("NA", "N/A", "na")) %>% tibble::as_tibble()
+    # a3 <- "kd"
     ###########
     
-    cat(a2, "\n")
+    # cat(a4, "\n")
     
     # import the main result tibbles
-    tibble_raw_sorted_out <- read.delim(file = paste(a1, "/", a2, "_r1_ir3.sorted.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, na.strings = c("NA", "N/A", "na")) %>% as_tibble
+    tibble_raw_sorted_out <- a1
     
     # extract info on the number of lanes
     number_of_replicates <- tibble_raw_sorted_out$`N Values` %>% .[1] %>% strsplit(split = "\\|") %>% unlist %>% length
     
     # post-import clean-up
     tibble_sorted_out_cleaned <- tibble_raw_sorted_out %>% 
-      setNames(nm = c("VSR_coords", "psisigma_gene_symbol", "alternative_exon_coords", "splicemode", "no_replicates_comparison.1", paste(a2, "_no_replicates", sep = ""), "psisigma_nmd", "psisigma_reference_transcript", "dPSI", "t_test_pvalue", "t_test_FDR", "PSI_comparison.1", "PSI_comparison.2", "database_ID")) %>% 
-      dplyr::relocate(database_ID, .before = 1) %>%
-      tibble::add_column("LIV_ID" = gsub(x = .$database_ID, pattern = "(.*ENST.*)_(.*)", replacement = "\\1"), 
-                         "exon_number" = gsub(x = .$database_ID, pattern = "(.*ENST.*)_(.*)", replacement = "\\2") %>% type.convert, .after = "database_ID")
+      setNames(nm = c("event_region", "psisigma_gene_symbol", "alternative_exon_coords", "splicemode", "no_replicates_ctrl", paste(a4, "_no_replicates", sep = ""), "psisigma_nmd", "psisigma_reference_transcript", "dPSI", "t_test_pvalue", "t_test_FDR", "PSI_comparison.1", "PSI_comparison.2", "database_id")) %>%
+      dplyr::select(-contains("no_replicates")) %>% 
+      dplyr::relocate(database_id, .before = 1) %>%
+      tibble::add_column("aes_id" = gsub(x = .$database_id, pattern = "(.*ENST.*)_(.*)", replacement = "\\1"), 
+                         "exon_number" = gsub(x = .$database_id, pattern = "(.*ENST.*)_(.*)", replacement = "\\2") %>% type.convert(as.is = TRUE), .after = "database_id")
     
     # import denominator tables
-    tibble_denominator_table <- read.delim(file = paste(a1, "/", a2, "_r1_ir3.denominator.gct", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, skip = 2, na.strings = c("NA", "N/A", "na")) %>% 
-      as_tibble %>%
-      tibble::add_column("LIV_ID" = gsub(x = .$Event, pattern = ".*\\:(.*ENST.*)_(.*)$", replacement = "\\1"), 
-                         "exon_number" = gsub(x = .$Event, pattern = ".*\\:(.*ENST.*)_(.*)$", replacement = "\\2") %>% type.convert, .after = "Event")
+    tibble_denominator_table <- a2 %>%
+      tibble::add_column("aes_id" = gsub(x = .$Event, pattern = ".*\\:(.*ENST.*)_(.*)$", replacement = "\\1"), 
+                         "exon_number" = gsub(x = .$Event, pattern = ".*\\:(.*ENST.*)_(.*)$", replacement = "\\2") %>% type.convert(as.is = TRUE), .after = "Event")
 
-    tibble_joined <- dplyr::left_join(tibble_sorted_out_cleaned, tibble_denominator_table %>% dplyr::select(-Event, -Annotation), by = c("LIV_ID", "exon_number"))
+    colnames(tibble_denominator_table)[5:7] <- paste("denominator_ctrl_", 1:3, sep = "")
+    colnames(tibble_denominator_table)[8:10] <- paste("denominator_condition_", 1:3, sep = "")
+    
+    tibble_joined <- dplyr::left_join(tibble_sorted_out_cleaned, tibble_denominator_table %>% dplyr::select(-Event, -Annotation), by = c("aes_id", "exon_number"))
     
     # SEPARATE absolute psi VALUES
     tibble_joined <- tibble_joined %>% 
-      tidyr::separate(col = "PSI_comparison.1", into = paste("absolute.psi_", gsub(x = a2, pattern = "(.*)_minus_(.*)", replacement = "\\2"), "_", 1:3, sep = ""), sep = "\\|") %>% type.convert(na.strings = c("NA", "N/A", "na")) %>%
-      tidyr::separate(col = "PSI_comparison.2", into = paste("absolute.psi_", gsub(x = a2, pattern = "(.*)_minus_(.*)", replacement = "\\1"), "_", 1:3, sep = ""), sep = "\\|") %>% type.convert(na.strings = c("NA", "N/A", "na")) 
+      tidyr::separate(col = "PSI_comparison.1", into = paste("absolute.psi_ctrl_", 1:3, sep = ""), sep = "\\|") %>% type.convert(as.is = TRUE, na.strings = c("NA", "N/A", "na")) %>%
+      tidyr::separate(col = "PSI_comparison.2", into = paste("absolute.psi_condition_", 1:3, sep = ""), sep = "\\|") %>% type.convert(as.is = TRUE, na.strings = c("NA", "N/A", "na")) 
     
-    colnames(tibble_joined)[21:23] <- paste("denominator_", gsub(x = a2, pattern = "(.*)_minus_(.*)", replacement = "\\2"), "_", 1:3, sep = "")
-    colnames(tibble_joined)[24:26] <- paste("denominator_", gsub(x = a2, pattern = "(.*)_minus_(.*)", replacement = "\\1"), "_", 1:3, sep = "")
-    
-    # create numerator - DON'T NEED IT BECAUSE WE'RE NEVER DOING DEXSEQ EVER AGAIN. IT SUCKS.
+    # create numerator
     tibble_joined <- tibble_joined %>% 
-      dplyr::mutate(!!(paste("numerator_", gsub(x = a2, pattern = "(.*)_minus_(.*)", replacement = "\\1"), sep = "") %>% as.name) := type.convert(apply(X = tibble_joined[, 24:26], MARGIN = 1, FUN = function(X) {X %>% na.omit %>% mean} ) ) * type.convert(apply(X = tibble_joined[, 18:20], MARGIN = 1, FUN = function(X) {X %>% na.omit %>% mean} ) ) * 0.01) %>% 
-      dplyr::mutate(!!(paste("numerator_", gsub(x = a2, pattern = "(.*)_minus_(.*)", replacement = "\\2"), sep = "") %>% as.name) := type.convert(apply(X = tibble_joined[, 21:23], MARGIN = 1, FUN = function(X) {X %>% na.omit %>% mean} ) ) * type.convert(apply(X = tibble_joined[, 15:17], MARGIN = 1, FUN = function(X) {X %>% na.omit %>% mean} ) ) * 0.01)
+      dplyr::mutate(!!(paste("numerator_ctrl", sep = "") %>% as.name) := type.convert(as.is = TRUE, tibble_joined[, grep(x = names(tibble_joined), pattern = "absolute\\.psi\\_ctrl\\_")] %>% as.matrix %>% rowMeans(na.rm = TRUE)) * type.convert(as.is = TRUE, tibble_joined[, grep(x = names(tibble_joined), pattern = "denominator\\_ctrl\\_")] %>% as.matrix %>% rowMeans(na.rm = TRUE) ) * 0.01) %>% 
+      dplyr::mutate(!!(paste("numerator_condition", sep = "") %>% as.name) := type.convert(as.is = TRUE, tibble_joined[, grep(x = names(tibble_joined), pattern = "absolute\\.psi\\_condition\\_")] %>% as.matrix %>% rowMeans(na.rm = TRUE)) * type.convert(as.is = TRUE, tibble_joined[, grep(x = names(tibble_joined), pattern = "denominator\\_condition\\_")] %>% as.matrix %>% rowMeans(na.rm = TRUE) ) * 0.01)
     
     # create logical column of whether the row is at least 5 inclusion reads in at least 3 reps.
     # vector_logical_passes_read_threshold <- tibble_joined %>% dplyr::select(contains("numerator")) %>% apply(X = ., MARGIN = 1, FUN = function(X) {all(X %>% na.omit >= read_threshold) & any(X %>% is.na) == FALSE})
-    vector_logical_passes_read_threshold <- ((tibble_joined %>% dplyr::select(contains("numerator")) %>% unlist) > read_threshold)
+    vector_logical_passes_read_threshold <- (tibble_joined %>% dplyr::select(contains("numerator")) %>% rowSums(na.rm = TRUE)) > read_threshold
     
-    tibble_joined <- tibble::add_column(tibble_joined, !!(paste(a2, "_passes_read_threshold", sep = "") %>% as.name) := vector_logical_passes_read_threshold)
+    tibble_joined <- tibble::add_column(tibble_joined, "passes_read_threshold" = vector_logical_passes_read_threshold)
+    
+    tibble_joined <- tibble::add_column(tibble_joined, "condition" = a4)
+    
+    tibble_universal_dbfile <- a3 %>% 
+  .[!is.na(.$V2), ] %>%
+  setNames(nm = c("chr", "left_junc_start", "left_junc_end", "right_junc_start", "right_junc_end", "alternative_exon_start", "alternative_exon_end", "psisigma_nmd", "event_region_start", "event_region_end", "database_id", "psisigma_gene_symbol")) %>% 
+  tibble::add_column("aes_id" = gsub(x = .$database_id, pattern = "(.*ENST.*)_(.*)", replacement = "\\1"), 
+                     "exon_number" = gsub(x = .$database_id, pattern = "(.*ENST.*)_(.*)", replacement = "\\2") %>% type.convert(as.is = TRUE), 
+                     "alternative_exon_coords" = paste(.$chr, ":", .$alternative_exon_start, "-", .$alternative_exon_end, sep = ""), .after = "database_id")
+    
+    tibble_aes_id_to_aes_exon_mapping <- tibble_universal_dbfile %>% 
+      dplyr::arrange(alternative_exon_start) %>%
+      dplyr::group_by(aes_id) %>%
+      dplyr::summarise("aes_exon_coords" = alternative_exon_coords %>% paste(collapse = ";"))
+    
+    tibble_joined <- tibble_joined %>% 
+      dplyr::left_join(., tibble_aes_id_to_aes_exon_mapping, by = "aes_id") %>%
+      dplyr::relocate(aes_exon_coords, .after = "event_region")
     
     return(tibble_joined)
     
-  }, .progress = TRUE) %>% set_names(nm = list.dirs(path = psisigma_results_pooled_technical_replicates_dir, recursive = FALSE, full.names = FALSE))
+  }, .progress = TRUE) %>% set_names(nm = c("kd", "oe"))
 
 # wide table join for master tibble
-wide_tibble_processed_sorted_tibbles <- list_sorted_joined_tibbles %>% purrr::reduce(dplyr::full_join, by = c("database_ID", "LIV_ID", "exon_number", "VSR_coords", "psisigma_gene_symbol", "alternative_exon_coords", "splicemode", "psisigma_nmd", "psisigma_reference_transcript"))
+long_tibble_main <- list_sorted_joined_tibbles %>% purrr::reduce(dplyr::bind_rows)
 
-tibble_universal_dbfile <- data.table::fread(file = paste(psisigma_results_pooled_technical_replicates_dir, "psisigma_atlas_universal.db", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = FALSE, check.names = FALSE, na.strings = c("NA", "N/A", "na"), fill = TRUE) %>% 
-  as_tibble %>% 
-  .[!is.na(.$V2), ] %>%
-  setNames(nm = c("chr", "left_junc_start", "left_junc_end", "right_junc_start", "right_junc_end", "alternative_exon_start", "alternative_exon_end", "psisigma_nmd", "VSR_start", "VSR_end", "database_ID", "psisigma_gene_symbol")) %>% 
-  tibble::add_column("LIV_ID" = gsub(x = .$database_ID, pattern = "(.*ENST.*)_(.*)", replacement = "\\1"), 
-                     "exon_number" = gsub(x = .$database_ID, pattern = "(.*ENST.*)_(.*)", replacement = "\\2") %>% type.convert, 
-                     "alternative_exon_coords" = paste(.$chr, ":", .$alternative_exon_start, "-", .$alternative_exon_end, sep = ""), .after = "database_ID")
-
-# create mapping from LIV ID to concatenated alternative exon coords.
-# this will account for the entirety of LIVs.
-tibble_LIV_ID_to_LIV_exon_mapping <- tibble_universal_dbfile %>% 
-  dplyr::arrange(alternative_exon_start) %>%
-  dplyr::group_by(LIV_ID) %>%
-  dplyr::summarise("LIV_exon_coords" = alternative_exon_coords %>% paste(collapse = ";"))
-
-wide_tibble_processed_sorted_tibbles_with_LIV_info <- wide_tibble_processed_sorted_tibbles %>% 
-      dplyr::left_join(., tibble_LIV_ID_to_LIV_exon_mapping, by = "LIV_ID") %>%
-      dplyr::relocate(LIV_exon_coords, .after = "VSR_coords")
-
-wide_tibble_processed_sorted_tibbles_with_LIV_info <- wide_tibble_processed_sorted_tibbles_with_LIV_info %>% 
+long_tibble_main <- long_tibble_main %>% 
   dplyr::mutate_at(.vars = "splicemode", .funs = function(x) {gsub(x = x, pattern = "(IR)(.*)", replacement = "\\1") %>% return}) %>% 
   dplyr::mutate_at(.vars = "splicemode", .funs = function(x) {gsub(x = x, pattern = "TSS\\|", replacement = "") %>% return})
 
-# fix LIV exon coords for A3/5SS events. they're not meant to describe alternative exons to begin with.
-wide_tibble_processed_sorted_tibbles_with_LIV_info[wide_tibble_processed_sorted_tibbles_with_LIV_info$splicemode %in% c("A3SS", "A5SS"), "LIV_exon_coords"] <- wide_tibble_processed_sorted_tibbles_with_LIV_info[wide_tibble_processed_sorted_tibbles_with_LIV_info$splicemode %in% c("A3SS", "A5SS"), "alternative_exon_coords"]
+# fix aes exon coords for A3/5SS events. they're not meant to describe alternative exons to begin with.
+long_tibble_main[long_tibble_main$splicemode %in% c("A3SS", "A5SS"), "aes_exon_coords"] <- long_tibble_main[long_tibble_main$splicemode %in% c("A3SS", "A5SS"), "alternative_exon_coords"]
 
-wide_tibble_processed_sorted_tibbles_with_LIV_info <- wide_tibble_processed_sorted_tibbles_with_LIV_info %>% 
-  tibble::add_column("unprocessed_id" = 1:nrow(wide_tibble_processed_sorted_tibbles_with_LIV_info), .before = 1)
+long_tibble_main <- long_tibble_main %>% 
+  tibble::add_column("unprocessed_id" = 1:nrow(long_tibble_main), .before = 1)
 
-# save(wide_tibble_processed_sorted_tibbles_with_LIV_info, file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_wide_tibble_processed_sorted_tibbles_with_LIV_info_pooled_replicates.tibble", sep = ""), compress = FALSE)
+# qs::qsave(x = long_tibble_main, file = paste(R_processing_results_dir, vector_experiment_tag %>% paste(collapse = "_"), "_long_tibble_main.qs", sep = ""))
 
-data.table::fwrite(x = wide_tibble_processed_sorted_tibbles_with_LIV_info, file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_wide_tibble_processed_sorted_tibbles_with_LIV_info_pooled_replicates.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+data.table::fwrite(x = long_tibble_main, file = paste(R_processing_results_dir, vector_experiment_tag %>% paste(collapse = "_"), "_long_tibble_main.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 # filter for read threshold
-list_wide_tibble_processed_sorted_tibbles_with_LIV_info_read_threshold_cols_only_array_tree <- wide_tibble_processed_sorted_tibbles_with_LIV_info %>% dplyr::select(contains("_passes_read_threshold")) %>% array_tree(margin = 1)
-
-options(mc.cores = 12)
-
-row_indices_of_rows_passing_read_threshold <- furrr::future_map(.x = list_wide_tibble_processed_sorted_tibbles_with_LIV_info_read_threshold_cols_only_array_tree, .f = ~any(.x %>% na.omit == TRUE), .progress = TRUE) %>% unlist %>% which
-
-# filter the raw table
-wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any <- wide_tibble_processed_sorted_tibbles_with_LIV_info[row_indices_of_rows_passing_read_threshold, ] 
+long_tibble_filtered_for_readcount <- long_tibble_main[long_tibble_main$passes_read_threshold == TRUE, ]
 
 # add in group and feature IDs for DEXSeq anyways
-wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any %>% dplyr::group_by(VSR_coords) %>% dplyr::mutate("groupid" = which(group_data(.) %>% .$VSR_coords == `VSR_coords` %>% unique), "featureid" = 1:n()) %>% dplyr::ungroup()
+long_tibble_filtered_for_readcount_grouped_by_event_region <- long_tibble_filtered_for_readcount %>% 
+  dplyr::group_by(event_region) %>% 
+  dplyr::mutate("groupid" = which(group_data(.) %>% .$event_region == `event_region` %>% unique), "featureid" = 1:n()) %>% 
+  dplyr::ungroup()
 
-data.table::fwrite(x = wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids, file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
-
-  # write.table(x = long_tibble_processed_sorted_tibbles, file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_long_tibble_processed_sorted_tibbles_pooled_replicates.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
-# long_tibble_processed_sorted_tibbles <- read.delim(file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_long_tibble_processed_sorted_tibbles_pooled_replicates.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, na.strings = c("NA", "N/A", "na")) %>% as_tibble
+data.table::fwrite(x = long_tibble_filtered_for_readcount_grouped_by_event_region, file = paste(R_processing_results_dir, vector_experiment_tag %>% paste(collapse = "_"), "_long_tibble_filtered_for_readcount_grouped_by_event_region.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ```
 
@@ -901,10 +196,10 @@ For splice events with no SJ existence, we set the numerator, denominator and PS
 wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids <- data.table::fread(file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE) %>% as_tibble
 
 tibble_VSR_alt_exon_info <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids %>% 
-  dplyr::select(contains("VSR_coords"), contains("LIV_exon_coords"), contains("splicemode")) %>% 
-  dplyr::mutate("chr" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1"),
-                "VSR_start" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2"),
-                "VSR_end" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3"),
+  dplyr::select(contains("event_region"), contains("LIV_exon_coords"), contains("splicemode")) %>% 
+  dplyr::mutate("chr" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1"),
+                "VSR_start" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2"),
+                "VSR_end" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3"),
                 "id" = 1:nrow(.))
 
 # split by chr
@@ -973,12 +268,12 @@ list_row_indices_valid_according_to_SJ_existence <- furrr::future_pmap(
           ###########
           
           chr <- X[names(X) == "chr"]
-          VSR_start <- X[names(X) == "VSR_start"] %>% type.convert %>% suppressMessages() %>% suppressWarnings()
-          VSR_end <- X[names(X) == "VSR_end"] %>% type.convert %>% suppressMessages() %>% suppressWarnings()
+          VSR_start <- X[names(X) == "VSR_start"] %>% type.convert(as.is = TRUE) %>% suppressMessages() %>% suppressWarnings()
+          VSR_end <- X[names(X) == "VSR_end"] %>% type.convert(as.is = TRUE) %>% suppressMessages() %>% suppressWarnings()
           
-          vector_LIV_exon_starts <- X[names(X) == "LIV_exon_coords"] %>% strsplit(split = "\\;") %>% unlist %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2") %>% type.convert %>% suppressMessages() %>% suppressWarnings()
+          vector_LIV_exon_starts <- X[names(X) == "LIV_exon_coords"] %>% strsplit(split = "\\;") %>% unlist %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2") %>% type.convert(as.is = TRUE) %>% suppressMessages() %>% suppressWarnings()
           
-          vector_LIV_exon_ends <- X[names(X) == "LIV_exon_coords"] %>% strsplit(split = "\\;") %>% unlist %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3") %>% type.convert %>% suppressMessages() %>% suppressWarnings()
+          vector_LIV_exon_ends <- X[names(X) == "LIV_exon_coords"] %>% strsplit(split = "\\;") %>% unlist %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3") %>% type.convert(as.is = TRUE) %>% suppressMessages() %>% suppressWarnings()
           
           if (X[names(X) == "splicemode"] == "IR") {
             logical_is_valid <- which(b1$chr == chr &
@@ -1152,11 +447,11 @@ data.table::fwrite(x = wide_tibble_processed_sorted_tibbles_with_LIV_info_filter
 # extract the unique LIVs for re-annotation and save. 
 ## because of the sheer size, we will be doing this in another instance. 
 tibble_unique_LIV_info <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_filtered_SJ_dezeroed %>%
-  dplyr::distinct(unprocessed_id, exon_number, VSR_coords, LIV_exon_coords, alternative_exon_coords, splicemode) %>%
-  dplyr::mutate("chr" = gsub(x = VSR_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\1"),
+  dplyr::distinct(unprocessed_id, exon_number, event_region, LIV_exon_coords, alternative_exon_coords, splicemode) %>%
+  dplyr::mutate("chr" = gsub(x = event_region, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\1"),
                 
-                "VSR_start" = gsub(x = VSR_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\2"),
-                "VSR_end" = gsub(x = VSR_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\3"),
+                "VSR_start" = gsub(x = event_region, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\2"),
+                "VSR_end" = gsub(x = event_region, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\3"),
                 
                 "alternative_exon_start" = gsub(x = alternative_exon_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\2"),
                 "alternative_exon_end" = gsub(x = alternative_exon_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\3"),
@@ -1272,10 +567,10 @@ tibble_reannotated_LIV_info_non_IR_only <- furrr::future_pmap(
         # get a vertex pool. 
         # firstly get rid of duplicated coordinates. this means A3/5SS. 
         # then split coords into exon starts and exon ends
-        vector_vertex_pool <- c(b1$VSR_start %>% type.convert, 
-                                b1$VSR_end %>% type.convert, 
-                                b1$LIV_exon_starts %>% strsplit(split = "\\;") %>% unlist %>% type.convert, 
-                                b1$LIV_exon_ends %>% strsplit(split = "\\;") %>% unlist %>% type.convert) %>% sort
+        vector_vertex_pool <- c(b1$VSR_start %>% type.convert(as.is = TRUE), 
+                                b1$VSR_end %>% type.convert(as.is = TRUE), 
+                                b1$LIV_exon_starts %>% strsplit(split = "\\;") %>% unlist %>% type.convert(as.is = TRUE), 
+                                b1$LIV_exon_ends %>% strsplit(split = "\\;") %>% unlist %>% type.convert(as.is = TRUE)) %>% sort
 
         # construct a diff table to check for co-ordinate proximity
         ## this is to handle tolerance between VSRs and alternative exon coords.
@@ -1288,19 +583,19 @@ tibble_reannotated_LIV_info_non_IR_only <- furrr::future_pmap(
         # filter for nonduplicated vertices.
         # VSR start becomes LIV exon end; VSR end becomes LIV exon start.
         # these will be the coords used to match ref gtf starts/ends.
-        vector_exon_starts <- c(intersect(b1$VSR_end %>% type.convert, vector_nonduplicated_vertices) + 1, 
-                                intersect(b1$LIV_exon_starts %>% strsplit(split = "\\;") %>% unlist %>% type.convert, vector_nonduplicated_vertices))
+        vector_exon_starts <- c(intersect(b1$VSR_end %>% type.convert(as.is = TRUE), vector_nonduplicated_vertices) + 1, 
+                                intersect(b1$LIV_exon_starts %>% strsplit(split = "\\;") %>% unlist %>% type.convert(as.is = TRUE), vector_nonduplicated_vertices))
         
-        vector_exon_ends <- c(intersect(b1$VSR_start %>% type.convert, vector_nonduplicated_vertices) - 1, 
-                              intersect(b1$LIV_exon_ends %>% strsplit(split = "\\;") %>% unlist %>% type.convert, vector_nonduplicated_vertices))
+        vector_exon_ends <- c(intersect(b1$VSR_start %>% type.convert(as.is = TRUE), vector_nonduplicated_vertices) - 1, 
+                              intersect(b1$LIV_exon_ends %>% strsplit(split = "\\;") %>% unlist %>% type.convert(as.is = TRUE), vector_nonduplicated_vertices))
         
         # filter ref GTF coords for each vertex
         # count the number of times each ENST ID or gene appears.
         list_ref_gtf_entries_matched_to_vertices <- list(
           "LIV_exon_starts" = purrr::map(.x = c(vector_exon_starts),
-                         .f = ~L1_tibble_ref_gtf_exon_only[L1_tibble_ref_gtf_exon_only$start >= ((.x %>% type.convert) - 1) & L1_tibble_ref_gtf_exon_only$start <= ((.x %>% type.convert) + 1), ]),
+                         .f = ~L1_tibble_ref_gtf_exon_only[L1_tibble_ref_gtf_exon_only$start >= ((.x %>% type.convert(as.is = TRUE)) - 1) & L1_tibble_ref_gtf_exon_only$start <= ((.x %>% type.convert(as.is = TRUE)) + 1), ]),
           "LIV_exon_ends" = purrr::map(.x = vector_exon_ends,
-                         .f = ~L1_tibble_ref_gtf_exon_only[L1_tibble_ref_gtf_exon_only$end >= ((.x %>% type.convert) - 1) & L1_tibble_ref_gtf_exon_only$end <= ((.x %>% type.convert) + 1), ])
+                         .f = ~L1_tibble_ref_gtf_exon_only[L1_tibble_ref_gtf_exon_only$end >= ((.x %>% type.convert(as.is = TRUE)) - 1) & L1_tibble_ref_gtf_exon_only$end <= ((.x %>% type.convert(as.is = TRUE)) + 1), ])
         ) 
         
         tibble_gene_name_and_ENST_summary <- list_ref_gtf_entries_matched_to_vertices %>% 
@@ -1356,10 +651,10 @@ tibble_reannotated_LIV_info_non_IR_only <- furrr::future_pmap(
           
           # match VSR and exon battery.
           ## match VSR first
-          list_ref_exons_matching_VSR <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$VSR_start %>% type.convert, query_end = b1$VSR_end %>% type.convert, query_strand = "*", tibble_gtf_table = L1_tibble_ref_gtf_exon_only, tolerance_left = 1, tolerance_right = 1, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = FALSE, return_type = "exon")
+          list_ref_exons_matching_VSR <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$VSR_start %>% type.convert(as.is = TRUE), query_end = b1$VSR_end %>% type.convert(as.is = TRUE), query_strand = "*", tibble_gtf_table = L1_tibble_ref_gtf_exon_only, tolerance_left = 1, tolerance_right = 1, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = FALSE, return_type = "exon")
           
           ## construct exon start/ends
-          list_battery_coords <- purrr::map2(.x = b1$LIV_exon_starts %>% strsplit(split = "\\;") %>% unlist, .y = b1$LIV_exon_ends %>% strsplit(split = "\\;") %>% unlist, .f = ~c(.x, .y) %>% type.convert)
+          list_battery_coords <- purrr::map2(.x = b1$LIV_exon_starts %>% strsplit(split = "\\;") %>% unlist, .y = b1$LIV_exon_ends %>% strsplit(split = "\\;") %>% unlist, .f = ~c(.x, .y) %>% type.convert(as.is = TRUE))
           
           ## match each element to reference gtf exons
           list_ref_exons_matched_to_battery <- purrr::map(.x = list_battery_coords, .f = ~extract_matching.exons(query_chr = b1$chr, query_start = .x[1], query_end = .x[2], query_strand = "*", tibble_gtf_table = L1_tibble_ref_gtf_exon_only, tolerance_left = 1, tolerance_right = 1, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon"))
@@ -1385,7 +680,7 @@ tibble_reannotated_LIV_info_non_IR_only <- furrr::future_pmap(
             
             result_matched_transcript_type <- purrr::map(.x = vector_ENST_ids_perfectly_matched, .f = ~a2[a2$transcript_id == .x, ] %>% .$type %>% unique %>% sort %>% paste(collapse = ",")) %>% unlist %>% paste(collapse = ";")
             
-            result_matched_transcript_biotype <- purrr::map(.x = vector_ENST_ids_perfectly_matched, .f = ~a2[a2$transcript_id == .x, ] %>% .$transcript_biotype %>% unique %>% sort %>% paste(collapse = ",")) %>% unlist %>% paste(collapse = ";") %>% type.convert
+            result_matched_transcript_biotype <- purrr::map(.x = vector_ENST_ids_perfectly_matched, .f = ~a2[a2$transcript_id == .x, ] %>% .$transcript_biotype %>% unique %>% sort %>% paste(collapse = ",")) %>% unlist %>% paste(collapse = ";") %>% type.convert(as.is = TRUE)
             
           }
           
@@ -1508,14 +803,14 @@ suppressMessages(suppressWarnings(
           result_matched_transcript_biotype <- NA
           
           # NOW WE TAKE THE MOST LIKELY OF THESE TRANSCRIPTS BASED ON THE VERTICES PROVIDED
-          vector_exon_starts <- c(b1$VSR_start %>% type.convert,
-                                  b1$alternative_exon_end %>% type.convert + 1)
+          vector_exon_starts <- c(b1$VSR_start %>% type.convert(as.is = TRUE),
+                                  b1$alternative_exon_end %>% type.convert(as.is = TRUE) + 1)
           
-          vector_exon_ends <- c(b1$VSR_end %>% type.convert, 
-                                b1$alternative_exon_start %>% type.convert - 1)
+          vector_exon_ends <- c(b1$VSR_end %>% type.convert(as.is = TRUE), 
+                                b1$alternative_exon_start %>% type.convert(as.is = TRUE) - 1)
           
           ## match the IR junction
-          list_ref_gtf_matched_to_IR_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$alternative_exon_start %>% type.convert, query_end = b1$alternative_exon_end %>% type.convert, query_strand = "*", tibble_gtf_table = a2, tolerance_left = 1, tolerance_right = 1, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon")
+          list_ref_gtf_matched_to_IR_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$alternative_exon_start %>% type.convert(as.is = TRUE), query_end = b1$alternative_exon_end %>% type.convert(as.is = TRUE), query_strand = "*", tibble_gtf_table = a2, tolerance_left = 1, tolerance_right = 1, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon")
           
           if (list_ref_gtf_matched_to_IR_junction %>% length > 0) {
             
@@ -1529,7 +824,7 @@ suppressMessages(suppressWarnings(
             
             tibble_reduced_gtf <- a2[which(a2$gene_id %in% vector_IR_junction_matched_ENSG_ids), ]
             
-            tibble_reduced_gtf_exons_encompassing_IR_junction <- tibble_reduced_gtf[tibble_reduced_gtf$start <= (b1$alternative_exon_start %>% type.convert + 1) & tibble_reduced_gtf$end >= (b1$alternative_exon_end %>% type.convert - 1) & tibble_reduced_gtf$type == "exon", ]
+            tibble_reduced_gtf_exons_encompassing_IR_junction <- tibble_reduced_gtf[tibble_reduced_gtf$start <= (b1$alternative_exon_start %>% type.convert(as.is = TRUE) + 1) & tibble_reduced_gtf$end >= (b1$alternative_exon_end %>% type.convert(as.is = TRUE) - 1) & tibble_reduced_gtf$type == "exon", ]
             
             if (tibble_reduced_gtf_exons_encompassing_IR_junction %>% nrow > 0) {
               
@@ -1537,9 +832,9 @@ suppressMessages(suppressWarnings(
               # count the number of times each ENST ID or gene appears.
               list_reduced_gtf_exons_encompassing_IR_junction_entries_matched_to_vertices <- list(
                 "LIV_exon_starts" = purrr::map(.x = c(vector_exon_starts),
-                                               .f = ~tibble_reduced_gtf_exons_encompassing_IR_junction[tibble_reduced_gtf_exons_encompassing_IR_junction$start >= ((.x %>% type.convert) - 1) & tibble_reduced_gtf_exons_encompassing_IR_junction$start <= ((.x %>% type.convert) + 1), ]),
+                                               .f = ~tibble_reduced_gtf_exons_encompassing_IR_junction[tibble_reduced_gtf_exons_encompassing_IR_junction$start >= ((.x %>% type.convert(as.is = TRUE)) - 1) & tibble_reduced_gtf_exons_encompassing_IR_junction$start <= ((.x %>% type.convert(as.is = TRUE)) + 1), ]),
                 "LIV_exon_ends" = purrr::map(.x = vector_exon_ends,
-                                             .f = ~tibble_reduced_gtf_exons_encompassing_IR_junction[tibble_reduced_gtf_exons_encompassing_IR_junction$end >= ((.x %>% type.convert) - 1) & tibble_reduced_gtf_exons_encompassing_IR_junction$end <= ((.x %>% type.convert) + 1), ])
+                                             .f = ~tibble_reduced_gtf_exons_encompassing_IR_junction[tibble_reduced_gtf_exons_encompassing_IR_junction$end >= ((.x %>% type.convert(as.is = TRUE)) - 1) & tibble_reduced_gtf_exons_encompassing_IR_junction$end <= ((.x %>% type.convert(as.is = TRUE)) + 1), ])
               ) 
               
               tibble_gene_name_and_ENST_summary <- list_reduced_gtf_exons_encompassing_IR_junction_entries_matched_to_vertices %>% 
@@ -1574,9 +869,9 @@ suppressMessages(suppressWarnings(
             # count the number of times each ENST ID or gene appears.
             list_ref_gtf_entries_matched_to_vertices <- list(
               "LIV_exon_starts" = purrr::map(.x = c(vector_exon_starts),
-                                             .f = ~a2[a2$start >= ((.x %>% type.convert) - 1) & a2$start <= ((.x %>% type.convert) + 1), ]),
+                                             .f = ~a2[a2$start >= ((.x %>% type.convert(as.is = TRUE)) - 1) & a2$start <= ((.x %>% type.convert(as.is = TRUE)) + 1), ]),
               "LIV_exon_ends" = purrr::map(.x = vector_exon_ends,
-                                           .f = ~a2[a2$end >= ((.x %>% type.convert) - 1) & a2$end <= ((.x %>% type.convert) + 1), ])
+                                           .f = ~a2[a2$end >= ((.x %>% type.convert(as.is = TRUE)) - 1) & a2$end <= ((.x %>% type.convert(as.is = TRUE)) + 1), ])
             ) 
             
             tibble_gene_name_and_ENST_summary <- list_ref_gtf_entries_matched_to_vertices %>% 
@@ -1662,10 +957,10 @@ tibble_merged_non_IR_and_IR_annotations_summarised <- data.table::fread(file = p
 wide_tibble_main_info_with_annotations <- dplyr::left_join(wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_filtered_SJ_dezeroed, tibble_merged_non_IR_and_IR_annotations_summarised)
 
 # export for 3FT - LIS
-data.table::fwrite(x = wide_tibble_main_info_with_annotations %>% dplyr::select(VSR_coords, LIV_exon_coords, splicemode, matched_gene_names, unprocessed_id) %>% dplyr::rename("gene_name" = "matched_gene_names", "custom_identifier" = "unprocessed_id", "alternative_exon_coords" = "LIV_exon_coords") %>% dplyr::mutate("custom_identifier" = paste("atlas_totalrna_psisigma_", `custom_identifier`, sep = ""), "organism" = "homo_sapiens"), file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_LIS_export_for_3FT.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+data.table::fwrite(x = wide_tibble_main_info_with_annotations %>% dplyr::select(event_region, LIV_exon_coords, splicemode, matched_gene_names, unprocessed_id) %>% dplyr::rename("gene_name" = "matched_gene_names", "custom_identifier" = "unprocessed_id", "alternative_exon_coords" = "LIV_exon_coords") %>% dplyr::mutate("custom_identifier" = paste("atlas_totalrna_psisigma_", `custom_identifier`, sep = ""), "organism" = "homo_sapiens"), file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_LIS_export_for_3FT.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 # export for 3FT - VSR
-data.table::fwrite(x = wide_tibble_main_info_with_annotations %>% dplyr::select(VSR_coords, splicemode, matched_gene_names, matched_strand, unprocessed_id) %>% dplyr::mutate("chr" = gsub(x = VSR_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\1"), "start" = gsub(x = VSR_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\2"), "end" = gsub(x = VSR_coords, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\3")) %>% dplyr::rename("gene_name" = "matched_gene_names", "custom_identifier" = "unprocessed_id", "strand" = "matched_strand") %>% dplyr::select(-VSR_coords) %>% dplyr::mutate("custom_identifier" = paste("atlas_totalrna_psisigma_", `custom_identifier`, sep = ""), "organism" = "homo_sapiens") %>% split_delimited_column_in_table(input_table = ., target_colname = "strand", split = ";", columns_to_deduplicate = NULL), file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_VSR_junctions_export_for_3FT.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+data.table::fwrite(x = wide_tibble_main_info_with_annotations %>% dplyr::select(event_region, splicemode, matched_gene_names, matched_strand, unprocessed_id) %>% dplyr::mutate("chr" = gsub(x = event_region, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\1"), "start" = gsub(x = event_region, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\2"), "end" = gsub(x = event_region, pattern = "(.*)\\:(\\d+)\\-(.*)", replacement = "\\3")) %>% dplyr::rename("gene_name" = "matched_gene_names", "custom_identifier" = "unprocessed_id", "strand" = "matched_strand") %>% dplyr::select(-event_region) %>% dplyr::mutate("custom_identifier" = paste("atlas_totalrna_psisigma_", `custom_identifier`, sep = ""), "organism" = "homo_sapiens") %>% split_delimited_column_in_table(input_table = ., target_colname = "strand", split = ";", columns_to_deduplicate = NULL), file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_VSR_junctions_export_for_3FT.txt", sep = ""), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 ```
 
@@ -1677,7 +972,7 @@ data.table::fwrite(x = wide_tibble_main_info_with_annotations %>% dplyr::select(
 
 # cast tibble into a matrix tibble
 # list_long_tibble_processed_sorted_tibbles_split_by_sample_name <- long_tibble_processed_sorted_tibbles %>% 
-#   dplyr::select(VSR_coords, alternative_exon_coords, LIV_exon_coords, contains("combined_absolute.psi"), contains("sample_absolute.psi"), sample_name) %>%
+#   dplyr::select(event_region, alternative_exon_coords, LIV_exon_coords, contains("combined_absolute.psi"), contains("sample_absolute.psi"), sample_name) %>%
 #   dplyr::group_split(sample_name) %>%
 #   purrr::map(.x = ., .f = function(a1) {
 #     tibble_output <- a1
@@ -1691,10 +986,10 @@ data.table::fwrite(x = wide_tibble_main_info_with_annotations %>% dplyr::select(
 #     } )
 # 
 # wide_tibble_processed_sorted_tibbles <- list_long_tibble_processed_sorted_tibbles_split_by_sample_name %>% 
-#   purrr::reduce(dplyr::inner_join, by = c("VSR_coords", "alternative_exon_coords", "LIV_exon_coords", "combined_absolute.psi_1", "combined_absolute.psi_2", "combined_absolute.psi_3", "combined_absolute.psi_4", "combined_absolute.psi_5", "combined_absolute.psi_6"))
+#   purrr::reduce(dplyr::inner_join, by = c("event_region", "alternative_exon_coords", "LIV_exon_coords", "combined_absolute.psi_1", "combined_absolute.psi_2", "combined_absolute.psi_3", "combined_absolute.psi_4", "combined_absolute.psi_5", "combined_absolute.psi_6"))
 # 
 # wide_tibble_matrix_processed_sorted_tibbles <- wide_tibble_processed_sorted_tibbles %>%
-#   dplyr::select(-VSR_coords, -alternative_exon_coords, -LIV_exon_coords, -contains("combined"))
+#   dplyr::select(-event_region, -alternative_exon_coords, -LIV_exon_coords, -contains("combined"))
   
 wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_filtered_SJ_dezeroed <- data.table::fread(file = paste(R_processing_results_dir, "wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_filtered_SJ_dezeroed.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE) %>% as.data.frame
 
@@ -3035,8 +2330,6 @@ tibble_dicer_clustering_results_km <- `4DA_dicer_clustering_results_km`[,, "KM",
 
 # Differential splicing detection
 
-## a) Characteristic markers for each cluster (DExpSeq)
-
 ```{r}
 
 wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_filtered_SJ <- data.table::fread(file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_filtered_SJ_dezeroed.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE) %>% as_tibble
@@ -3265,7 +2558,7 @@ list_characteristic_markers_per_cluster_DExpSeq_results <- future_pmap(
     tibble_stdevs <- purrr::map2(
       .x = a3,
       .y = names(a3),
-      .f = ~.x %>% apply(MARGIN = 1, FUN = function(X) {return(sd(X %>% type.convert()))} ) %>% tibble::enframe(name = NULL, value = paste("stdev_", .y, sep = ""))) %>% 
+      .f = ~.x %>% apply(MARGIN = 1, FUN = function(X) {return(sd(X %>% type.convert(as.is = TRUE)))} ) %>% tibble::enframe(name = NULL, value = paste("stdev_", .y, sep = ""))) %>% 
       purrr::reduce(dplyr::bind_cols) %>%
       suppressMessages() %>%
       suppressWarnings()
@@ -3341,10 +2634,10 @@ list_sample_comparisons <- purrr::splice(
 )
 
 tibble_VSR_alt_exon_info <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% 
-  dplyr::select(contains("VSR_coords"), contains("LIV_exon_coords"), contains("splicemode")) %>% 
-  dplyr::mutate("chr" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1"),
-                "VSR_start" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2"),
-                "VSR_end" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3"))
+  dplyr::select(contains("event_region"), contains("LIV_exon_coords"), contains("splicemode")) %>% 
+  dplyr::mutate("chr" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1"),
+                "VSR_start" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2"),
+                "VSR_end" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3"))
 
 tibble_matrix_absolute_psi_table <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% dplyr::select(contains("absolute.psi"))
 
@@ -4158,10 +3451,10 @@ list_condition_names_of_cell_or_tissue_types_in_multiple_clusters <- list(
   purrr::map(.f = ~.x %>% dplyr::group_split(som_cluster))
 
 tibble_VSR_alt_exon_info <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% 
-  dplyr::select(contains("VSR_coords"), contains("LIV_exon_coords"), contains("splicemode")) %>% 
-  dplyr::mutate("chr" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1"),
-                "VSR_start" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2"),
-                "VSR_end" = `VSR_coords` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3"))
+  dplyr::select(contains("event_region"), contains("LIV_exon_coords"), contains("splicemode")) %>% 
+  dplyr::mutate("chr" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1"),
+                "VSR_start" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2"),
+                "VSR_end" = `event_region` %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3"))
 
 tibble_matrix_absolute_psi_table <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% dplyr::select(contains("absolute.psi"))
 
@@ -4967,7 +4260,7 @@ wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_an
 wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, grep(x = wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% colnames, pattern = "absolute.psi")][is.na(wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, grep(x = wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% colnames, pattern = "absolute.psi")])] <- 0
 
 # fetch the LIS data
-# tibble_LIS_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, c("database_ID", "LIV_ID", "exon_number", "VSR_coords", "LIV_exon_coords", "psisigma_gene_symbol", "alternative_exon_coords", "splicemode", "psisigma_nmd", "psisigma_reference_transcript")]
+# tibble_LIS_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, c("database_id", "aes_id", "exon_number", "event_region", "LIV_exon_coords", "psisigma_gene_symbol", "alternative_exon_coords", "splicemode", "psisigma_nmd", "psisigma_reference_transcript")]
 
 tibble_merged_non_IR_and_IR_annotations_summarised <- data.table::fread(file = paste(R_processing_results_dir, "atlas_totalrna_psisigma_tibble_merged_non_IR_and_IR_annotations_summarised.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, check.names = FALSE, na.strings = c("NA", "N/A", "na")) %>% as_tibble
 
@@ -5098,7 +4391,7 @@ tibble_characteristic_markers_for_each_som_cluster_annotated0 <- purrr::map2(
 # add in average, stdev and z scores
 tibble_characteristic_markers_for_each_som_cluster_annotated1 <- tibble_characteristic_markers_for_each_som_cluster_annotated0 %>% 
   dplyr::mutate("avg_psi" = tibble_characteristic_markers_for_each_som_cluster_annotated0 %>% dplyr::select(contains("absolute.psi")) %>% rowMeans(),
-                "stdev" = tibble_characteristic_markers_for_each_som_cluster_annotated0 %>% dplyr::select(contains("absolute.psi")) %>% apply(MARGIN = 1, FUN = function(X) {return(sd(X %>% type.convert))} )) %>%
+                "stdev" = tibble_characteristic_markers_for_each_som_cluster_annotated0 %>% dplyr::select(contains("absolute.psi")) %>% apply(MARGIN = 1, FUN = function(X) {return(sd(X %>% type.convert(as.is = TRUE)))} )) %>%
   suppressMessages() %>%
   suppressWarnings()
 
@@ -7248,7 +6541,7 @@ wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_an
 wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, grep(x = wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% colnames, pattern = "absolute.psi")][is.na(wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, grep(x = wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering %>% colnames, pattern = "absolute.psi")])] <- 0
 
 # fetch the LIS data
-tibble_LIS_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, c("database_ID", "LIV_ID", "exon_number", "VSR_coords", "LIV_exon_coords", "psisigma_gene_symbol", "alternative_exon_coords", "splicemode", "psisigma_nmd", "psisigma_reference_transcript")]
+tibble_LIS_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering <- wide_tibble_processed_sorted_tibbles_with_LIV_info_filtered_for_at_least_5_in_any_with_dexseq_ids_for_clustering[, c("database_id", "aes_id", "exon_number", "event_region", "LIV_exon_coords", "psisigma_gene_symbol", "alternative_exon_coords", "splicemode", "psisigma_nmd", "psisigma_reference_transcript")]
 
 tibble_merged_non_IR_and_IR_annotations_summarised <- read.delim(file = paste(R_processing_results_dir, "tibble_merged_non_IR_and_IR_annotations_summarised.txt", sep = ""), sep = "\t", stringsAsFactors = FALSE, header = TRUE, row.names = NULL, check.names = FALSE, na.strings = c("NA", "N/A", "na")) %>% as_tibble
 
@@ -7327,12 +6620,12 @@ tibble_alternative_exon_table <- dplyr::left_join(tibble_LIS_info_filtered_for_a
 
 # identifier table
 # chr start end strand table
-vector_chr <- gsub(x = tibble_alternative_exon_table$VSR_coords, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1")
-vector_VSR_start <- purrr::map2(.x = gsub(x = tibble_alternative_exon_table$VSR_coords, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2") %>% type.convert,
-                                .y = gsub(x = tibble_alternative_exon_table$VSR_coords, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3") %>% type.convert,
+vector_chr <- gsub(x = tibble_alternative_exon_table$event_region, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\1")
+vector_VSR_start <- purrr::map2(.x = gsub(x = tibble_alternative_exon_table$event_region, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2") %>% type.convert(as.is = TRUE),
+                                .y = gsub(x = tibble_alternative_exon_table$event_region, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3") %>% type.convert(as.is = TRUE),
                                 .f = ~min(.x, .y)) %>% unlist
-vector_VSR_end <- purrr::map2(.x = gsub(x = tibble_alternative_exon_table$VSR_coords, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2") %>% type.convert,
-                              .y = gsub(x = tibble_alternative_exon_table$VSR_coords, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3") %>% type.convert,
+vector_VSR_end <- purrr::map2(.x = gsub(x = tibble_alternative_exon_table$event_region, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\2") %>% type.convert(as.is = TRUE),
+                              .y = gsub(x = tibble_alternative_exon_table$event_region, pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3") %>% type.convert(as.is = TRUE),
                               .f = ~max(.x, .y)) %>% unlist
 
 plan(multiprocess)
@@ -7342,7 +6635,7 @@ vector_alt_segment_starts <- tibble_alternative_exon_table$LIV_exon_coords %>% s
 vector_alt_segment_ends <- tibble_alternative_exon_table$LIV_exon_coords %>% strsplit(split = "\\;") %>% furrr::future_map(~.x %>% unlist %>% gsub(pattern = "^([^\\:]+)\\:([^\\-]+)\\-(\\d+)", replacement = "\\3"), .progress = TRUE)
 
 tibble_alternative_exons_chr_start_end_strand <- tibble(
-  "VSR_coords" = tibble_alternative_exon_table$VSR_coords,
+  "event_region" = tibble_alternative_exon_table$event_region,
   "LIV_exon_coords" = tibble_alternative_exon_table$LIV_exon_coords,
   "splicemode" = tibble_alternative_exon_table$splicemode,
   "matched_gene_names" = tibble_alternative_exon_table$matched_gene_names,
@@ -7397,20 +6690,20 @@ list_ref_entries_matched_to_exons <- future_map2(
         
         # detect exon extension/skipping
         ## get vector of VSR and exon coords
-        vector_VSR_exon_coords <- b1[c("vector_VSR_start", "vector_VSR_end", "vector_alt_segment_starts", "vector_alt_segment_ends")] %>% unlist %>% type.convert
+        vector_VSR_exon_coords <- b1[c("vector_VSR_start", "vector_VSR_end", "vector_alt_segment_starts", "vector_alt_segment_ends")] %>% unlist %>% type.convert(as.is = TRUE)
         ## if no. of unique VSR + alt. exon coords = 4, then it's exon skipping. If 3, then partial exon extension.
         # IR EVENTS
         if (grepl(x = b1$splicemode, pattern = intron_retention_string) == TRUE) {
           
           # VSR MATCHING
           # match transcripts to the IR region
-          list_matched_GTF_exon_entries <- extract_matching.exons(query_chr = b1$chr, query_start = b1$vector_VSR_start %>% type.convert, query_end = b1$vector_VSR_end %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
+          list_matched_GTF_exon_entries <- extract_matching.exons(query_chr = b1$chr, query_start = b1$vector_VSR_start %>% type.convert(as.is = TRUE), query_end = b1$vector_VSR_end %>% type.convert(as.is = TRUE), query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon") %>% dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
           # get parent transcript entries
           list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~a2[which(a2$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
           
           # INEXACT MATCHING IF VSR MATCHING FAILS
           if (list_matched_GTF_exon_entries %>% length == 0) {
-            list_GTF_entries_matched_to_IR_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$vector_alt_segment_starts %>% type.convert, query_end = b1$vector_alt_segment_ends %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon")
+            list_GTF_entries_matched_to_IR_junction <- extract_junction.flanking.exons(query_chr = b1$chr, query_start = b1$vector_alt_segment_starts %>% type.convert(as.is = TRUE), query_end = b1$vector_alt_segment_ends %>% type.convert(as.is = TRUE), query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, match_consecutive = TRUE, return_type = "exon")
             # extract overlapping, same strand, (and maybe) same gene_name/gene_id transcripts.
             tibble_IR_junction_parent_transcript_entries <- a2[which(a2$transcript_id %in% names(list_GTF_entries_matched_to_IR_junction) &
                                                                a2$type == "transcript"), ]
@@ -7440,8 +6733,8 @@ list_ref_entries_matched_to_exons <- future_map2(
             # extract only transcripts with encapsulating exons. These are the final exon matches.
             list_matched_GTF_exon_entries <- 
               tibble_all_candidate_overlapping_full_entries[tibble_all_candidate_overlapping_full_entries$type == "exon" &
-                                                         tibble_all_candidate_overlapping_full_entries$start <= b1$vector_alt_segment_starts %>% type.convert &
-                                                         tibble_all_candidate_overlapping_full_entries$end >= b1$vector_alt_segment_ends %>% type.convert, ] %>% 
+                                                         tibble_all_candidate_overlapping_full_entries$start <= b1$vector_alt_segment_starts %>% type.convert(as.is = TRUE) &
+                                                         tibble_all_candidate_overlapping_full_entries$end >= b1$vector_alt_segment_ends %>% type.convert(as.is = TRUE), ] %>% 
               dplyr::group_split(transcript_id) %>% set_names(nm = purrr::map(.x = ., .f = ~.x$transcript_id %>% unique) %>% unlist)
             # get parent transcript entries
             list_parent_GTF_transcript_entries <- purrr::map(.x = list_matched_GTF_exon_entries %>% names, .f = ~tibble_all_candidate_overlapping_full_entries[which(tibble_all_candidate_overlapping_full_entries$transcript_id == .x), ]) %>% set_names(list_matched_GTF_exon_entries %>% names)
@@ -7451,7 +6744,7 @@ list_ref_entries_matched_to_exons <- future_map2(
         } else if (vector_VSR_exon_coords %>% unique %>% length >= 4) {
           
           # exact match of each alternative exon to the reference GTF
-          list_matched_GTF_exon_entries <- purrr::map2(.x = b1$vector_alt_segment_starts, .y = b1$vector_alt_segment_ends, .f = ~extract_matching.exons(query_chr = b1$chr, query_start = .x %>% type.convert, query_end = .y %>% type.convert, query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon"))
+          list_matched_GTF_exon_entries <- purrr::map2(.x = b1$vector_alt_segment_starts, .y = b1$vector_alt_segment_ends, .f = ~extract_matching.exons(query_chr = b1$chr, query_start = .x %>% type.convert(as.is = TRUE), query_end = .y %>% type.convert(as.is = TRUE), query_strand = b1$strand, tibble_gtf_table = a2, tolerance_left = 0, tolerance_right = 0, tolerance_inside = 0, tolerance_outside = 0, return_type = "exon"))
           
           if (list_matched_GTF_exon_entries %>% purrr::map(~.x %>% nrow > 0) %>% unlist %>% all == TRUE) {
             
@@ -7476,11 +6769,11 @@ list_ref_entries_matched_to_exons <- future_map2(
           # This is done using the equation: genome_coord_first_nucleotide_extending_into_common_region = common + (common_coord-VSR_only_coord)/(abs(common_coord-VSR_only_coord))
           # 3. Find the CONSTITUTIVE (native, non-extended) exon by requiring no overlap with the DR but has either the start or end coord = the DR + 1 nucleotide.
           # 4. The exonic matches are any exon which overlaps the region of the constitutive span AND contains the WHOLE DR on the same strand.
-          common_coord <- intersect(c(b1$vector_VSR_start %>% type.convert, b1$vector_VSR_end %>% type.convert), 
-                                    c(b1$vector_alt_segment_starts %>% type.convert, b1$vector_alt_segment_ends %>% type.convert))
-          event_region_only_coord <- setdiff(c(b1$vector_VSR_start %>% type.convert, b1$vector_VSR_end %>% type.convert), common_coord)
-          exon_only_coord <- setdiff(c(b1$vector_alt_segment_starts %>% type.convert, b1$vector_alt_segment_ends %>% type.convert), common_coord)
-          genome_coord_first_nucleotide_extending_into_common_region = common_coord + ((common_coord - event_region_only_coord)/(abs(common_coord - event_region_only_coord)))
+          common_coord <- intersect(c(b1$vector_VSR_start %>% type.convert(as.is = TRUE), b1$vector_VSR_end %>% type.convert(as.is = TRUE)), 
+                                    c(b1$vector_alt_segment_starts %>% type.convert(as.is = TRUE), b1$vector_alt_segment_ends %>% type.convert(as.is = TRUE)))
+          aes_id_only_coord <- setdiff(c(b1$vector_VSR_start %>% type.convert(as.is = TRUE), b1$vector_VSR_end %>% type.convert(as.is = TRUE)), common_coord)
+          exon_only_coord <- setdiff(c(b1$vector_alt_segment_starts %>% type.convert(as.is = TRUE), b1$vector_alt_segment_ends %>% type.convert(as.is = TRUE)), common_coord)
+          genome_coord_first_nucleotide_extending_into_common_region = common_coord + ((common_coord - aes_id_only_coord)/(abs(common_coord - aes_id_only_coord)))
           
           tibble_GTF_exons_with_DR_plus_one_nucleotide <- 
             a2[(which(a2$type == "exon" &
@@ -7538,7 +6831,7 @@ list_ref_entries_matched_to_exons <- future_map2(
   }, .progress = TRUE)
 
 # write the entries that didn't have any matches to the reference GTF.
-tibble_ref_entries_matched_to_exons_unmatched <- list_ref_entries_matched_to_exons %>% purrr::map(~.x$unmatched_list) %>% flatten %>% purrr::map(~.x[c("VSR_coords", "LIV_exon_coords", "splicemode", "chr", "strand", "vector_VSR_start", "vector_VSR_end", "vector_alt_segment_starts", "vector_alt_segment_ends")] %>% as_tibble) %>% rbindlist %>% as_tibble
+tibble_ref_entries_matched_to_exons_unmatched <- list_ref_entries_matched_to_exons %>% purrr::map(~.x$unmatched_list) %>% flatten %>% purrr::map(~.x[c("event_region", "LIV_exon_coords", "splicemode", "chr", "strand", "vector_VSR_start", "vector_VSR_end", "vector_alt_segment_starts", "vector_alt_segment_ends")] %>% as_tibble) %>% rbindlist %>% as_tibble
 # write
 write.table(x = tibble_ref_entries_matched_to_exons_unmatched, file = paste(R_processing_results_dir, "table_exon_ontology_unmatched_exons_", query_name, ".txt", sep = ""), sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
@@ -7592,7 +6885,7 @@ list_genome_relative_exonic.and.CDS_coords <- furrr::future_map2(
         # cat("\nprocessing entry number: ", a2)
         
         # retrieve the genomic coords of the differential exonic region (just start:end)
-        vector_genomic_coords_of_all_differential_exon_positions <- purrr::map2(.x = b1$vector_alt_segment_starts, .y = b1$vector_alt_segment_ends, .f = ~(.x %>% type.convert):(.y %>% type.convert)) %>% unlist %>% unique %>% sort
+        vector_genomic_coords_of_all_differential_exon_positions <- purrr::map2(.x = b1$vector_alt_segment_starts, .y = b1$vector_alt_segment_ends, .f = ~(.x %>% type.convert(as.is = TRUE)):(.y %>% type.convert(as.is = TRUE))) %>% unlist %>% unique %>% sort
         
         # find the overlapping features from the parent transcripts (from the matched exons)
         ## get parent transcript entries
@@ -7859,10 +7152,10 @@ list_tidied_annotation <- list_matched_annotation %>%
                       modify_at(.x, .at = "tibble_overlapping_parent_transcript_features", .f = ~.x[, c("type", "transcript_biotype")] %>% unlist %>% unique %>% sort %>% paste(collapse = ",")), .progress = TRUE)
 
 # extract the transcript features and tibblise 
-tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("VSR_coords", "LIV_exon_coords", "splicemode", "matched_gene_names", "vector_matched_transcript_ids", "tibble_overlapping_parent_transcript_features")] %>% as_tibble) %>%
+tibble_final_transcript_feature_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("event_region", "LIV_exon_coords", "splicemode", "matched_gene_names", "vector_matched_transcript_ids", "tibble_overlapping_parent_transcript_features")] %>% as_tibble) %>%
   rbindlist %>% 
   as_tibble %>%
-  setNames(c("VSR_coords", "LIV_exon_coords", "splicemode", "matched_gene_names", "vector_matched_transcript_ids", "tibble_overlapping_parent_transcript_features"))
+  setNames(c("event_region", "LIV_exon_coords", "splicemode", "matched_gene_names", "vector_matched_transcript_ids", "tibble_overlapping_parent_transcript_features"))
 # write table
 write.table(x = tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "table_exon_ontology_matched_transcript_features_", query_name, ".txt", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
 save(tibble_final_transcript_feature_annotation, file = paste(R_processing_results_dir, "tibble_final_transcript_feature_annotation.tibble", sep = ""), compress = FALSE)
@@ -7872,7 +7165,7 @@ plan(list(tweak(multiprocess, workers = 24),
           tweak(multiprocess, workers = 3)))
 
 # extract the biomart results and tibblise 
-tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("VSR_coords", "LIV_exon_coords", "splicemode", "matched_gene_names", "biomart_annotations")] ) %>%
+tibble_final_biomart_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("event_region", "LIV_exon_coords", "splicemode", "matched_gene_names", "biomart_annotations")] ) %>%
   purrr::discard(.p = ~.x$biomart_annotations %>% nrow == 0) %>%
   furrr::future_map(~purrr::modify_at(.x = .x, .at = "biomart_annotations", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble, .progress = TRUE) %>%
   rbindlist(fill = TRUE) %>% 
@@ -7887,7 +7180,7 @@ write.table(x = tibble_final_biomart_annotation, file = paste(R_processing_resul
 save(tibble_final_biomart_annotation, file = paste(R_processing_results_dir, "tibble_final_biomart_annotation.tibble", sep = ""), compress = FALSE)
 
 # extract the PTM results and tibblise 
-tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("VSR_coords", "LIV_exon_coords", "splicemode", "matched_gene_names", "PTMs")] ) %>%
+tibble_final_PTM_annotation <- list_tidied_annotation %>% purrr::map(~.x[c("event_region", "LIV_exon_coords", "splicemode", "matched_gene_names", "PTMs")] ) %>%
   purrr::discard(.p = ~.x$PTMs %>% nrow == 0) %>%
   furrr::future_map(~purrr::modify_at(.x = .x, .at = "PTMs", .f = ~array_tree(.x, margin = 2)) %>% flatten %>% as_tibble, .progress = TRUE) %>%
   rbindlist %>% 
@@ -7901,7 +7194,7 @@ save(tibble_final_PTM_annotation, file = paste(R_processing_results_dir, "tibble
 
 # extract the other supporting information and tibblise
 tibble_final_annotation_supp <- list_tidied_annotation %>% 
-  furrr::future_map(~.x[c("VSR_coords", "LIV_exon_coords", "splicemode", "matched_gene_names", "vector_genomic_coords_of_all_differential_exon_positions", "list_differential_CDS_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")], .progress = TRUE) %>%
+  furrr::future_map(~.x[c("event_region", "LIV_exon_coords", "splicemode", "matched_gene_names", "vector_genomic_coords_of_all_differential_exon_positions", "list_differential_CDS_positions", "vector_matched_transcript_ids", "protein_relative_differential_coords")], .progress = TRUE) %>%
   furrr::future_map_if(.p = ~.x$protein_relative_differential_coords %>% length != 0, .f = ~.x %>% (function(x) {
     purrr::splice(x, 
                   "tibble" = x[c("protein_relative_differential_coords", "list_differential_CDS_positions")] %>% purrr::map_depth(.depth = 2, .f = ~paste(.x, collapse = ",")) %>% purrr::map2(.x = ., .y = names(.), .f = ~.x %>% as_tibble %>% t %>% as_tibble(rownames = "ensembl_peptide_id") %>% setNames(c("ensembl_peptide_id", .y))) %>% purrr::reduce(dplyr::full_join, by = "ensembl_peptide_id")) %>% return}), .progress = TRUE ) %>%
@@ -7955,9 +7248,9 @@ list_characteristic_markers_for_each_cluster_transcript_ontology <- furrr::futur
         
         return(
           list(
-            "transcript_ontology" = dplyr::left_join(b1[, c("VSR_coords", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_transcript_feature_annotation) %>% unique,
-            "biomart" = dplyr::left_join(b1[, c("VSR_coords", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_biomart_annotation) %>% unique,
-            "dbPTM" = dplyr::left_join(b1[, c("VSR_coords", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_PTM_annotation) %>% unique
+            "transcript_ontology" = dplyr::left_join(b1[, c("event_region", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_transcript_feature_annotation) %>% unique,
+            "biomart" = dplyr::left_join(b1[, c("event_region", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_biomart_annotation) %>% unique,
+            "dbPTM" = dplyr::left_join(b1[, c("event_region", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_PTM_annotation) %>% unique
           )
         )
         
@@ -8011,13 +7304,13 @@ suppressMessages(
             )
           
           tibble_biomart_ontology_summary <- tibble(
-            "frequency_interpro" = b1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `interpro` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-            "frequency_mobidblite" = b1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `mobidblite` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-            "frequency_seg" = b1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `seg_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-            "frequency_ncoils" = b1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `ncoils_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-            "frequency_tmhmm" = b1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `tmhmm_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-            "frequency_signalp" = b1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `signalp_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-            "frequency_sifts" = b1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `sifts_import` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+            "frequency_interpro" = b1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `interpro` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+            "frequency_mobidblite" = b1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `mobidblite` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+            "frequency_seg" = b1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `seg_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+            "frequency_ncoils" = b1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `ncoils_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+            "frequency_tmhmm" = b1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `tmhmm_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+            "frequency_signalp" = b1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `signalp_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+            "frequency_sifts" = b1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `sifts_import` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
           ) %>%
             tibble::add_column(
               "cluster_name" = a2,
@@ -8165,9 +7458,9 @@ list_annotated_result_differential_comparisons_within_clusters_transcript_ontolo
             
             return(
               list(
-                "transcript_ontology" = dplyr::left_join(c1[, c("VSR_coords", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_transcript_feature_annotation) %>% unique,
-                "biomart" = dplyr::left_join(c1[, c("VSR_coords", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_biomart_annotation) %>% unique,
-                "dbPTM" = dplyr::left_join(c1[, c("VSR_coords", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_PTM_annotation) %>% unique
+                "transcript_ontology" = dplyr::left_join(c1[, c("event_region", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_transcript_feature_annotation) %>% unique,
+                "biomart" = dplyr::left_join(c1[, c("event_region", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_biomart_annotation) %>% unique,
+                "dbPTM" = dplyr::left_join(c1[, c("event_region", "LIV_exon_coords", "splicemode")] %>% unique, tibble_final_PTM_annotation) %>% unique
               )
             )
             
@@ -8245,13 +7538,13 @@ suppressMessages(
               
               if (nrow(c1$biomart) > 0) {
                 tibble_biomart_ontology_summary <- tibble(
-                  "frequency_interpro" = c1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `interpro` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-                  "frequency_mobidblite" = c1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `mobidblite` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-                  "frequency_seg" = c1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `seg_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-                  "frequency_ncoils" = c1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `ncoils_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-                  "frequency_tmhmm" = c1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `tmhmm_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-                  "frequency_signalp" = c1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `signalp_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
-                  "frequency_sifts" = c1$biomart %>% dplyr::group_by(VSR_coords, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `sifts_import` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+                  "frequency_interpro" = c1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `interpro` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+                  "frequency_mobidblite" = c1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `mobidblite` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+                  "frequency_seg" = c1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `seg_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+                  "frequency_ncoils" = c1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `ncoils_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+                  "frequency_tmhmm" = c1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `tmhmm_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+                  "frequency_signalp" = c1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `signalp_percentage_overlap` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
+                  "frequency_sifts" = c1$biomart %>% dplyr::group_by(event_region, LIV_exon_coords, splicemode) %>% dplyr::summarise("exists" = `sifts_import` %>% na.omit %>% length > 0) %>% .$exists %>% which %>% length,
                 ) %>%
                   tibble::add_column(
                     "cluster_name" = a2,

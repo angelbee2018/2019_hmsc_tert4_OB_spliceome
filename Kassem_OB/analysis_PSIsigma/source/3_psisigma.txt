@@ -1,0 +1,84 @@
+
+ulimit -n 65535
+ulimit -s 16384
+
+# Deal with environment
+module load samtools/0.1.19
+module load gsl/2.4
+
+export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/angel/.dotnet/tools:/home/angel/Downloads/randfold-master/src:/usr/bin/samtools-0.1.19:/usr/lib:/usr/lib/x86_64-linux-gnu
+
+export PERL5LIB=/home/angel/perl5:/home/angel/perl5/lib/perl5
+
+# Specify directories
+
+bam_dir="/mnt/scratch/2019_hmsc_spliceome/2_STAR_0.1.19/"
+
+psisigma_output_dir="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/analysis_PSIsigma/results/run_1.9k/"
+mkdir -p $psisigma_output_dir
+
+#samtools_path="/mnt/LTS/tools/samtools-0.1.19/samtools"
+#sudo ln -s $samtools_path /usr/bin/samtools
+
+ref_gtf_path="/mnt/LTS/reference_data/hg38_ensembl_reference/gtf/Homo_sapiens.GRCh38.98.sorted.gtf"
+
+psisigma_package_dir="/mnt/LTS/tools/PSISigma_1.9k/"
+
+sampleandaccessionlists="/mnt/LTS/projects/2019_hmsc_spliceome/Kassem_OB/"
+replicate_name_list_nothing=$sampleandaccessionlists"replicate_name_list_nothing.txt"
+
+# WOODY METHOD - UNIVERSAL DB ###
+
+## separated technical repliacates
+
+cd $psisigma_output_dir
+
+ln -s $bam_dir*"Aligned.sortedByCoord.out.bam"* .
+ln -s $bam_dir*"SJ.out.tab" .
+
+ls *".bam" | sed 's/.*\/\(.*\)$/\1/g' | sed 's/\.Aligned\.sortedByCoord\.out\.bam//g' > groupa.txt
+ls *".bam" | sed 's/.*\/\(.*\)$/\1/g' | sed 's/\.Aligned\.sortedByCoord\.out\.bam//g' | head -n 2 > groupb.txt
+
+for i in $(echo $(seq 1 22) X Y MT); do perl $psisigma_package_dir"PSIsigma-db-v.1.0.pl" $ref_gtf_path $i 1 1 0 & done 
+
+wait
+
+cat *.db.tmp > 2019_hmsc_to_ob_universal.db
+cat *.bed.tmp > 2019_hmsc_to_ob_universal.bed
+
+rm *.db.tmp
+rm *.bed.tmp
+
+parallel --link -j 96 --round-robin -N 1 --ungroup "(perl {2}"PSIsigma-ir-v.1.2.pl" 2019_hmsc_to_ob_universal.db {1} 1) 2>&1 | tee "2019_hmsc_to_ob_universal_ir.pl.log"" \
+::: $(ls *.bam) \
+::: $psisigma_package_dir
+
+parallel --link -j 96 --round-robin -N 1 --ungroup 'mkdir -p {2}{1}; \
+cd {2}{1}; \
+cp -rP {2}*.bed {2}*.db {2}*.bam {2}*.bai {2}*.tab .; \
+cp -rP {2}"BM_MSC_to_OB_12d_B1"* .; \
+cp -rP {2}"BM_MSC_to_OB_12d_B2"* .; \
+ls {1}"_"*".bam" > groupa.txt; \
+ls "BM_MSC_to_OB_12d_B1"*".bam" > groupb.txt; \
+ls "BM_MSC_to_OB_12d_B2"*".bam" >> groupb.txt; \
+(perl {3}"dummyai.pl" --gtf {4} --name 2019_hmsc_to_ob_universal --type 1 --fmode 3 --nread 1 --irmode 0 --denominator 1 --adjp 0) 2>&1 | tee "2019_hmsc_to_ob_universal_"{1}".dummayai.log"' \
+::: $(cat $replicate_name_list_nothing | sed 's/\_B.//g' | sort -u) \
+::: $psisigma_output_dir \
+::: $psisigma_package_dir \
+::: $ref_gtf_path
+
+# do last time for the last one
+parallel --link -j 96 --round-robin -N 1 --ungroup 'mkdir -p {2}{1}; \
+cd {2}{1}; \
+cp -rP {2}*.bed {2}*.db {2}*.bam {2}*.bai {2}*.tab .; \
+cp -rP {2}"BM_MSC_to_OB_12h_B1"* .; \
+cp -rP {2}"BM_MSC_to_OB_12h_B2"* .; \
+ls {1}"_"*".bam" > groupa.txt; \
+ls "BM_MSC_to_OB_12h_B1"*".bam" > groupb.txt; \
+ls "BM_MSC_to_OB_12h_B2"*".bam" >> groupb.txt; \
+(perl {3}"dummyai.pl" --gtf {4} --name 2019_hmsc_to_ob_universal --type 1 --fmode 3 --nread 1 --irmode 0 --denominator 1 --adjp 0) 2>&1 | tee "2019_hmsc_to_ob_universal_"{1}".dummayai.log"' \
+::: BM_MSC_to_OB_12d \
+::: $psisigma_output_dir \
+::: $psisigma_package_dir \
+::: $ref_gtf_path
+
